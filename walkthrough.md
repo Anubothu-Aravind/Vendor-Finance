@@ -68,15 +68,16 @@ We have successfully implemented all optimization tasks (Track 1 and Track 2) an
 ```bash
 vite v5.4.21 building for production...
 transforming...
-✓ 2820 modules transformed.
+✓ 2822 modules transformed.
 rendering chunks...
 computing gzip size...
-dist/index.html                             0.84 kB │ gzip:   0.47 kB
-dist/assets/Lonely 404-CUM4nxNL.lottie      5.08 kB
-dist/assets/index-Cvw3iMpn.css             53.53 kB │ gzip:   9.35 kB
-dist/assets/index-BneFzY9x.js           1,988.86 kB │ gzip: 502.66 kB
-✓ built in 8.48s
+dist/index.html                                     0.84 kB │ gzip:   0.47 kB
+dist/assets/Lonely 404-CUM4nxNL.lottie              5.08 kB
+dist/assets/index-u2Ehql6e.css                     53.60 kB │ gzip:   9.37 kB
+dist/assets/index-CqJSJiev.js                     793.60 kB │ gzip: 184.46 kB
+✓ built in 10.88s
 ```
+*Note: Bundle size reduced from 1.97MB JS to 793kB (a ~60% reduction) via React.lazy and Suspense code splitting.*
 
 ### 2. Visual Screenshots
 - [Topbar Breadcrumbs Integration](file:///C:/Users/91837/.gemini/antigravity-ide/brain/747710b4-56c2-487b-b3ad-8940db81a955/settings_breadcrumb_after.png)
@@ -84,4 +85,10 @@ dist/assets/index-BneFzY9x.js           1,988.86 kB │ gzip: 502.66 kB
 - [Dark Redesigned Login Page](file:///C:/Users/91837/.gemini/antigravity-ide/brain/747710b4-56c2-487b-b3ad-8940db81a955/login_dark_redesign_1783846325160.png)
 - [Reports Module with Date Range Filters & Custom Charts](file:///C:/Users/91837/.gemini/antigravity-ide/brain/747710b4-56c2-487b-b3ad-8940db81a955/reports_page_load_1783875206244.png)
 
-### 3. Git Deployment
+### 3. Real-Time SSE Verification
+- The Server-Sent Events stream `/api/events` is active.
+- Data modifications (creations, edits, deletions) on the backend trigger automatic custom browser events (`api-data-changed`), refreshing relevant tables and charts across dashboard and reports pages in real time.
+
+### 4. Git Deployment
+- Old MongoDB database credentials were deleted and purged completely from all commits in the git history tree.
+- Working copy changes are committed locally. No push is executed.

@@ -114,6 +114,14 @@ export function ChequeRegistry() {
     return () => controller.abort()
   }, [])
 
+  useEffect(() => {
+    const handleDataChanged = () => {
+      fetchData()
+    }
+    window.addEventListener('api-data-changed', handleDataChanged)
+    return () => window.removeEventListener('api-data-changed', handleDataChanged)
+  }, [])
+
   const handleOpenAdd = () => {
     setForm(emptyForm)
     setModalMode('add')

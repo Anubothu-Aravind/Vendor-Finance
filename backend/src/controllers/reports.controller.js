@@ -108,3 +108,80 @@ exports.getOutstandingSummary = async (req, res, next) => {
     next(error)
   }
 }
+
+exports.getInterestStatements = async (req, res, next) => {
+  try {
+    const loans = await Loan.find({ isDeleted: false }).populate('financierId')
+    const loanSchedules = []
+    const monthlyAggregates = {}
+
+    for (const loan of loans) {
+      const P = loan.principalAmount
+      const R = loan.interestRate
+      const drawdown = new Date(loan.drawdownDate)
+      const maturity = new Date(loan.maturityDate)
+      
+      let tenureMonths = (maturity.getFullYear() - drawdown.getFullYear()) * 12 + (maturity.getMonth() - drawdown.getMonth())
+      if (tenureMonths <= 0) tenureMonths = 1
+
+      const r = R / (100 * 12)
+      let emi = 0
+      if (r > 0) {
+        emi = P * r * Math.pow(1 + r, tenureMonths) / (Math.pow(1 + r, tenureMonths) - 1)
+      } else {
+        emi = P / tenureMonths
+      }
+
+      const schedule = []
+      let balance = P
+
+      for (let m = 1; m <= tenureMonths; m++) {
+        const paymentDate = new Date(drawdown.getFullYear(), drawdown.getMonth() + m, drawdown.getDate())
+        const monthKey = `${paymentDate.getFullYear()}-${String(paymentDate.getMonth() + 1).padStart(2, '0')}`
+
+        let interest = balance * r
+        if (r === 0) interest = 0
+
+        let principal = emi - interest
+        if (m === tenureMonths || balance < principal) {
+          principal = balance
+        }
+
+        balance = Math.max(0, balance - principal)
+
+        schedule.push({
+          month: monthKey,
+          principal: Math.round(principal),
+          interest: Math.round(interest),
+          balance: Math.round(balance)
+        })
+
+        if (!monthlyAggregates[monthKey]) {
+          monthlyAggregates[monthKey] = { month: monthKey, principal: 0, interest: 0, balance: 0 }
+        }
+        monthlyAggregates[monthKey].principal += Math.round(principal)
+        monthlyAggregates[monthKey].interest += Math.round(interest)
+        monthlyAggregates[monthKey].balance += Math.round(balance)
+      }
+
+      loanSchedules.push({
+        loanId: loan._id,
+        loanReference: loan.loanReference,
+        financierName: loan.financierId?.name || '—',
+        principalAmount: P,
+        interestRate: R,
+        schedule
+      })
+    }
+
+    const summary = Object.values(monthlyAggregates).sort((a, b) => a.month.localeCompare(b.month))
+
+    res.status(200).json({
+      success: true,
+      summary,
+      loans: loanSchedules
+    })
+  } catch (error) {
+    next(error)
+  }
+}

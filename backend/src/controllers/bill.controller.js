@@ -1,4 +1,5 @@
 const mongoose = require('mongoose')
+const { broadcastEvent } = require('../utils/sse')
 const Bill = require('../models/Bill')
 const Vendor = require('../models/Vendor')
 const LedgerService = require('../services/ledger.service')
@@ -50,6 +51,8 @@ exports.createBill = async (req, res, next) => {
 
     await session.commitTransaction()
     session.endSession()
+
+    broadcastEvent('data-changed', { entity: 'bill', action: 'create' })
 
     res.status(201).json({ success: true, data: bill })
   } catch (error) {
@@ -125,6 +128,8 @@ exports.deleteBill = async (req, res, next) => {
 
     await session.commitTransaction()
     session.endSession()
+
+    broadcastEvent('data-changed', { entity: 'bill', action: 'delete' })
 
     res.status(200).json({ success: true, message: 'Bill deleted and payable ledger reversed' })
   } catch (error) {

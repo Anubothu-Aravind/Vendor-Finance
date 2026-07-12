@@ -62,6 +62,9 @@ app.use('/api/cheques', require('./routes/cheque.routes'))
 app.use('/api/ledger', require('./routes/ledger.routes'))
 app.use('/api/reports', require('./routes/reports.routes'))
 app.use('/api/settings', require('./routes/settings.routes'))
+app.use('/api/notifications', require('./routes/notification.routes'))
+const { sseHandler } = require('./utils/sse')
+app.get('/api/events', sseHandler)
 app.use('/api', require('./routes/backup.routes'))
 
 // Global Error Handler

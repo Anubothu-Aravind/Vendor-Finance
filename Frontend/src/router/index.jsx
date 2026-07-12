@@ -1,72 +1,89 @@
-import React from 'react'
+import React, { lazy, Suspense } from 'react'
 import { createBrowserRouter, Navigate } from 'react-router-dom'
 import AppLayout from '../components/layout/AppLayout'
-import Dashboard from '../pages/Dashboard'
-import Vendors from '../pages/Vendors'
-import PurchaseBills from '../pages/PurchaseBills'
-import VendorPayments from '../pages/VendorPayments'
-import Financiers from '../pages/Financiers'
-import FinancierProfile from '../pages/FinancierProfile'
-import Loans from '../pages/Loans'
-import FinancierPayments from '../pages/FinancierPayments'
-import ChequeRegistry from '../pages/ChequeRegistry'
-import OutstandingStatement from '../pages/OutstandingStatement'
-import RunningLedger from '../pages/RunningLedger'
-import TransactionHistory from '../pages/TransactionHistory'
-import Reports from '../pages/Reports'
-import { Settings } from '../pages/Settings'
-import Login from '../pages/Login'
-import Setup from '../pages/Setup'
 import ProtectedRoute from '../components/ProtectedRoute'
 import PublicRoute from '../components/PublicRoute'
-import Error400 from '../pages/errors/Error400'
-import Error401 from '../pages/errors/Error401'
-import Error403 from '../pages/errors/Error403'
-import Error404 from '../pages/errors/Error404'
-import Error429 from '../pages/errors/Error429'
-import Error500 from '../pages/errors/Error500'
-import Error503 from '../pages/errors/Error503'
+
+// Lazy loaded page components
+const Dashboard = lazy(() => import('../pages/Dashboard'))
+const Vendors = lazy(() => import('../pages/Vendors'))
+const PurchaseBills = lazy(() => import('../pages/PurchaseBills'))
+const VendorPayments = lazy(() => import('../pages/VendorPayments'))
+const Financiers = lazy(() => import('../pages/Financiers'))
+const FinancierProfile = lazy(() => import('../pages/FinancierProfile'))
+const Loans = lazy(() => import('../pages/Loans'))
+const FinancierPayments = lazy(() => import('../pages/FinancierPayments'))
+const ChequeRegistry = lazy(() => import('../pages/ChequeRegistry'))
+const OutstandingStatement = lazy(() => import('../pages/OutstandingStatement'))
+const RunningLedger = lazy(() => import('../pages/RunningLedger'))
+const TransactionHistory = lazy(() => import('../pages/TransactionHistory'))
+const Reports = lazy(() => import('../pages/Reports'))
+const Settings = lazy(() => import('../pages/Settings').then(module => ({ default: module.Settings })))
+const Login = lazy(() => import('../pages/Login'))
+const Setup = lazy(() => import('../pages/Setup'))
+
+// Lazy loaded error pages
+const Error400 = lazy(() => import('../pages/errors/Error400'))
+const Error401 = lazy(() => import('../pages/errors/Error401'))
+const Error403 = lazy(() => import('../pages/errors/Error403'))
+const Error404 = lazy(() => import('../pages/errors/Error404'))
+const Error429 = lazy(() => import('../pages/errors/Error429'))
+const Error500 = lazy(() => import('../pages/errors/Error500'))
+const Error503 = lazy(() => import('../pages/errors/Error503'))
+
+// Loading placeholder
+const PageLoader = () => (
+  <div className="flex items-center justify-center min-h-[200px] w-full">
+    <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2" style={{ borderColor: 'var(--color-primary)' }}></div>
+  </div>
+)
+
+const lazyLoad = (Component) => (
+  <Suspense fallback={<PageLoader />}>
+    <Component />
+  </Suspense>
+)
 
 const router = createBrowserRouter([
   {
     path: '/login',
     element: (
       <PublicRoute>
-        <Login />
+        {lazyLoad(Login)}
       </PublicRoute>
     ),
   },
   {
     path: '/setup',
-    element: <Setup />
+    element: lazyLoad(Setup)
   },
   {
     path: '/error/400',
-    element: <Error400 />
+    element: lazyLoad(Error400)
   },
   {
     path: '/error/401',
-    element: <Error401 />
+    element: lazyLoad(Error401)
   },
   {
     path: '/error/403',
-    element: <Error403 />
+    element: lazyLoad(Error403)
   },
   {
     path: '/error/404',
-    element: <Error404 />
+    element: lazyLoad(Error404)
   },
   {
     path: '/error/429',
-    element: <Error429 />
+    element: lazyLoad(Error429)
   },
   {
     path: '/error/500',
-    element: <Error500 />
+    element: lazyLoad(Error500)
   },
   {
     path: '/error/503',
-    element: <Error503 />
+    element: lazyLoad(Error503)
   },
   {
     path: '/',
@@ -76,25 +93,25 @@ const router = createBrowserRouter([
       </ProtectedRoute>
     ),
     children: [
-      { index: true, element: <Dashboard /> },
-      { path: 'vendors', element: <Vendors /> },
-      { path: 'bills', element: <PurchaseBills /> },
-      { path: 'payments', element: <VendorPayments /> },
-      { path: 'financiers', element: <Financiers /> },
-      { path: 'financiers/:id', element: <FinancierProfile /> },
-      { path: 'loans', element: <Loans /> },
-      { path: 'financier-payments', element: <FinancierPayments /> },
-      { path: 'cheques', element: <ChequeRegistry /> },
-      { path: 'outstanding', element: <OutstandingStatement /> },
-      { path: 'ledger', element: <RunningLedger /> },
-      { path: 'transaction-history', element: <TransactionHistory /> },
-      { path: 'reports', element: <Reports /> },
-      { path: 'settings', element: <Settings /> },
+      { index: true, element: lazyLoad(Dashboard) },
+      { path: 'vendors', element: lazyLoad(Vendors) },
+      { path: 'bills', element: lazyLoad(PurchaseBills) },
+      { path: 'payments', element: lazyLoad(VendorPayments) },
+      { path: 'financiers', element: lazyLoad(Financiers) },
+      { path: 'financiers/:id', element: lazyLoad(FinancierProfile) },
+      { path: 'loans', element: lazyLoad(Loans) },
+      { path: 'financier-payments', element: lazyLoad(FinancierPayments) },
+      { path: 'cheques', element: lazyLoad(ChequeRegistry) },
+      { path: 'outstanding', element: lazyLoad(OutstandingStatement) },
+      { path: 'ledger', element: lazyLoad(RunningLedger) },
+      { path: 'transaction-history', element: lazyLoad(TransactionHistory) },
+      { path: 'reports', element: lazyLoad(Reports) },
+      { path: 'settings', element: lazyLoad(Settings) },
     ]
   },
   {
     path: '*',
-    element: <Error404 />
+    element: lazyLoad(Error404)
   }
 ])
 

@@ -1,4 +1,5 @@
 const mongoose = require('mongoose')
+const { broadcastEvent } = require('../utils/sse')
 const Loan = require('../models/Loan')
 const Repayment = require('../models/Repayment')
 const Financier = require('../models/Financier')
@@ -70,6 +71,8 @@ exports.createLoan = async (req, res, next) => {
 
     await session.commitTransaction()
     session.endSession()
+
+    broadcastEvent('data-changed', { entity: 'loan', action: 'create' })
 
     res.status(201).json({ success: true, data: loan })
   } catch (error) {
@@ -242,6 +245,8 @@ exports.createRepayment = async (req, res, next) => {
     await session.commitTransaction()
     session.endSession()
 
+    broadcastEvent('data-changed', { entity: 'loan', action: 'repayment' })
+
     res.status(201).json({ success: true, data: repayment })
   } catch (error) {
     await session.abortTransaction()
@@ -278,6 +283,7 @@ exports.updateLoan = async (req, res, next) => {
     }
 
     await loan.save()
+    broadcastEvent('data-changed', { entity: 'loan', action: 'update' })
     res.status(200).json({ success: true, data: loan })
   } catch (error) {
     next(error)
@@ -295,6 +301,8 @@ exports.deleteLoan = async (req, res, next) => {
     if (!loan) {
       return res.status(404).json({ success: false, message: 'Loan not found' })
     }
+
+    broadcastEvent('data-changed', { entity: 'loan', action: 'delete' })
 
     res.status(200).json({ success: true, message: 'Loan soft deleted successfully' })
   } catch (error) {

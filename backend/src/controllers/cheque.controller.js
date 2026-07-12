@@ -1,4 +1,6 @@
 const mongoose = require('mongoose')
+const { createNotification } = require('../utils/notificationHelper')
+const { broadcastEvent } = require('../utils/sse')
 const Cheque = require('../models/Cheque')
 const Payment = require('../models/Payment')
 const Repayment = require('../models/Repayment')
@@ -20,6 +22,7 @@ exports.createCheque = async (req, res, next) => {
       status: 'PENDING'
     })
     await cheque.save()
+    broadcastEvent('data-changed', { entity: 'cheque', action: 'create' })
     res.status(201).json({ success: true, data: cheque })
   } catch (error) {
     next(error)
@@ -153,6 +156,18 @@ exports.updateChequeStatus = async (req, res, next) => {
     await session.commitTransaction()
     session.endSession()
 
+    if (status === 'BOUNCED') {
+      await createNotification({
+        userId: req.user.id,
+        type: 'alert',
+        title: 'Cheque Bounced',
+        message: `Cheque #${cheque.chequeNumber} for ${cheque.partyName || 'Party'} of ₹${cheque.amount.toLocaleString('en-IN')} has bounced.`,
+        link: '/cheques'
+      })
+    }
+
+    broadcastEvent('data-changed', { entity: 'cheque', action: 'update' })
+
     res.status(200).json({ success: true, data: cheque })
   } catch (error) {
     await session.abortTransaction()
@@ -166,6 +181,9 @@ exports.deleteCheque = async (req, res, next) => {
     const { id } = req.params
     const cheque = await Cheque.findByIdAndUpdate(id, { isDeleted: true }, { new: true })
     if (!cheque) return res.status(404).json({ success: false, message: 'Cheque not found' })
+
+    broadcastEvent('data-changed', { entity: 'cheque', action: 'delete' })
+
     res.status(200).json({ success: true, data: cheque })
   } catch (error) {
     next(error)

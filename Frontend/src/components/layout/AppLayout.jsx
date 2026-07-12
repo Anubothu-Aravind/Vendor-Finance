@@ -5,8 +5,10 @@ import Sidebar from './Sidebar'
 import Topbar from './Topbar'
 import NavigationSetter from '../NavigationSetter'
 import { usePreferences } from '../../hooks/usePreferences'
+import useSSE from '../../hooks/useSSE'
 
 export function AppLayout() {
+  useSSE()
   const location = useLocation()
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const { sidebarCollapsed } = usePreferences()

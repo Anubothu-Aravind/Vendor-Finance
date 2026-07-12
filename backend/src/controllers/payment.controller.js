@@ -1,4 +1,6 @@
 const mongoose = require('mongoose')
+const { createNotification } = require('../utils/notificationHelper')
+const { broadcastEvent } = require('../utils/sse')
 const Payment = require('../models/Payment')
 const Cheque = require('../models/Cheque')
 const FifoService = require('../services/fifo.service')
@@ -75,6 +77,16 @@ exports.createPayment = async (req, res, next) => {
 
     await session.commitTransaction()
     session.endSession()
+
+    await createNotification({
+      userId: req.user.id,
+      type: 'success',
+      title: 'Payment Recorded',
+      message: `Payment of ₹${amount.toLocaleString('en-IN')} to ${vendor.name} has been successfully recorded.`,
+      link: '/payments'
+    })
+
+    broadcastEvent('data-changed', { entity: 'payment', action: 'create' })
 
     res.status(201).json({ success: true, data: payment })
   } catch (error) {

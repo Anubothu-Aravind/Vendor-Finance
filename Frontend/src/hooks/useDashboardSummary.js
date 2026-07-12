@@ -31,6 +31,14 @@ export function useDashboardSummary() {
     return () => controller.abort()
   }, [])
 
+  useEffect(() => {
+    const handleDataChanged = () => {
+      fetchSummary()
+    }
+    window.addEventListener('api-data-changed', handleDataChanged)
+    return () => window.removeEventListener('api-data-changed', handleDataChanged)
+  }, [])
+
   return { data, loading, error, refetch: fetchSummary }
 }
 

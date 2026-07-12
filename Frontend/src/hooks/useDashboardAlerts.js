@@ -31,6 +31,14 @@ export function useDashboardAlerts() {
     return () => controller.abort()
   }, [])
 
+  useEffect(() => {
+    const handleDataChanged = () => {
+      fetchAlerts()
+    }
+    window.addEventListener('api-data-changed', handleDataChanged)
+    return () => window.removeEventListener('api-data-changed', handleDataChanged)
+  }, [])
+
   return { alerts, loading, error, refetch: fetchAlerts }
 }
 

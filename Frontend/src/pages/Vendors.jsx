@@ -80,6 +80,14 @@ export function Vendors() {
     return () => controller.abort()
   }, [])
 
+  useEffect(() => {
+    const handleDataChanged = () => {
+      fetchVendors()
+    }
+    window.addEventListener('api-data-changed', handleDataChanged)
+    return () => window.removeEventListener('api-data-changed', handleDataChanged)
+  }, [])
+
   const handleOpenAdd = () => {
     setForm(emptyForm)
     setFormErrors({})

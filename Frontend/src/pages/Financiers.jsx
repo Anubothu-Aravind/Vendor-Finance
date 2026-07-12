@@ -61,6 +61,14 @@ export function Financiers() {
     return () => controller.abort()
   }, [])
 
+  useEffect(() => {
+    const handleDataChanged = () => {
+      fetchFinanciers()
+    }
+    window.addEventListener('api-data-changed', handleDataChanged)
+    return () => window.removeEventListener('api-data-changed', handleDataChanged)
+  }, [])
+
   const handleOpenAdd = () => {
     setForm(emptyForm)
     setModalMode('add')

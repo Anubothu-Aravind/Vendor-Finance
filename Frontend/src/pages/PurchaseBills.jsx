@@ -102,6 +102,14 @@ export function PurchaseBills() {
     return () => controller.abort()
   }, [])
 
+  useEffect(() => {
+    const handleDataChanged = () => {
+      fetchBillsAndVendors()
+    }
+    window.addEventListener('api-data-changed', handleDataChanged)
+    return () => window.removeEventListener('api-data-changed', handleDataChanged)
+  }, [])
+
   const vendorListOptions = useMemo(() => {
     return vendors.map(v => ({ value: v._id, label: toTitleCase(v.name) }))
   }, [vendors])

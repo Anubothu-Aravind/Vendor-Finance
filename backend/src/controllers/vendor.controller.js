@@ -1,4 +1,6 @@
 const Vendor = require('../models/Vendor')
+const { createNotification } = require('../utils/notificationHelper')
+const { broadcastEvent } = require('../utils/sse')
 
 exports.createVendor = async (req, res, next) => {
   try {
@@ -12,6 +14,17 @@ exports.createVendor = async (req, res, next) => {
 
     const vendor = new Vendor({ name, contactPerson, email, phone, address, type, gstin, openingBalance, status, bankName, accountNo, ifsc, category })
     await vendor.save()
+
+    // Generate event notification
+    await createNotification({
+      userId: req.user.id,
+      type: 'info',
+      title: 'Vendor Added',
+      message: `New vendor "${name}" has been successfully added to the system.`,
+      link: '/vendors'
+    })
+
+    broadcastEvent('data-changed', { entity: 'vendor', action: 'create' })
 
     res.status(201).json({ success: true, data: vendor })
   } catch (error) {
@@ -53,6 +66,8 @@ exports.updateVendor = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Vendor not found' })
     }
 
+    broadcastEvent('data-changed', { entity: 'vendor', action: 'update' })
+
     res.status(200).json({ success: true, data: vendor })
   } catch (error) {
     next(error)
@@ -66,6 +81,8 @@ exports.deleteVendor = async (req, res, next) => {
     if (!vendor) {
       return res.status(404).json({ success: false, message: 'Vendor not found' })
     }
+
+    broadcastEvent('data-changed', { entity: 'vendor', action: 'delete' })
 
     res.status(200).json({ success: true, message: 'Vendor deleted successfully from database' })
   } catch (error) {
