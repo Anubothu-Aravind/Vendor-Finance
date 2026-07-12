@@ -170,6 +170,10 @@ router.post('/skip', authenticateSetupToken, async (req, res, next) => {
     // Clean up any remaining verification records
     await OTPVerification.deleteMany({ setupToken: req.rawSetupToken })
 
+    // Bypassing setup in dev mode mark isDefaultCredential as false
+    user.isDefaultCredential = false
+    await user.save()
+
     // Issue normal tokens directly without credentials changes
     const tokenPayload = {
       id: user._id,
