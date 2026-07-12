@@ -31,34 +31,43 @@ export function OutstandingStatement() {
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState('All')
 
-  const fetchData = async () => {
+  const fetchData = async (signal) => {
     try {
       setLoading(true)
-      const data = await api.get('/reports/outstanding')
-      setKpis(data.kpis || { totalOutstanding: 0, vendorPayables: 0, loanOutstanding: 0, vendorCount: 0, financierCount: 0 })
-      const mapped = (data.parties || []).map((p, idx) => ({
-        id: p._id,
-        name: p.name || '—',
-        type: (p.type || '').toLowerCase(), // 'vendor' or 'financier'
-        items: p.items || 0,
-        total: p.total || 0,
-        paid: p.paid || 0,
-        outstanding: p.outstanding || 0,
-        oldestDue: formatDate(p.oldestDue),
-        daysOverdue: p.daysOverdue || null,
-        idx,
-      }))
-      setParties(mapped.filter(p => p.outstanding > 0)) // only show parties with outstanding
-      setError(null)
+      const data = await api.get('/reports/outstanding', { signal })
+      
+      if (!signal || !signal.aborted) {
+        setKpis(data.kpis || { totalOutstanding: 0, vendorPayables: 0, loanOutstanding: 0, vendorCount: 0, financierCount: 0 })
+        const mapped = (data.parties || []).map((p, idx) => ({
+          id: p._id,
+          name: p.name || '—',
+          type: (p.type || '').toLowerCase(), // 'vendor' or 'financier'
+          items: p.items || 0,
+          total: p.total || 0,
+          paid: p.paid || 0,
+          outstanding: p.outstanding || 0,
+          oldestDue: formatDate(p.oldestDue),
+          daysOverdue: p.daysOverdue || null,
+          idx,
+        }))
+        setParties(mapped.filter(p => p.outstanding > 0)) // only show parties with outstanding
+        setError(null)
+      }
     } catch (err) {
-      setError(err.message || 'Failed to load outstanding data')
+      if (!signal || !signal.aborted) {
+        setError(err.message || 'Failed to load outstanding data')
+      }
     } finally {
-      setLoading(false)
+      if (!signal || !signal.aborted) {
+        setLoading(false)
+      }
     }
   }
 
   useEffect(() => {
-    fetchData()
+    const controller = new AbortController()
+    fetchData(controller.signal)
+    return () => controller.abort()
   }, [])
 
   const totalOutstanding = kpis.totalOutstanding

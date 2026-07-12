@@ -64,14 +64,14 @@ export function ChequeRegistry() {
   }
   const [form, setForm] = useState(emptyForm)
 
-  const fetchData = async () => {
+  const fetchData = async (signal) => {
     try {
       setLoading(true)
       const [chequesData, vendorsData, financiersData, profileRes] = await Promise.all([
-        api.get('/cheques'),
-        api.get('/vendors'),
-        api.get('/financiers'),
-        api.get('/settings/profile')
+        api.get('/cheques', { signal }),
+        api.get('/vendors', { signal }),
+        api.get('/financiers', { signal }),
+        api.get('/settings/profile', { signal })
       ])
 
       const mapped = chequesData.map((c, idx) => ({
@@ -88,22 +88,30 @@ export function ChequeRegistry() {
         idx,
       }))
 
-      setCheques(mapped)
-      setVendors(vendorsData)
-      setFinanciers(financiersData)
-      if (profileRes && profileRes.data) {
-        setBanks(profileRes.data.banks || [])
+      if (!signal || !signal.aborted) {
+        setCheques(mapped)
+        setVendors(vendorsData)
+        setFinanciers(financiersData)
+        if (profileRes && profileRes.data) {
+          setBanks(profileRes.data.banks || [])
+        }
+        setError(null)
       }
-      setError(null)
     } catch (err) {
-      setError(err.message || 'Failed to load cheques')
+      if (!signal || !signal.aborted) {
+        setError(err.message || 'Failed to load cheques')
+      }
     } finally {
-      setLoading(false)
+      if (!signal || !signal.aborted) {
+        setLoading(false)
+      }
     }
   }
 
   useEffect(() => {
-    fetchData()
+    const controller = new AbortController()
+    fetchData(controller.signal)
+    return () => controller.abort()
   }, [])
 
   const handleOpenAdd = () => {
@@ -304,7 +312,7 @@ export function ChequeRegistry() {
             <tbody className="divide-y divide-gray-50 dark:divide-slate-700/40">
               {filtered.map((c, i) => (
                 <motion.tr 
-                  key={c.id} 
+                  key={c._id || c.id} 
                   onClick={() => handleOpenPreview(c)} 
                   initial={{ opacity: 0, y: 4 }}
                   animate={{ opacity: 1, y: 0 }}

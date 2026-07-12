@@ -55,48 +55,54 @@ export function FinancierProfile() {
     remarks: ''
   })
 
-  const fetchProfileAndLoans = async () => {
+  const fetchProfileAndLoans = async (signal) => {
     try {
       setLoading(true)
       const [finData, loansData] = await Promise.all([
-        api.get(`/financiers/${id}`),
-        api.get('/loans')
+        api.get(`/financiers/${id}`, { signal }),
+        api.get('/loans', { signal })
       ])
       
-      setProfile({
-        ...finData,
-        id: finData._id
-      })
-      
-      setEditForm({
-        name: finData.name || '',
-        phone: finData.phone || '',
-        address: finData.address || '',
-        status: finData.status || 'Active',
-        notes: finData.notes || ''
-      })
-      
-      const finLoans = loansData
-        .filter(l => !l.isDeleted && (l.financierId?._id === id || l.financierId === id))
-        .map(l => ({
-          id: l._id,
-          noteNo: l.loanReference,
-          date: fromInputDate(l.drawdownDate.split('T')[0]),
-          amount: l.principalAmount,
-          paid: l.paidPrincipal,
-          outstanding: l.outstandingPrincipal,
-          status: l.status
-        }))
-      setLoans(finLoans)
-      setLoading(false)
+      if (!signal || !signal.aborted) {
+        setProfile({
+          ...finData,
+          id: finData._id
+        })
+        
+        setEditForm({
+          name: finData.name || '',
+          phone: finData.phone || '',
+          address: finData.address || '',
+          status: finData.status || 'Active',
+          notes: finData.notes || ''
+        })
+        
+        const finLoans = loansData
+          .filter(l => !l.isDeleted && (l.financierId?._id === id || l.financierId === id))
+          .map(l => ({
+            id: l._id,
+            noteNo: l.loanReference,
+            date: fromInputDate(l.drawdownDate.split('T')[0]),
+            amount: l.principalAmount,
+            paid: l.paidPrincipal,
+            outstanding: l.outstandingPrincipal,
+            status: l.status
+          }))
+        setLoans(finLoans)
+        setLoading(false)
+      }
     } catch (err) {
-      setError(err.message || 'Failed to load financier profile')
-      setLoading(false)
+      if (!signal || !signal.aborted) {
+        setError(err.message || 'Failed to load financier profile')
+        setLoading(false)
+      }
     }
   }
 
   useEffect(() => {
-    fetchProfileAndLoans()
+    const controller = new AbortController()
+    fetchProfileAndLoans(controller.signal)
+    return () => controller.abort()
   }, [id])
 
   // Totals calculations
@@ -351,7 +357,7 @@ export function FinancierProfile() {
             </thead>
             <tbody className="divide-y divide-gray-50">
               {profile.loans.map((l, i) => (
-                <tr key={i} className="hover:bg-gray-50 transition-colors">
+                <tr key={l._id || l.id || i} className="hover:bg-gray-50 transition-colors">
                   <td className="px-5 py-3.5 text-sm font-mono font-semibold text-gray-700">{l.noteNo}</td>
                   <td className="px-5 py-3.5 text-sm text-gray-500 font-mono">{l.date}</td>
                   <td className="px-5 py-3.5 text-sm font-semibold text-gray-900 text-right tabular-nums">₹{fmt(l.amount)}</td>

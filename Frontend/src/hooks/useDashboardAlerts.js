@@ -6,21 +6,29 @@ export function useDashboardAlerts() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  const fetchAlerts = async () => {
+  const fetchAlerts = async (signal) => {
     try {
       setLoading(true)
-      const res = await api.get('/dashboard/alerts')
-      setAlerts(res)
-      setError(null)
+      const res = await api.get('/dashboard/alerts', { signal })
+      if (!signal || !signal.aborted) {
+        setAlerts(res)
+        setError(null)
+      }
     } catch (err) {
-      setError(err.message || 'Failed to fetch dashboard alerts')
+      if (!signal || !signal.aborted) {
+        setError(err.message || 'Failed to fetch dashboard alerts')
+      }
     } finally {
-      setLoading(false)
+      if (!signal || !signal.aborted) {
+        setLoading(false)
+      }
     }
   }
 
   useEffect(() => {
-    fetchAlerts()
+    const controller = new AbortController()
+    fetchAlerts(controller.signal)
+    return () => controller.abort()
   }, [])
 
   return { alerts, loading, error, refetch: fetchAlerts }

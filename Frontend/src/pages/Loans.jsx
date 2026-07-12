@@ -41,12 +41,12 @@ export function Loans() {
   }
   const [form, setForm] = useState(emptyForm)
 
-  const fetchLoansAndFinanciers = async () => {
+  const fetchLoansAndFinanciers = async (signal) => {
     try {
       setLoading(true)
       const [loansData, financiersData] = await Promise.all([
-        api.get('/loans'),
-        api.get('/financiers')
+        api.get('/loans', { signal }),
+        api.get('/financiers', { signal })
       ])
 
       const mappedLoans = loansData.map(l => {
@@ -72,17 +72,23 @@ export function Loans() {
         }
       })
 
-      setLoans(mappedLoans)
-      setFinanciers(financiersData)
-      setLoading(false)
+      if (!signal || !signal.aborted) {
+        setLoans(mappedLoans)
+        setFinanciers(financiersData)
+        setLoading(false)
+      }
     } catch (err) {
-      setError(err.message || 'Failed to fetch loans')
-      setLoading(false)
+      if (!signal || !signal.aborted) {
+        setError(err.message || 'Failed to fetch loans')
+        setLoading(false)
+      }
     }
   }
 
   useEffect(() => {
-    fetchLoansAndFinanciers()
+    const controller = new AbortController()
+    fetchLoansAndFinanciers(controller.signal)
+    return () => controller.abort()
   }, [])
 
   const handleOpenAdd = () => {
@@ -198,7 +204,7 @@ export function Loans() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {loans.map((loan, i) => (
             <motion.div 
-              key={loan.id} 
+              key={loan._id || loan.id} 
               onClick={() => handleOpenPreview(loan)} 
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}

@@ -46,11 +46,11 @@ export function TransactionHistory() {
   const [typeFilter, setTypeFilter] = useState('All Types')
   const [showDeleted, setShowDeleted] = useState(false)
 
-  const fetchData = async (includeDeleted = false) => {
+  const fetchData = async (includeDeleted = false, signal) => {
     try {
       setLoading(true)
       const params = includeDeleted ? '?showDeleted=true' : ''
-      const data = await api.get(`/ledger${params}`)
+      const data = await api.get(`/ledger${params}`, { signal })
 
       const mapped = data.map((t, idx) => {
         const party = t.vendorId?.name || t.financierId?.name || '—'
@@ -70,17 +70,25 @@ export function TransactionHistory() {
           mongoId: t._id,
         }
       })
-      setTransactions(mapped)
-      setError(null)
+      if (!signal || !signal.aborted) {
+        setTransactions(mapped)
+        setError(null)
+      }
     } catch (err) {
-      setError(err.message || 'Failed to load transactions')
+      if (!signal || !signal.aborted) {
+        setError(err.message || 'Failed to load transactions')
+      }
     } finally {
-      setLoading(false)
+      if (!signal || !signal.aborted) {
+        setLoading(false)
+      }
     }
   }
 
   useEffect(() => {
-    fetchData(showDeleted)
+    const controller = new AbortController()
+    fetchData(showDeleted, controller.signal)
+    return () => controller.abort()
   }, [showDeleted])
 
   // Map user-facing type display names to internal types

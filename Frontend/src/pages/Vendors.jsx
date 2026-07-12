@@ -54,24 +54,30 @@ export function Vendors() {
   const [form, setForm] = useState(emptyForm)
   const [formErrors, setFormErrors] = useState({})
 
-  const fetchVendors = async () => {
+  const fetchVendors = async (signal) => {
     try {
       setLoading(true)
-      const data = await api.get('/vendors')
-      setVendors(data.map(v => ({
-        ...v,
-        id: v._id,
-        outstanding: v.outstandingBalance
-      })))
-      setLoading(false)
+      const data = await api.get('/vendors', { signal })
+      if (!signal || !signal.aborted) {
+        setVendors(data.map(v => ({
+          ...v,
+          id: v._id,
+          outstanding: v.outstandingBalance
+        })))
+        setLoading(false)
+      }
     } catch (err) {
-      setError(err.message || 'Failed to fetch vendors')
-      setLoading(false)
+      if (!signal || !signal.aborted) {
+        setError(err.message || 'Failed to fetch vendors')
+        setLoading(false)
+      }
     }
   }
 
   useEffect(() => {
-    fetchVendors()
+    const controller = new AbortController()
+    fetchVendors(controller.signal)
+    return () => controller.abort()
   }, [])
 
   const handleOpenAdd = () => {
@@ -262,7 +268,7 @@ export function Vendors() {
             <tbody className="divide-y divide-gray-50">
               {filtered.map((v, i) => (
                 <motion.tr 
-                  key={v.id} 
+                  key={v._id || v.id} 
                   onClick={() => handleOpenPreview(v)} 
                   initial={{ opacity: 0, y: 4 }}
                   animate={{ opacity: 1, y: 0 }}

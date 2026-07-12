@@ -38,14 +38,14 @@ export function FinancierPayments() {
   }
   const [form, setForm] = useState(emptyForm)
 
-  const fetchRepaymentsData = async () => {
+  const fetchRepaymentsData = async (signal) => {
     try {
       setLoading(true)
       const [repaymentsData, financiersData, loansData, profileRes] = await Promise.all([
-        api.get('/loans/repayments/all'),
-        api.get('/financiers'),
-        api.get('/loans'),
-        api.get('/settings/profile')
+        api.get('/loans/repayments/all', { signal }),
+        api.get('/financiers', { signal }),
+        api.get('/loans', { signal }),
+        api.get('/settings/profile', { signal })
       ])
 
       const mappedRepayments = repaymentsData.map(r => {
@@ -72,22 +72,28 @@ export function FinancierPayments() {
         }
       })
 
-      setRepayments(mappedRepayments)
-      setFinanciers(financiersData)
-      setLoans(loansData)
-      if (profileRes && profileRes.data) {
-        const activeModes = (profileRes.data.paymentModes || []).filter(m => m.enabled)
-        setPaymentModes(activeModes)
+      if (!signal || !signal.aborted) {
+        setRepayments(mappedRepayments)
+        setFinanciers(financiersData)
+        setLoans(loansData)
+        if (profileRes && profileRes.data) {
+          const activeModes = (profileRes.data.paymentModes || []).filter(m => m.enabled)
+          setPaymentModes(activeModes)
+        }
+        setLoading(false)
       }
-      setLoading(false)
     } catch (err) {
-      setError(err.message || 'Failed to fetch repayments')
-      setLoading(false)
+      if (!signal || !signal.aborted) {
+        setError(err.message || 'Failed to fetch repayments')
+        setLoading(false)
+      }
     }
   }
 
   useEffect(() => {
-    fetchRepaymentsData()
+    const controller = new AbortController()
+    fetchRepaymentsData(controller.signal)
+    return () => controller.abort()
   }, [])
 
   const handleOpenAdd = () => {
@@ -270,7 +276,7 @@ export function FinancierPayments() {
             <tbody className="divide-y divide-gray-50">
               {filtered.map((r, i) => (
                 <motion.tr 
-                  key={r.id} 
+                  key={r._id || r.id} 
                   onClick={() => handleOpenPreview(r)} 
                   initial={{ opacity: 0, y: 4 }}
                   animate={{ opacity: 1, y: 0 }}

@@ -345,20 +345,26 @@ export function Settings() {
   const [lastSaved, setLastSaved] = useState(null)
   const [dragOver, setDragOver] = useState(false)
   
-  const fetchProfile = async () => {
+  const fetchProfile = async (signal) => {
     try {
-      const res = await api.get('/settings/profile')
+      const res = await api.get('/settings/profile', { signal })
       if (res.success && res.data) {
-        setProfile(res.data)
-        setHasChanges(false)
+        if (!signal || !signal.aborted) {
+          setProfile(res.data)
+          setHasChanges(false)
+        }
       }
     } catch (err) {
-      showToast(err.message || 'Failed to load business profile', 'error')
+      if (!signal || !signal.aborted) {
+        showToast(err.message || 'Failed to load business profile', 'error')
+      }
     }
   }
 
   useEffect(() => {
-    fetchProfile()
+    const controller = new AbortController()
+    fetchProfile(controller.signal)
+    return () => controller.abort()
   }, [])
 
   const handleProfileChange = (e) => {
@@ -503,17 +509,23 @@ export function Settings() {
     status: 'Active'
   })
 
-  const fetchVendors = async () => {
+  const fetchVendors = async (signal) => {
     try {
-      const res = await api.get('/vendors')
-      setVendors(res)
+      const res = await api.get('/vendors', { signal })
+      if (!signal || !signal.aborted) {
+        setVendors(res)
+      }
     } catch (err) {
-      showToast('Failed to load vendors', 'error')
+      if (!signal || !signal.aborted) {
+        showToast('Failed to load vendors', 'error')
+      }
     }
   }
 
   useEffect(() => {
-    fetchVendors()
+    const controller = new AbortController()
+    fetchVendors(controller.signal)
+    return () => controller.abort()
   }, [])
 
   const handleOpenAddVendor = () => {
@@ -600,17 +612,23 @@ export function Settings() {
     defaultInterestRate: 12
   })
 
-  const fetchFinanciers = async () => {
+  const fetchFinanciers = async (signal) => {
     try {
-      const res = await api.get('/financiers')
-      setFinanciers(res)
+      const res = await api.get('/financiers', { signal })
+      if (!signal || !signal.aborted) {
+        setFinanciers(res)
+      }
     } catch (err) {
-      showToast('Failed to load financiers', 'error')
+      if (!signal || !signal.aborted) {
+        showToast('Failed to load financiers', 'error')
+      }
     }
   }
 
   useEffect(() => {
-    fetchFinanciers()
+    const controller = new AbortController()
+    fetchFinanciers(controller.signal)
+    return () => controller.abort()
   }, [])
 
   const handleOpenAddFinancier = () => {
@@ -691,17 +709,23 @@ export function Settings() {
     notes: ''
   })
 
-  const fetchLoans = async () => {
+  const fetchLoans = async (signal) => {
     try {
-      const res = await api.get('/loans')
-      setLoans(res)
+      const res = await api.get('/loans', { signal })
+      if (!signal || !signal.aborted) {
+        setLoans(res)
+      }
     } catch (err) {
-      showToast('Failed to load loans', 'error')
+      if (!signal || !signal.aborted) {
+        showToast('Failed to load loans', 'error')
+      }
     }
   }
 
   useEffect(() => {
-    fetchLoans()
+    const controller = new AbortController()
+    fetchLoans(controller.signal)
+    return () => controller.abort()
   }, [])
 
   const handleOpenEditLoan = (l) => {
@@ -1667,7 +1691,7 @@ export function Settings() {
                   </thead>
                   <tbody className="divide-y divide-gray-200">
                     {banks.map((b, idx) => (
-                      <tr key={idx} className="hover:bg-gray-50/50 transition-colors text-sm text-gray-700">
+                      <tr key={b || idx} className="hover:bg-gray-50/50 transition-colors text-sm text-gray-700">
                         <td className="px-4 py-3.5">
                           {editingBankIndex === idx ? (
                             <input 
@@ -1742,7 +1766,7 @@ export function Settings() {
                   </thead>
                   <tbody className="divide-y divide-gray-200">
                     {paymentModes.map((m, idx) => (
-                      <tr key={idx} className="hover:bg-gray-50/50 transition-colors text-sm text-gray-700">
+                      <tr key={m.name || idx} className="hover:bg-gray-50/50 transition-colors text-sm text-gray-700">
                         <td className="px-4 py-3.5">
                           {editingModeIndex === idx ? (
                             <input 

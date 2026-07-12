@@ -35,24 +35,30 @@ export function Financiers() {
   }
   const [form, setForm] = useState(emptyForm)
 
-  const fetchFinanciers = async () => {
+  const fetchFinanciers = async (signal) => {
     try {
       setLoading(true)
-      const data = await api.get('/financiers')
-      setFinanciers(data.map(f => ({
-        ...f,
-        id: f._id,
-        outstanding: f.outstandingBalance
-      })))
-      setLoading(false)
+      const data = await api.get('/financiers', { signal })
+      if (!signal || !signal.aborted) {
+        setFinanciers(data.map(f => ({
+          ...f,
+          id: f._id,
+          outstanding: f.outstandingBalance
+        })))
+        setLoading(false)
+      }
     } catch (err) {
-      setError(err.message || 'Failed to fetch financiers')
-      setLoading(false)
+      if (!signal || !signal.aborted) {
+        setError(err.message || 'Failed to fetch financiers')
+        setLoading(false)
+      }
     }
   }
 
   useEffect(() => {
-    fetchFinanciers()
+    const controller = new AbortController()
+    fetchFinanciers(controller.signal)
+    return () => controller.abort()
   }, [])
 
   const handleOpenAdd = () => {
@@ -215,7 +221,7 @@ export function Financiers() {
             <tbody className="divide-y divide-gray-50">
               {filtered.map((f, i) => (
                 <motion.tr 
-                  key={f.id} 
+                  key={f._id || f.id} 
                   onClick={() => navigate(`/financiers/${f.id}`)} 
                   initial={{ opacity: 0, y: 4 }}
                   animate={{ opacity: 1, y: 0 }}

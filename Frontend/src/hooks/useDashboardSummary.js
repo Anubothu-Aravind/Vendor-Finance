@@ -6,21 +6,29 @@ export function useDashboardSummary() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  const fetchSummary = async () => {
+  const fetchSummary = async (signal) => {
     try {
       setLoading(true)
-      const res = await api.get('/dashboard/summary')
-      setData(res)
-      setError(null)
+      const res = await api.get('/dashboard/summary', { signal })
+      if (!signal || !signal.aborted) {
+        setData(res)
+        setError(null)
+      }
     } catch (err) {
-      setError(err.message || 'Failed to fetch dashboard summary')
+      if (!signal || !signal.aborted) {
+        setError(err.message || 'Failed to fetch dashboard summary')
+      }
     } finally {
-      setLoading(false)
+      if (!signal || !signal.aborted) {
+        setLoading(false)
+      }
     }
   }
 
   useEffect(() => {
-    fetchSummary()
+    const controller = new AbortController()
+    fetchSummary(controller.signal)
+    return () => controller.abort()
   }, [])
 
   return { data, loading, error, refetch: fetchSummary }

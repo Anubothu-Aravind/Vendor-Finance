@@ -49,14 +49,14 @@ export function VendorPayments() {
   }
   const [form, setForm] = useState(emptyForm)
 
-  const fetchPaymentsData = async () => {
+  const fetchPaymentsData = async (signal) => {
     try {
       setLoading(true)
       const [paymentsData, vendorsData, billsData, profileRes] = await Promise.all([
-        api.get('/payments'),
-        api.get('/vendors'),
-        api.get('/bills'),
-        api.get('/settings/profile')
+        api.get('/payments', { signal }),
+        api.get('/vendors', { signal }),
+        api.get('/bills', { signal }),
+        api.get('/settings/profile', { signal })
       ])
 
       const mappedPayments = paymentsData.map(p => {
@@ -88,9 +88,6 @@ export function VendorPayments() {
         }
       })
 
-      setPayments(mappedPayments)
-      setVendors(vendorsData)
-      
       const mappedBills = billsData.map(b => ({
         billNo: b.billNumber,
         vendor: b.vendorId?.name || '—',
@@ -98,21 +95,30 @@ export function VendorPayments() {
         outstanding: b.outstandingAmount,
         status: b.status
       }))
-      setBills(mappedBills)
-      
-      if (profileRes && profileRes.data) {
-        const activeModes = (profileRes.data.paymentModes || []).filter(m => m.enabled)
-        setPaymentModes(activeModes)
+
+      if (!signal || !signal.aborted) {
+        setPayments(mappedPayments)
+        setVendors(vendorsData)
+        setBills(mappedBills)
+        
+        if (profileRes && profileRes.data) {
+          const activeModes = (profileRes.data.paymentModes || []).filter(m => m.enabled)
+          setPaymentModes(activeModes)
+        }
+        setLoading(false)
       }
-      setLoading(false)
     } catch (err) {
-      setError(err.message || 'Failed to fetch payments')
-      setLoading(false)
+      if (!signal || !signal.aborted) {
+        setError(err.message || 'Failed to fetch payments')
+        setLoading(false)
+      }
     }
   }
 
   useEffect(() => {
-    fetchPaymentsData()
+    const controller = new AbortController()
+    fetchPaymentsData(controller.signal)
+    return () => controller.abort()
   }, [])
 
   const handleOpenAdd = () => {

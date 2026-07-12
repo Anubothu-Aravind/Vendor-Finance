@@ -50,34 +50,43 @@ export function RunningLedger() {
   const [error, setError] = useState(null)
 
   useEffect(() => {
+    const controller = new AbortController()
     const fetchParties = async () => {
       try {
         setPartiesLoading(true)
         const [vendorsData, financiersData] = await Promise.all([
-          api.get('/vendors'),
-          api.get('/financiers'),
+          api.get('/vendors', { signal: controller.signal }),
+          api.get('/financiers', { signal: controller.signal }),
         ])
-        setVendors(vendorsData)
-        setFinanciers(financiersData)
+        if (!controller.signal.aborted) {
+          setVendors(vendorsData)
+          setFinanciers(financiersData)
+        }
       } catch (err) {
-        setError(err.message || 'Failed to load parties')
+        if (!controller.signal.aborted) {
+          setError(err.message || 'Failed to load parties')
+        }
       } finally {
-        setPartiesLoading(false)
+        if (!controller.signal.aborted) {
+          setPartiesLoading(false)
+        }
       }
     }
     fetchParties()
+    return () => controller.abort()
   }, [])
 
   useEffect(() => {
     if (!partyId || !partyType) return
+    const controller = new AbortController()
     const fetchLedger = async () => {
       try {
         setLedgerLoading(true)
         const endpoint = partyType === 'vendor'
           ? `/ledger/vendor/${partyId}`
           : `/ledger/financier/${partyId}`
-        const data = await api.get(endpoint)
-        // Build running statement from sorted transactions
+        const data = await api.get(endpoint, { signal: controller.signal })
+        
         let runningBal = 0
         const rows = data.map((t, idx) => {
           const isCredit = isCreditType(t.type)
@@ -96,16 +105,23 @@ export function RunningLedger() {
             balance: runningBal,
           }
         })
-        setLedger(rows)
-        setError(null)
+        if (!controller.signal.aborted) {
+          setLedger(rows)
+          setError(null)
+        }
       } catch (err) {
-        setError(err.message || 'Failed to load ledger')
-        setLedger([])
+        if (!controller.signal.aborted) {
+          setError(err.message || 'Failed to load ledger')
+          setLedger([])
+        }
       } finally {
-        setLedgerLoading(false)
+        if (!controller.signal.aborted) {
+          setLedgerLoading(false)
+        }
       }
     }
     fetchLedger()
+    return () => controller.abort()
   }, [partyId, partyType])
 
   // Build combined party list for dropdown

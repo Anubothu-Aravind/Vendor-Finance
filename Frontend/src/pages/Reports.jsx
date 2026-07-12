@@ -20,7 +20,7 @@ const tabs = ['Vendor Outstanding', 'Financier Outstanding', 'Payments Summary',
 
 export function Reports() {
   const [activeTab, setActiveTab] = useState('Vendor Outstanding')
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString())
+  const [selectedYear, setSelectedYear] = useState('')
 
   // Data states
   const [outstandingData, setOutstandingData] = useState({ kpis: {}, parties: [] })
@@ -31,29 +31,37 @@ export function Reports() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  const fetchData = async () => {
+  const fetchData = async (signal) => {
     try {
       setLoading(true)
       const [outstanding, paymentsData, repaymentsData, billsData] = await Promise.all([
-        api.get('/reports/outstanding'),
-        api.get('/payments'),
-        api.get('/loans/repayments/all'),
-        api.get('/bills')
+        api.get('/reports/outstanding', { signal }),
+        api.get('/payments', { signal }),
+        api.get('/loans/repayments/all', { signal }),
+        api.get('/bills', { signal })
       ])
-      setOutstandingData(outstanding)
-      setPayments(paymentsData)
-      setRepayments(repaymentsData)
-      setBills(billsData)
-      setError(null)
+      if (!signal || !signal.aborted) {
+        setOutstandingData(outstanding)
+        setPayments(paymentsData)
+        setRepayments(repaymentsData)
+        setBills(billsData)
+        setError(null)
+      }
     } catch (err) {
-      setError(err.message || 'Failed to load reports data')
+      if (!signal || !signal.aborted) {
+        setError(err.message || 'Failed to load reports data')
+      }
     } finally {
-      setLoading(false)
+      if (!signal || !signal.aborted) {
+        setLoading(false)
+      }
     }
   }
 
   useEffect(() => {
-    fetchData()
+    const controller = new AbortController()
+    fetchData(controller.signal)
+    return () => controller.abort()
   }, [])
 
   // Calculate distinct years present across bills, payments, and repayments
@@ -86,12 +94,8 @@ export function Reports() {
     }))
   }, [bills, payments, repayments])
 
-  // Sync selectedYear to ensure it is in the list of available years
-  useEffect(() => {
-    if (availableYears.length > 0 && !availableYears.some(y => y.value === selectedYear)) {
-      setSelectedYear(availableYears[0].value)
-    }
-  }, [availableYears, selectedYear])
+  // Derive activeYear inline without an extra state-syncing effect
+  const activeYear = selectedYear || (availableYears[0]?.value) || new Date().getFullYear().toString()
 
   // 1. Vendor Outstanding Tab Data
   const vendorData = useMemo(() => {
@@ -207,9 +211,9 @@ export function Reports() {
     }
   }, [payments, repayments])
 
-  // 6. Yearly Trends calculations based on selectedYear
+  // 6. Yearly Trends calculations based on activeYear
   const yearlyData = useMemo(() => {
-    const targetYear = parseInt(selectedYear)
+    const targetYear = parseInt(activeYear)
 
     // Filter bills and payments by year
     const yearBills = bills.filter(b => !b.isDeleted && new Date(b.billDate || b.date).getFullYear() === targetYear)
@@ -247,7 +251,7 @@ export function Reports() {
       pending: `₹${(pendingAmount / 100000).toFixed(1)}L`,
       chartData
     }
-  }, [bills, payments, selectedYear])
+  }, [bills, payments, activeYear])
 
   return (
     <div className="space-y-6">
@@ -593,7 +597,7 @@ export function Reports() {
               <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Yearly Summary ({currentYearData.title})</h3>
               <div className="w-36">
                 <DropdownSelect
-                  value={selectedYear}
+                  value={activeYear}
                   onChange={setSelectedYear}
                   options={availableYears}
                 />

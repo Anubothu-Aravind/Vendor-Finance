@@ -50,23 +50,23 @@ export function PurchaseBills() {
   }
   const [form, setForm] = useState(emptyForm)
 
-  const fetchBillsAndVendors = async () => {
+  const fetchBillsAndVendors = async (signal) => {
     try {
       setLoading(true)
       const [billsData, vendorsData] = await Promise.all([
-        api.get('/bills'),
-        api.get('/vendors')
+        api.get('/bills', { signal }),
+        api.get('/vendors', { signal })
       ])
-      
+
       const mapped = billsData.map(b => {
         const billDateStr = b.billDate ? fromInputDate(b.billDate.split('T')[0]) : ''
         const dueDateStr = b.dueDate ? fromInputDate(b.dueDate.split('T')[0]) : ''
-        
+
         let mappedStatus = b.status === 'PAID' ? 'Paid' : b.status === 'PARTIALLY_PAID' ? 'Partial' : 'Pending'
         if (mappedStatus !== 'Paid' && b.dueDate && new Date(b.dueDate) < new Date()) {
           mappedStatus = 'Overdue'
         }
-        
+
         return {
           id: b._id,
           billNo: b.billNumber,
@@ -82,18 +82,24 @@ export function PurchaseBills() {
           status: mappedStatus
         }
       })
-      
-      setBills(mapped)
-      setVendors(vendorsData)
-      setLoading(false)
+
+      if (!signal || !signal.aborted) {
+        setBills(mapped)
+        setVendors(vendorsData)
+        setLoading(false)
+      }
     } catch (err) {
-      setError(err.message || 'Failed to fetch bills')
-      setLoading(false)
+      if (!signal || !signal.aborted) {
+        setError(err.message || 'Failed to fetch bills')
+        setLoading(false)
+      }
     }
   }
 
   useEffect(() => {
-    fetchBillsAndVendors()
+    const controller = new AbortController()
+    fetchBillsAndVendors(controller.signal)
+    return () => controller.abort()
   }, [])
 
   const vendorListOptions = useMemo(() => {
@@ -287,7 +293,7 @@ export function PurchaseBills() {
             <tbody className="divide-y divide-gray-50">
               {filtered.map((b, i) => (
                 <motion.tr 
-                  key={b.id} 
+                  key={b._id || b.id} 
                   onClick={() => handleOpenPreview(b)} 
                   initial={{ opacity: 0, y: 4 }}
                   animate={{ opacity: 1, y: 0 }}
