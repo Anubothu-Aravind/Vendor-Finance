@@ -99,6 +99,9 @@ html.light body {
 @layer base {
   *, ::before, ::after {
     box-sizing: border-box;
+    /* Firefox scrollbar compatibility styling */
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border-strong) transparent;
   }
 
   html {
@@ -194,6 +197,7 @@ html.light body {
   background: var(--gradient-primary);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
+  -moz-background-clip: text;
   background-clip: text;
   color: transparent;
 }
