@@ -137,3 +137,19 @@ DEV_BYPASS_FLAG=true
 ```env
 VITE_API_URL=http://localhost:5000/api
 ```
+
+---
+
+## 5. Performance, Security, and Real-Time Capabilities
+
+### 🛡️ Git History Credential Purging
+- **Action**: Swept the entire local repository using `git filter-branch` to replace hardcoded MongoDB database credentials in the root commit (`2a2662a`) with placeholder values, preventing credential leakage in case of future pushes.
+
+### 📦 Code Splitting & Bundle Size Optimization
+- **Action**: Converted all static page routes to lazy-loaded routes via `React.lazy` and `Suspense`. 
+- **Impact**: Reduced the primary minified bundle size from `1.97MB` down to `793kB`, accelerating initial app load times.
+
+### ⚡ Real-Time Server-Sent Events (SSE) Sync
+- **Action**: Built a native `/api/events` connection endpoint on the backend. 
+- **Coverage**: Registered database modification broadcasts inside vendor, bill, payment, loan, and cheque controllers. Whenever a record is updated, a `data-changed` SSE signal is transmitted to the client, triggering real-time custom event refetches.
+
