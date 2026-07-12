@@ -26,5 +26,6 @@ router.put('/ui-prefs', settingsController.updateUiPrefs)
 router.get('/profile', settingsController.getProfile)
 router.post('/profile', requireRole(['Admin']), validateProfile, settingsController.updateProfile)
 router.post('/upload-logo', requireRole(['Admin']), upload.single('logo'), settingsController.uploadLogo)
+router.post('/backup/restore', requireRole(['Admin']), upload.single('backup'), settingsController.restoreBackup)
 
 module.exports = router

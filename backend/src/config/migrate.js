@@ -1,7 +1,32 @@
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
 const mongoose = require('mongoose');
 
-const uriTest = "mongodb+srv://aravindvindce_db_user:Vywtrv17qaIXjo0A@cluster0.uvwpdlh.mongodb.net/test?appName=Cluster0";
-const uriVastrams = "mongodb+srv://aravindvindce_db_user:Vywtrv17qaIXjo0A@cluster0.uvwpdlh.mongodb.net/vastrams?appName=Cluster0";
+const baseUri = process.env.MONGO_URI;
+
+if (!baseUri) {
+  console.error("FATAL ERROR: MONGO_URI is not defined in environment! Please configure it in backend/.env");
+  process.exit(1);
+}
+
+function getDbUri(base, dbName) {
+  try {
+    const urlObj = new URL(base);
+    urlObj.pathname = `/${dbName}`;
+    return urlObj.toString();
+  } catch (err) {
+    // Fallback if URL parsing fails
+    if (base.includes('/test')) {
+      return base.replace('/test', `/${dbName}`);
+    } else if (base.includes('/vastrams')) {
+      return base.replace('/vastrams', `/${dbName}`);
+    }
+    return base;
+  }
+}
+
+const uriTest = getDbUri(baseUri, 'test');
+const uriVastrams = getDbUri(baseUri, 'vastrams');
 
 async function migrate() {
   console.log('Starting migration from test to vastrams...');

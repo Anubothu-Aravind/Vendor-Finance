@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { 
   User, Store, Building2, Coins, CreditCard, Database, Palette, Info, 
   Search, Plus, Trash2, Edit2, X, Check, Upload, RefreshCw,
@@ -322,6 +323,7 @@ export function Settings() {
   const [activeTab, setActiveTab] = useState('profile')
   const toast = useToast()
   const confirm = useConfirm()
+  const navigate = useNavigate()
 
   const showToast = (message, type = 'success') => {
     toast(message, type)
@@ -952,6 +954,13 @@ export function Settings() {
   const [importData, setImportData] = useState(null)
   const fileInputRef = useRef(null)
 
+  const [restoreFile, setRestoreFile] = useState(null)
+  const [restoreError, setRestoreError] = useState('')
+  const [restoreLoading, setRestoreLoading] = useState(false)
+  const [showRestoreModal, setShowRestoreModal] = useState(false)
+  const [parsedRestoreData, setParsedRestoreData] = useState(null)
+  const restoreFileInputRef = useRef(null)
+
   // Reset Flow States
   const [showResetModal1, setShowResetModal1] = useState(false)
   const [showResetModal2, setShowResetModal2] = useState(false)
@@ -1018,9 +1027,20 @@ export function Settings() {
     }
   }
 
-  const handleImportFileChange = (e) => {
+  const handleRestoreFileChange = (e) => {
     const file = e.target.files[0]
     if (!file) return
+
+    setRestoreFile(null)
+    setRestoreError('')
+    setParsedRestoreData(null)
+
+    // Client-side extension validation
+    const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase()
+    if (ext !== '.xlsx' && ext !== '.xls') {
+      setRestoreError("Only Excel files (.xlsx, .xls) are accepted")
+      return
+    }
 
     const reader = new FileReader()
     reader.onload = (event) => {
@@ -1029,7 +1049,6 @@ export function Settings() {
         const workbook = XLSX.read(data, { type: 'array' })
         
         const parsed = {}
-        
         const parseSheet = (sheetName) => {
           const sheet = workbook.Sheets[sheetName]
           if (!sheet) return []
@@ -1053,8 +1072,7 @@ export function Settings() {
           })
         }
 
-        const settingsList = parseSheet('Settings')
-        parsed.settings = settingsList[0] || {}
+        parsed.settings = parseSheet('Settings')[0] || {}
         parsed.vendors = parseSheet('Vendors')
         parsed.financiers = parseSheet('Financiers')
         parsed.loans = parseSheet('Loans')
@@ -1064,45 +1082,41 @@ export function Settings() {
         parsed.cheques = parseSheet('Cheques')
         parsed.transactions = parseSheet('Transactions')
 
-        setImportData(parsed)
-        
-        const vendorsCount = parsed.vendors?.length || 0
-        const billsCount = parsed.bills?.length || 0
-        const paymentsCount = parsed.payments?.length || 0
-        const financiersCount = parsed.financiers?.length || 0
-        const loansCount = parsed.loans?.length || 0
-        const repaymentsCount = parsed.repayments?.length || 0
-        const chequesCount = parsed.cheques?.length || 0
-
-        setImportSummary(`Found ${vendorsCount} vendors, ${billsCount} bills, ${paymentsCount} payments, ${financiersCount} financiers, ${loansCount} loans, ${repaymentsCount} repayments, ${chequesCount} cheques in the Excel file.`)
+        setParsedRestoreData(parsed)
+        setRestoreFile(file)
       } catch (err) {
-        console.error('Import error:', err)
-        showToast('Invalid Excel file format', 'error')
-        setImportSummary(null)
-        setImportData(null)
+        console.error('Restore parsing error:', err)
+        setRestoreError("Invalid Excel file format or structure")
       }
     }
     reader.readAsArrayBuffer(file)
   }
 
-  const handleConfirmImport = async () => {
-    if (!importData) return
+  const handleConfirmRestore = async () => {
+    if (!restoreFile || !parsedRestoreData) return
     try {
-      const res = await api.post('/import', importData)
+      setRestoreLoading(true)
+      const formData = new FormData()
+      formData.append('backup', restoreFile)
+      formData.append('data', JSON.stringify(parsedRestoreData))
+
+      const res = await api.post('/settings/backup/restore', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      })
       if (res.success) {
-        showToast('Data imported successfully')
-        setImportSummary(null)
-        setImportData(null)
-        if (fileInputRef.current) fileInputRef.current.value = ''
-        
-        // Refresh all local backend lists
-        fetchProfile()
-        fetchVendors()
-        fetchFinanciers()
-        fetchLoans()
+        showToast('Data restored successfully')
+        setShowRestoreModal(false)
+        setRestoreFile(null)
+        setParsedRestoreData(null)
+        if (restoreFileInputRef.current) restoreFileInputRef.current.value = ''
+        navigate('/') // redirect to dashboard!
       }
     } catch (err) {
-      showToast(err.message || 'Failed to import data', 'error')
+      showToast(err.message || 'Failed to restore backup', 'error')
+    } finally {
+      setRestoreLoading(false)
     }
   }
 
@@ -1879,43 +1893,62 @@ export function Settings() {
               </div>
             </div>
 
-            {/* Import Section */}
+            {/* Restore from Backup Section */}
             <div className="space-y-4 pt-6">
               <div>
-                <h2 className="text-lg font-bold text-gray-900">Import Data</h2>
-                <p className="text-xs text-gray-400 mt-0.5">Restore the application data from a previously exported `.xlsx` file</p>
+                <h2 className="text-lg font-bold text-gray-900" style={{ fontFamily: 'var(--font-display)', color: 'var(--color-text-primary)' }}>Restore from Backup</h2>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>Restore the application data from a previously exported Excel backup file</p>
               </div>
 
               <div className="max-w-md space-y-4">
-                <div className="border border-dashed border-gray-200 dark:border-slate-600 rounded-lg p-5 bg-gray-50/50 dark:bg-slate-800/50">
+                <div className="border border-dashed rounded-lg p-5" style={{ background: 'var(--color-bg-surface)', borderColor: 'var(--color-border)' }}>
                   <div className="flex flex-col items-center gap-3 text-center">
-                    <Upload size={20} className="text-gray-400 dark:text-slate-500" />
+                    <Upload size={20} className="text-gray-400" />
                     <div>
-                      <p className="text-xs font-semibold text-gray-600 dark:text-slate-300 mb-0.5">Import an Excel backup file</p>
-                      <p className="text-[10px] text-gray-400 dark:text-slate-500">Only valid Excel backups created by this app are supported</p>
+                      <p className="text-xs font-semibold mb-0.5" style={{ color: 'var(--color-text-primary)' }}>Upload Excel backup file</p>
+                      <p className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>Only Excel files (.xlsx, .xls) are accepted</p>
                     </div>
-                    <label className="flex items-center space-x-2 px-3.5 py-1.5 text-xs font-semibold bg-brand-primary text-white rounded-lg hover:opacity-90 transition-opacity cursor-pointer">
+                    <label className="flex items-center space-x-2 px-3.5 py-1.5 text-xs font-semibold rounded-lg cursor-pointer transition-opacity" style={{ background: 'var(--color-primary)', color: '#fff' }}>
                       <Upload size={12} />
                       <span>Choose File</span>
                       <input 
                         type="file" 
-                        accept=".xlsx" 
-                        onChange={handleImportFileChange}
-                        ref={fileInputRef}
+                        accept=".xlsx,.xls" 
+                        onChange={handleRestoreFileChange}
+                        ref={restoreFileInputRef}
                         className="hidden"
                       />
                     </label>
-                    {fileInputRef.current?.files?.[0] && (
-                      <p className="text-[10px] font-mono text-gray-500 dark:text-slate-400 truncate max-w-full">{fileInputRef.current.files[0].name}</p>
+                    {restoreFile && (
+                      <div className="text-left w-full border-t border-slate-800 pt-3 mt-2 space-y-1">
+                        <p className="text-[10px] font-mono truncate max-w-full" style={{ color: 'var(--color-text-secondary)' }}>
+                          <strong>File:</strong> {restoreFile.name}
+                        </p>
+                        <p className="text-[10px] font-mono" style={{ color: 'var(--color-text-secondary)' }}>
+                          <strong>Size:</strong> {(restoreFile.size / 1024).toFixed(2)} KB
+                        </p>
+                      </div>
+                    )}
+                    {restoreError && (
+                      <p className="text-[10px] font-semibold text-red-500 mt-1">{restoreError}</p>
                     )}
                   </div>
                 </div>
 
-                {importSummary && (
-                  <div className="p-3 rounded-lg text-xs space-y-3" style={{ background: 'rgba(0,200,150,0.08)', border: '1px solid rgba(0,200,150,0.25)', color: 'var(--color-primary)' }}>
-                    <p className="font-semibold">{importSummary}</p>
-                    <button onClick={handleConfirmImport} className="px-3.5 py-1.5 text-xs font-semibold bg-brand-primary text-white rounded-lg hover:opacity-90 transition-opacity">
-                      Confirm Import
+                {restoreFile && parsedRestoreData && !restoreError && (
+                  <div className="p-3 rounded-lg text-xs space-y-3 flex items-center justify-between" style={{ background: 'rgba(0,200,150,0.08)', border: '1px solid rgba(0,200,150,0.25)' }}>
+                    <div style={{ color: 'var(--color-primary)' }}>
+                      <p className="font-semibold">Ready to restore data snapshot:</p>
+                      <p className="text-[10px] mt-0.5" style={{ color: 'var(--color-text-secondary)' }}>
+                        {parsedRestoreData.vendors?.length || 0} vendors · {parsedRestoreData.bills?.length || 0} bills · {parsedRestoreData.loans?.length || 0} loans
+                      </p>
+                    </div>
+                    <button 
+                      onClick={() => setShowRestoreModal(true)} 
+                      className="px-3.5 py-1.5 text-xs font-semibold text-white rounded-lg hover:opacity-90 transition-opacity"
+                      style={{ background: 'var(--color-primary)' }}
+                    >
+                      Restore
                     </button>
                   </div>
                 )}
@@ -2324,6 +2357,33 @@ export function Settings() {
                 }`}
               >
                 Permanently Wipe Database
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- RESTORE MODAL --- */}
+      {showRestoreModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl border border-gray-200 max-w-sm w-full p-6 space-y-4 shadow-xl">
+            <h3 className="text-sm font-bold text-red-500 uppercase tracking-wide">Confirm Database Restore</h3>
+            <p className="text-xs text-gray-500 leading-relaxed">
+              This will overwrite all current data. This cannot be undone. Are you sure?
+            </p>
+            <div className="flex justify-end space-x-2 pt-2">
+              <button 
+                onClick={() => setShowRestoreModal(false)} 
+                className="px-3.5 py-2 text-xs font-semibold text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleConfirmRestore} 
+                disabled={restoreLoading}
+                className="px-3.5 py-2 text-xs font-semibold bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+              >
+                {restoreLoading ? 'Restoring...' : 'Confirm Restore'}
               </button>
             </div>
           </div>

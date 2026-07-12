@@ -25,7 +25,13 @@ class AlertsService {
           title: 'Cheque Bounced',
           description: `Cheque #${cheque.chequeNumber} for ${cheque.partyName} (Amt: ₹${cheque.amount.toLocaleString('en-IN')}) bounced. Reason: ${cheque.bounceReason || 'Unspecified'}`,
           date: cheque.bounceDate || cheque.updatedAt,
-          metadata: { type: 'cheque', id: cheque._id }
+          metadata: { 
+            type: 'cheque', 
+            id: cheque._id,
+            partyName: cheque.partyName,
+            amount: cheque.amount,
+            date: cheque.bounceDate || cheque.updatedAt
+          }
         })
       })
 
@@ -46,15 +52,21 @@ class AlertsService {
           title: 'Critical Overdue Bill',
           description: `Bill #${bill.billNumber} from ${vendorName} is ${daysOverdue} days overdue (Outstanding: ₹${bill.outstandingAmount.toLocaleString('en-IN')})`,
           date: bill.dueDate,
-          metadata: { type: 'bill', id: bill._id }
+          metadata: { 
+            type: 'bill', 
+            id: bill._id,
+            partyName: vendorName,
+            amount: bill.outstandingAmount,
+            date: bill.dueDate
+          }
         })
       })
 
-      // 3. Fetch Loans Maturing Within 14 Days
-      const fourteenDaysHence = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000)
+      // 3. Fetch Loans Maturing Within 30 Days
+      const thirtyDaysHence = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
       const maturingLoans = await Loan.find({
         status: 'ACTIVE',
-        maturityDate: { $gte: now, $lte: fourteenDaysHence },
+        maturityDate: { $gte: now, $lte: thirtyDaysHence },
         isDeleted: false
       }).populate('financierId')
 
@@ -67,7 +79,13 @@ class AlertsService {
           title: 'Loan Maturing Soon',
           description: `Loan Ref: ${loan.loanReference} from ${financierName} matures in ${daysToMaturity} days (Outstanding Principal: ₹${loan.outstandingPrincipal.toLocaleString('en-IN')})`,
           date: loan.maturityDate,
-          metadata: { type: 'loan', id: loan._id }
+          metadata: { 
+            type: 'loan', 
+            id: loan._id,
+            partyName: financierName,
+            amount: loan.outstandingPrincipal,
+            date: loan.maturityDate
+          }
         })
       })
 

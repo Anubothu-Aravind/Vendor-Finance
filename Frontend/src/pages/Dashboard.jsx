@@ -8,6 +8,7 @@ import EmptyState from '../components/ui/EmptyState'
 import Badge from '../components/ui/Badge'
 import api from '../utils/api'
 import Skeleton from '../components/ui/Skeleton'
+import { AlertsWidget } from '../components/dashboard/AlertsWidget'
 
 const fmt = (v) => new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(v)
 
@@ -156,6 +157,9 @@ export function Dashboard() {
           ))
         )}
       </div>
+
+      {/* Active System Alerts */}
+      <AlertsWidget />
 
       {/* Charts & Top Outstandings */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

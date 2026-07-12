@@ -192,3 +192,71 @@ exports.uploadLogo = async (req, res, next) => {
     next(error)
   }
 }
+
+exports.restoreBackup = async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'No file uploaded' })
+    }
+
+    const { mimetype } = req.file
+    const validMimeTypes = [
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.ms-excel'
+    ]
+
+    if (!validMimeTypes.includes(mimetype)) {
+      return res.status(400).json({ success: false, message: 'Only Excel files (.xlsx, .xls) are accepted' })
+    }
+
+    const payload = req.body.data
+    if (!payload) {
+      return res.status(400).json({ success: false, message: 'No backup data payload provided' })
+    }
+
+    const data = JSON.parse(payload)
+
+    const Vendor = require('../models/Vendor')
+    const Financier = require('../models/Financier')
+    const Loan = require('../models/Loan')
+    const Bill = require('../models/Bill')
+    const Payment = require('../models/Payment')
+    const Repayment = require('../models/Repayment')
+    const Cheque = require('../models/Cheque')
+    const Transaction = require('../models/Transaction')
+
+    // Drop all collections
+    await Settings.deleteMany()
+    await Vendor.deleteMany()
+    await Financier.deleteMany()
+    await Loan.deleteMany()
+    await Bill.deleteMany()
+    await Payment.deleteMany()
+    await Repayment.deleteMany()
+    await Cheque.deleteMany()
+    await Transaction.deleteMany()
+
+    // Restore Settings
+    if (data.settings && Object.keys(data.settings).length > 0) {
+      const s = new Settings(data.settings)
+      await s.save()
+    } else {
+      const s = new Settings()
+      await s.save()
+    }
+
+    // Restore arrays
+    if (data.vendors && data.vendors.length > 0) await Vendor.insertMany(data.vendors)
+    if (data.financiers && data.financiers.length > 0) await Financier.insertMany(data.financiers)
+    if (data.loans && data.loans.length > 0) await Loan.insertMany(data.loans)
+    if (data.bills && data.bills.length > 0) await Bill.insertMany(data.bills)
+    if (data.payments && data.payments.length > 0) await Payment.insertMany(data.payments)
+    if (data.repayments && data.repayments.length > 0) await Repayment.insertMany(data.repayments)
+    if (data.cheques && data.cheques.length > 0) await Cheque.insertMany(data.cheques)
+    if (data.transactions && data.transactions.length > 0) await Transaction.insertMany(data.transactions)
+
+    res.status(200).json({ success: true, message: 'Data restored successfully' })
+  } catch (error) {
+    next(error)
+  }
+}
