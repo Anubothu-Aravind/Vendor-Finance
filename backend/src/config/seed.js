@@ -11,7 +11,8 @@ const seedAdminUser = async () => {
         email: 'admin@vastrams.in',
         passwordHash,
         role: 'Admin',
-        status: 'Active'
+        status: 'Active',
+        isDefaultCredential: true
       })
       await defaultAdmin.save()
       console.log('Seeded default Admin User: admin@vastrams.in / admin123')
