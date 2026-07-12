@@ -144,6 +144,10 @@ exports.refresh = async (req, res, next) => {
       role: user.role
     }
 
+    if (decoded.setupBypassed) {
+      tokenPayload.setupBypassed = true
+    }
+
     const accessToken = jwt.sign(tokenPayload, ACCESS_SECRET, { expiresIn: '1h' })
 
     res.status(200).json({

@@ -170,16 +170,13 @@ router.post('/skip', authenticateSetupToken, async (req, res, next) => {
     // Clean up any remaining verification records
     await OTPVerification.deleteMany({ setupToken: req.rawSetupToken })
 
-    // Bypassing setup in dev mode mark isDefaultCredential as false
-    user.isDefaultCredential = false
-    await user.save()
-
-    // Issue normal tokens directly without credentials changes
+    // Issue normal tokens directly without credentials changes (setup is bypassed for current session only)
     const tokenPayload = {
       id: user._id,
       name: user.name,
       email: user.email,
-      role: user.role
+      role: user.role,
+      setupBypassed: true
     }
 
     const accessToken = jwt.sign(tokenPayload, ACCESS_SECRET, { expiresIn: '1h' })

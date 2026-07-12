@@ -19,6 +19,9 @@ module.exports = async (req, res, next) => {
 
     // 1. If req.user is already populated by authenticateJWT
     if (req.user) {
+      if (req.user.setupBypassed) {
+        return next()
+      }
       if (req.user.isDefaultCredential) {
         return res.status(403).json({
           success: false,
@@ -35,6 +38,11 @@ module.exports = async (req, res, next) => {
       const token = authHeader.split(' ')[1]
       try {
         const decoded = jwt.verify(token, ACCESS_SECRET)
+        
+        if (decoded.setupBypassed) {
+          return next()
+        }
+
         const user = await User.findById(decoded.id)
         if (user && user.isDefaultCredential) {
           return res.status(403).json({
