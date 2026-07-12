@@ -1,0 +1,378 @@
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ═══════════════════════════════════════════════════════════════════
+   VASTRAMS DESIGN TOKENS — v2.1 (Emerald Dark + Gradient System)
+   All color decisions live here. Tailwind extends via CSS vars.
+   ═══════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* Brand */
+  --color-primary:        #00C896;
+  --color-primary-hover:  #00A87E;
+  --color-primary-muted:  rgba(0, 200, 150, 0.12);
+
+  /* Gradient — overridden at runtime by usePreferences */
+  --gradient-primary: linear-gradient(135deg, #00C896, #00A87E);
+
+  /* Backgrounds — deep layered dark */
+  --color-bg-base:        #0B0F1A;
+  --color-bg-surface:     #111827;
+  --color-bg-elevated:    #1A2235;
+  --color-bg-hover:       #1F2D42;
+
+  /* Borders */
+  --color-border:         #1E2D40;
+  --color-border-strong:  #2A3F5A;
+
+  /* Text */
+  --color-text-primary:   #F0F4F8;
+  --color-text-secondary: #8A9BB0;
+  --color-text-muted:     #4A5E72;
+  --color-text-inverse:   #0B0F1A;
+
+  /* Semantic */
+  --color-success:        #00C896;
+  --color-warning:        #F5A623;
+  --color-danger:         #E84545;
+  --color-info:           #4A9EFF;
+
+  /* Sidebar */
+  --color-sidebar-bg:          #0D1320;
+  --color-sidebar-active:      rgba(0, 200, 150, 0.08);
+  --color-sidebar-text:        #8A9BB0;
+  --color-sidebar-active-text: #00C896;
+
+  /* Table */
+  --color-table-header:   #111827;
+  --color-table-row-alt:  #0F1824;
+  --color-table-row-hover:#1A2235;
+
+  /* Typography */
+  --font-display: 'Montserrat', sans-serif;
+  --font-body:    'Inter', sans-serif;
+}
+
+/* ───────────────────────────────────────────────────────────────────
+   LIGHT THEME OVERRIDES (.light class on <html>)
+   Only surface and text change — gradient accent stays the same.
+   ─────────────────────────────────────────────────────────────────── */
+
+html.light {
+  color-scheme: light;
+
+  --color-bg-base:        #F8FAFC;
+  --color-bg-surface:     #FFFFFF;
+  --color-bg-elevated:    #F1F5F9;
+  --color-bg-hover:       #E8EDF5;
+
+  --color-border:         #E2E8F0;
+  --color-border-strong:  #CBD5E1;
+
+  --color-text-primary:   #0F172A;
+  --color-text-secondary: #475569;
+  --color-text-muted:     #94A3B8;
+  --color-text-inverse:   #FFFFFF;
+
+  --color-sidebar-bg:          #1A2235;
+  --color-sidebar-active:      rgba(0, 200, 150, 0.12);
+  --color-sidebar-text:        #8A9BB0;
+  --color-sidebar-active-text: #00C896;
+
+  --color-table-header:   #F8FAFC;
+  --color-table-row-alt:  #F1F5F9;
+  --color-table-row-hover:#EEF2F8;
+}
+
+html.light body {
+  background-color: var(--color-bg-base);
+  color: var(--color-text-primary);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   BASE RESETS
+   ═══════════════════════════════════════════════════════════════════ */
+
+@layer base {
+  *, ::before, ::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    background-color: var(--color-bg-base);
+    color: var(--color-text-primary);
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Display headings use Montserrat */
+  h1, h2, h3,
+  .page-title,
+  .brand-name,
+  .nav-logo,
+  .sidebar-nav-item,
+  .section-header,
+  .modal-title,
+  .card-title {
+    font-family: var(--font-display);
+  }
+
+  /* ── GLOBAL BUTTON RESET ──────────────────────────────────────────
+     Buttons must NEVER inherit all-caps, monospace, or display font.
+     This rule has highest specificity within base to override Tailwind.
+  ──────────────────────────────────────────────────────────────────── */
+  button,
+  [role="button"],
+  input[type="submit"],
+  input[type="button"] {
+    font-family: var(--font-body) !important;
+    font-weight: 500;
+    text-transform: none !important;
+    letter-spacing: normal !important;
+  }
+
+  a {
+    text-decoration: none;
+    color: inherit;
+  }
+
+  /* Scrollbar — matches the dark surface */
+  ::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-border-strong);
+    border-radius: 99px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-text-muted);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   GRADIENT UTILITY CLASSES
+   Applied via className — updated at runtime by --gradient-primary
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Primary button gradient background */
+.btn-primary {
+  background: var(--gradient-primary) !important;
+  border: none;
+  color: #fff !important;
+}
+
+/* Active sidebar item — gradient left border */
+.sidebar-active-indicator {
+  position: relative;
+}
+.sidebar-active-indicator::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  background: var(--gradient-primary);
+  border-radius: 0 3px 3px 0;
+}
+
+/* KPI stat values — gradient text */
+.stat-value {
+  font-family: var(--font-display);
+  background: var(--gradient-primary);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Page title underline accent */
+.page-title {
+  font-family: var(--font-display);
+  position: relative;
+  display: inline-block;
+}
+.page-title::after {
+  content: '';
+  display: block;
+  height: 3px;
+  width: 48px;
+  background: var(--gradient-primary);
+  border-radius: 2px;
+  margin-top: 6px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   UTILITIES
+   ═══════════════════════════════════════════════════════════════════ */
+
+@layer utilities {
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .font-display {
+    font-family: var(--font-display);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   TRANSITIONS
+   ═══════════════════════════════════════════════════════════════════ */
+
+.transition-default {
+  transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   GLOBAL OVERRIDES — flatten legacy light-mode Tailwind classes
+   These ensure any component still using raw Tailwind gray/white
+   classes renders correctly against the dark canvas.
+   On .light, these are overridden naturally via CSS var chain.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Panels & cards */
+.bg-white,
+.bg-brand-panel {
+  background-color: var(--color-bg-surface) !important;
+}
+
+/* Light canvas fallback */
+.bg-brand-canvas,
+.bg-gray-50,
+.bg-gray-100 {
+  background-color: var(--color-bg-base) !important;
+}
+
+/* Border resets */
+.border-gray-100,
+.border-gray-200,
+.border-gray-300,
+.border-brand-border-divider {
+  border-color: var(--color-border) !important;
+}
+
+/* Text resets */
+.text-gray-900,
+.text-gray-800,
+.text-brand-ink-primary {
+  color: var(--color-text-primary) !important;
+}
+
+.text-gray-700,
+.text-gray-600 {
+  color: var(--color-text-secondary) !important;
+}
+
+.text-gray-500,
+.text-gray-400,
+.text-brand-ink-muted {
+  color: var(--color-text-muted) !important;
+}
+
+/* Hover state overrides */
+.hover\:bg-gray-50:hover,
+.hover\:bg-gray-100:hover {
+  background-color: var(--color-bg-hover) !important;
+}
+
+/* Dividers */
+.divide-gray-50,
+.divide-gray-100,
+.divide-gray-200 {
+  border-color: var(--color-border) !important;
+}
+
+/* Inputs, selects, textareas */
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+select,
+textarea {
+  background-color: var(--color-bg-elevated) !important;
+  color: var(--color-text-primary) !important;
+  border-color: var(--color-border) !important;
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):focus,
+select:focus,
+textarea:focus {
+  border-color: var(--color-primary) !important;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(0, 200, 150, 0.18) !important;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--color-text-muted) !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   BADGE OVERRIDES — semantic colors for dark bg
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Success / cleared */
+.bg-green-50  { background-color: rgba(0, 200, 150, 0.10) !important; }
+.text-green-700 { color: #00C896 !important; }
+.border-green-200 { border-color: rgba(0, 200, 150, 0.25) !important; }
+
+/* Warning / pending */
+.bg-orange-50  { background-color: rgba(245, 166, 35, 0.10) !important; }
+.text-orange-700 { color: #F5A623 !important; }
+.border-orange-200 { border-color: rgba(245, 166, 35, 0.25) !important; }
+
+/* Amber (upcoming cheques dashboard) */
+.bg-amber-50  { background-color: rgba(245, 166, 35, 0.10) !important; }
+.text-amber-600 { color: #F5A623 !important; }
+.border-amber-100 { border-color: rgba(245, 166, 35, 0.15) !important; }
+
+/* Danger / bounced / overdue */
+.bg-red-50  { background-color: rgba(232, 69, 69, 0.10) !important; }
+.text-red-700 { color: #E84545 !important; }
+.text-red-500 { color: #E84545 !important; }
+.text-red-600 { color: #E84545 !important; }
+.border-red-200 { border-color: rgba(232, 69, 69, 0.25) !important; }
+.text-red-100 { color: rgba(232, 69, 69, 0.25) !important; }
+
+/* Info / blue (intentional — only for neutral info states) */
+.bg-blue-50  { background-color: rgba(74, 158, 255, 0.10) !important; }
+.text-blue-700 { color: #4A9EFF !important; }
+.text-blue-600 { color: #4A9EFF !important; }
+.text-blue-500 { color: #4A9EFF !important; }
+.border-blue-200 { border-color: rgba(74, 158, 255, 0.25) !important; }
+.border-blue-100 { border-color: rgba(74, 158, 255, 0.15) !important; }
+.bg-blue-600,
+.bg-blue-500,
+.bg-blue-400 { background-color: rgba(74, 158, 255, 0.12) !important; }
+
+/* Purple (active loans badge) */
+.bg-purple-50  { background-color: rgba(139, 92, 246, 0.10) !important; }
+.text-purple-700 { color: #a78bfa !important; }
+.text-purple-600 { color: #a78bfa !important; }
+.border-purple-200 { border-color: rgba(139, 92, 246, 0.25) !important; }
+.border-purple-100 { border-color: rgba(139, 92, 246, 0.15) !important; }
+
+/* Gray / neutral badges */
+.bg-gray-200  { background-color: var(--color-bg-elevated) !important; }
+.border-gray-200 { border-color: var(--color-border) !important; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   REDUCED MOTION
+   ═══════════════════════════════════════════════════════════════════ */
+
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
