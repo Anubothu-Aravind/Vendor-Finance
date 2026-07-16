@@ -1,4 +1,4 @@
-import { useState, useEffect, createContext, useContext } from 'react'
+import { useState, useEffect, useMemo, createContext, useContext } from 'react'
 import api from '../utils/api'
 
 const PreferencesContext = createContext()
@@ -121,27 +121,33 @@ export function PreferencesProvider({ children }) {
   }, [preferences.theme])
 
   // ── Currency formatter ───────────────────────────────────────────────────────
-  const formatCurrency = (amount) => {
+  // Recreates only when currency or numberFormat preference changes.
+  // Intl.NumberFormat is constructed once inside the memo, not on every call.
+  const formatCurrency = useMemo(() => {
     const symbolMap = { INR: '₹', USD: '$', EUR: '€' }
     const localeMap = { Indian: 'en-IN', International: 'en-US' }
     const symbol = symbolMap[preferences.currency] || '₹'
     const locale = localeMap[preferences.numberFormat] || 'en-IN'
     const formatter = new Intl.NumberFormat(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-    return `${symbol}${formatter.format(amount || 0)}`
-  }
+    return (amount) => `${symbol}${formatter.format(amount || 0)}`
+  }, [preferences.currency, preferences.numberFormat])
 
   // ── Date formatter ───────────────────────────────────────────────────────────
-  const formatDate = (dateInput) => {
-    if (!dateInput) return '—'
-    const date = new Date(dateInput)
-    if (isNaN(date.getTime())) return String(dateInput)
-    const day   = String(date.getDate()).padStart(2, '0')
-    const month = String(date.getMonth() + 1).padStart(2, '0')
-    const year  = date.getFullYear()
-    if (preferences.dateFormat === 'MM-DD-YYYY') return `${month}-${day}-${year}`
-    if (preferences.dateFormat === 'YYYY-MM-DD') return `${year}-${month}-${day}`
-    return `${day}-${month}-${year}`
-  }
+  // Recreates only when dateFormat preference changes.
+  const formatDate = useMemo(() => {
+    const fmt = preferences.dateFormat
+    return (dateInput) => {
+      if (!dateInput) return '—'
+      const date = new Date(dateInput)
+      if (isNaN(date.getTime())) return String(dateInput)
+      const day   = String(date.getDate()).padStart(2, '0')
+      const month = String(date.getMonth() + 1).padStart(2, '0')
+      const year  = date.getFullYear()
+      if (fmt === 'MM-DD-YYYY') return `${month}-${day}-${year}`
+      if (fmt === 'YYYY-MM-DD') return `${year}-${month}-${day}`
+      return `${day}-${month}-${year}`
+    }
+  }, [preferences.dateFormat])
 
   return (
     <PreferencesContext.Provider value={{ 

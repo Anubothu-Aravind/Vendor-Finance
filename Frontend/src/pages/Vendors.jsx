@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useReducer, useCallback } from 'react'
 import { Plus, Search, Trash2, Edit2, Eye, X } from 'lucide-react'
 import DropdownSelect from '../components/ui/DropdownSelect'
 import { toTitleCase } from '../utils/text'
@@ -24,12 +24,26 @@ const toCamelCase = (str) => {
     .replace(/\s+/g, '')
 }
 
+// ── Fetch state reducer (defined at module scope for stable reference) ────────
+const fetchInitial = { status: 'idle', vendors: [], error: null }
+function fetchReducer(state, action) {
+  switch (action.type) {
+    case 'FETCH_START':   return { ...state, status: 'loading', error: null }
+    case 'FETCH_SUCCESS': return { status: 'success', vendors: action.payload, error: null }
+    case 'FETCH_ERROR':   return { ...state, status: 'error', error: action.payload }
+    default:              return state
+  }
+}
+
 export function Vendors() {
   const toast = useToast()
   const confirm = useConfirm()
-  const [vendors, setVendors] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+
+  // ── Fetch state: consolidated into one reducer to avoid impossible states ──
+  const [fetchState, fetchDispatch] = useReducer(fetchReducer, fetchInitial)
+  const { vendors, status: fetchStatus, error } = fetchState
+  const loading = fetchStatus === 'idle' || fetchStatus === 'loading'
+
   const [search, setSearch] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [modalMode, setModalMode] = useState('add') // 'add' | 'edit' | 'preview'
@@ -54,39 +68,42 @@ export function Vendors() {
   const [form, setForm] = useState(emptyForm)
   const [formErrors, setFormErrors] = useState({})
 
-  const fetchVendors = async (signal) => {
+  // ── Fetch vendors ─────────────────────────────────────────────────────────
+  // Wrapped in useCallback so the reference is stable across renders.
+  // This allows both useEffect hooks below to correctly list it as a dependency
+  // without triggering re-registration of the event listener on every render.
+  const fetchVendors = useCallback(async (signal) => {
+    fetchDispatch({ type: 'FETCH_START' })
     try {
-      setLoading(true)
-      const data = await api.get('/vendors', { signal })
+      const data = await api.get('/vendors', signal ? { signal } : {})
       if (!signal || !signal.aborted) {
-        setVendors(data.map(v => ({
-          ...v,
-          id: v._id,
-          outstanding: v.outstandingBalance
-        })))
-        setLoading(false)
+        fetchDispatch({
+          type: 'FETCH_SUCCESS',
+          payload: data.map(v => ({
+            ...v,
+            id: v._id,
+            outstanding: v.outstandingBalance
+          }))
+        })
       }
     } catch (err) {
       if (!signal || !signal.aborted) {
-        setError(err.message || 'Failed to fetch vendors')
-        setLoading(false)
+        fetchDispatch({ type: 'FETCH_ERROR', payload: err.message || 'Failed to fetch vendors' })
       }
     }
-  }
+  }, [])
 
   useEffect(() => {
     const controller = new AbortController()
     fetchVendors(controller.signal)
     return () => controller.abort()
-  }, [])
+  }, [fetchVendors])
 
   useEffect(() => {
-    const handleDataChanged = () => {
-      fetchVendors()
-    }
+    const handleDataChanged = () => fetchVendors()
     window.addEventListener('api-data-changed', handleDataChanged)
     return () => window.removeEventListener('api-data-changed', handleDataChanged)
-  }, [])
+  }, [fetchVendors])
 
   const handleOpenAdd = () => {
     setForm(emptyForm)

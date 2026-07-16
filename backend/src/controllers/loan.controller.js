@@ -257,7 +257,7 @@ exports.createRepayment = async (req, res, next) => {
 
 exports.updateLoan = async (req, res, next) => {
   try {
-    const { noteNumber, amount, date, notes, status } = req.body
+    const { noteNumber, amount, date, maturityDate, notes, status } = req.body
     const loan = await Loan.findOne({ _id: req.params.id, isDeleted: false })
     if (!loan) {
       return res.status(404).json({ success: false, message: 'Loan not found' })
@@ -270,6 +270,7 @@ exports.updateLoan = async (req, res, next) => {
       loan.outstandingPrincipal = Math.max(0, amount - loan.paidPrincipal)
     }
     if (date !== undefined) loan.drawdownDate = date
+    if (maturityDate !== undefined) loan.maturityDate = maturityDate
     if (notes !== undefined) loan.notes = notes
     
     if (status !== undefined) {

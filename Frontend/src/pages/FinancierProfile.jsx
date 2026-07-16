@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Edit2, Plus, ArrowLeft, Building2, X } from 'lucide-react'
-import { toInputDate, fromInputDate } from '../utils/date'
+import { toInputDate, fromInputDate, getTodayFormatted } from '../utils/date'
 import DropdownSelect from '../components/ui/DropdownSelect'
 import CustomDatePicker from '../components/ui/CustomDatePicker'
 import { toTitleCase } from '../utils/text'
@@ -40,16 +40,17 @@ export function FinancierProfile() {
   // Repayment form state & sub-step
   const [repayStep, setRepayStep] = useState('input') // 'input' | 'preview'
   const [repayForm, setRepayForm] = useState({
-    date: '29-06-2026',
+    date: getTodayFormatted(),
     amount: '',
     mode: '',
-    remarks: ''
+    remarks: '',
+    chequeNo: ''
   })
 
   // Add loan form state
   const [loanForm, setLoanForm] = useState({
     noteNo: '',
-    date: '29-06-2026',
+    date: getTodayFormatted(),
     amount: '',
     interestRate: '',
     remarks: ''
@@ -152,7 +153,7 @@ export function FinancierProfile() {
       await api.post('/loans', payload)
       await fetchProfileAndLoans()
       setShowAddLoanModal(false)
-      setLoanForm({ noteNo: '', date: '29-06-2026', amount: '', interestRate: '', remarks: '' })
+      setLoanForm({ noteNo: '', date: getTodayFormatted(), amount: '', interestRate: '', remarks: '' })
     } catch (err) {
       toast(err.message || 'Failed to save loan', 'error')
     }
@@ -182,8 +183,32 @@ export function FinancierProfile() {
     return result
   }, [loans, repayForm.amount])
 
+  const isOverBalance = Number(repayForm.amount) > totals.outstanding
+
+  const handleAmountChange = (e) => {
+    let val = e.target.value.replace(/[^0-9.]/g, '')
+    const parts = val.split('.')
+    if (parts[0].length > 12) {
+      parts[0] = parts[0].slice(0, 12)
+    }
+    val = parts.join('.')
+    setRepayForm(prev => ({ ...prev, amount: val }))
+  }
+
   // Confirm Repayment Save
   const handleConfirmRepayment = async () => {
+    if (repayForm.mode === 'Cheque') {
+      if (!repayForm.chequeNo || repayForm.chequeNo.length !== 6) {
+        toast('Cheque number must be exactly 6 digits', 'error')
+        return
+      }
+    }
+
+    if (isOverBalance) {
+      toast('Amount cannot exceed the total outstanding balance', 'error')
+      return
+    }
+
     const modeMapping = {
       'Cash': 'CASH',
       'Cheque': 'CHEQUE',
@@ -201,6 +226,7 @@ export function FinancierProfile() {
             repaymentDate: toInputDate(repayForm.date),
             repaymentMode: modeMapping[repayForm.mode] || 'BANK_TRANSFER',
             referenceNumber: 'REP-' + String(Math.floor(100 + Math.random() * 900)),
+            chequeNumber: repayForm.mode === 'Cheque' ? repayForm.chequeNo : undefined,
             principalPaid: alloc.adjusted,
             interestPaid: 0
           })
@@ -209,7 +235,7 @@ export function FinancierProfile() {
       await fetchProfileAndLoans()
       setShowRepayModal(false)
       setRepayStep('input')
-      setRepayForm({ date: '29-06-2026', amount: '', mode: '', remarks: '' })
+      setRepayForm({ date: getTodayFormatted(), amount: '', mode: '', remarks: '', chequeNo: '' })
     } catch (err) {
       toast(err.message || 'Failed to confirm repayments', 'error')
     }
@@ -333,7 +359,7 @@ export function FinancierProfile() {
             <span>Add Loan</span>
           </button>
         </div>
-        {!profile.loans || profile.loans.length === 0 ? (
+        {!loans || loans.length === 0 ? (
           <div className="p-6">
             <EmptyState 
               icon="loan" 
@@ -356,7 +382,7 @@ export function FinancierProfile() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {profile.loans.map((l, i) => (
+              {loans.map((l, i) => (
                 <tr key={l._id || l.id || i} className="hover:bg-gray-50 transition-colors">
                   <td className="px-5 py-3.5 text-sm font-mono font-semibold text-gray-700">{l.noteNo}</td>
                   <td className="px-5 py-3.5 text-sm text-gray-500 font-mono">{l.date}</td>
@@ -469,9 +495,19 @@ export function FinancierProfile() {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1">Amount *</label>
-                  <input type="number" required value={repayForm.amount} onChange={e => setRepayForm({...repayForm, amount: e.target.value})}
+                  <input type="text" required value={repayForm.amount} onChange={handleAmountChange}
                     className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none font-bold" />
+                  {isOverBalance && (
+                    <p className="text-red-500 text-xs mt-1">Amount cannot exceed the total outstanding balance of ₹{fmt(totals.outstanding)}.</p>
+                  )}
                 </div>
+                {repayForm.mode === 'Cheque' && (
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Cheque Number *</label>
+                    <input type="text" required placeholder="e.g. 123456" value={repayForm.chequeNo || ''} onChange={e => setRepayForm({...repayForm, chequeNo: e.target.value.slice(0, 6).replace(/[^0-9]/g, '')})}
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none font-mono" />
+                  </div>
+                )}
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1">Remarks</label>
                   <textarea rows={2} value={repayForm.remarks} onChange={e => setRepayForm({...repayForm, remarks: e.target.value})}
@@ -479,7 +515,13 @@ export function FinancierProfile() {
                 </div>
                 <div className="flex justify-end space-x-3 pt-4 border-t border-gray-100 mt-6">
                   <button type="button" onClick={() => setShowRepayModal(false)} className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">Cancel</button>
-                  <button type="button" onClick={() => setRepayStep('preview')} disabled={!repayForm.amount}
+                  <button type="button" onClick={() => {
+                    if (repayForm.mode === 'Cheque' && (!repayForm.chequeNo || repayForm.chequeNo.length !== 6)) {
+                      toast('Cheque number must be exactly 6 digits', 'error')
+                      return
+                    }
+                    setRepayStep('preview')
+                  }} disabled={!repayForm.amount || isOverBalance}
                     className="px-4 py-2 text-sm font-medium text-white bg-brand-primary rounded-lg hover:bg-brand-primary/90 disabled:opacity-50">
                     Preview Allocation
                   </button>

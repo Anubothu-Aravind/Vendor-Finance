@@ -3,28 +3,33 @@ const validate = require('../middleware/validate')
 
 exports.validateProfile = [
   body('businessName')
+    .optional()
     .trim()
     .notEmpty()
-    .withMessage('Business name is required'),
+    .withMessage('Business name cannot be empty'),
 
   body('ownerName')
+    .optional()
     .trim()
     .notEmpty()
-    .withMessage('Owner name is required'),
+    .withMessage('Owner name cannot be empty'),
 
   body('email')
+    .optional()
     .isEmail()
     .withMessage('Email address is invalid'),
 
   body('phone')
+    .optional()
     .trim()
     .notEmpty()
-    .withMessage('Phone number is required'),
+    .withMessage('Phone number cannot be empty'),
 
   body('address')
+    .optional()
     .trim()
     .notEmpty()
-    .withMessage('Address is required'),
+    .withMessage('Address cannot be empty'),
 
   body('gstin')
     .optional({ checkFalsy: true })

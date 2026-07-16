@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { Plus, X, Edit2, Eye, Trash2 } from 'lucide-react'
-import { toInputDate, fromInputDate } from '../utils/date'
+import { toInputDate, fromInputDate, getTodayFormatted } from '../utils/date'
 import DropdownSelect from '../components/ui/DropdownSelect'
 import CustomDatePicker from '../components/ui/CustomDatePicker'
 import { toTitleCase } from '../utils/text'
@@ -34,7 +34,8 @@ export function Loans() {
   const emptyForm = {
     financier: '',
     noteNo: '',
-    loanDate: '29-06-2026',
+    loanDate: getTodayFormatted(),
+    maturityDate: '',
     amount: '',
     rate: '',
     remarks: '',
@@ -51,6 +52,7 @@ export function Loans() {
 
       const mappedLoans = loansData.map(l => {
         const drawdownDateStr = l.drawdownDate ? fromInputDate(l.drawdownDate.split('T')[0]) : ''
+        const maturityDateStr = l.maturityDate ? fromInputDate(l.maturityDate.split('T')[0]) : ''
         
         let displayStatus = 'Active'
         if (l.status === 'SETTLED') displayStatus = 'Closed'
@@ -62,6 +64,7 @@ export function Loans() {
           financier: l.financierId?.name || '—',
           financierId: l.financierId?._id || l.financierId || '',
           loanDate: drawdownDateStr,
+          maturityDate: maturityDateStr,
           amount: l.principalAmount,
           rate: String(l.interestRate),
           repaid: l.paidPrincipal,
@@ -127,15 +130,24 @@ export function Loans() {
       return
     }
 
+    if (!form.maturityDate) {
+      toast('Maturity date is required', 'error')
+      return
+    }
+
     const drawdown = new Date(toInputDate(form.loanDate))
-    const maturity = new Date(drawdown)
-    maturity.setMonth(maturity.getMonth() + 12) // Default to 12 months tenure
+    const maturity = new Date(toInputDate(form.maturityDate))
+    
+    if (maturity <= drawdown) {
+      toast('Maturity date must be after loan date', 'error')
+      return
+    }
 
     const payload = {
       loanReference: form.noteNo,
       financierId: selectedFinancierObj._id,
       drawdownDate: toInputDate(form.loanDate),
-      maturityDate: maturity.toISOString().split('T')[0],
+      maturityDate: toInputDate(form.maturityDate),
       principalAmount: amt,
       interestRate: Number(form.rate) || selectedFinancierObj.defaultInterestRate || 12,
       notes: form.remarks,
@@ -150,6 +162,7 @@ export function Loans() {
           noteNumber: form.noteNo,
           amount: amt,
           date: toInputDate(form.loanDate),
+          maturityDate: toInputDate(form.maturityDate),
           notes: form.remarks
         })
       }
@@ -315,6 +328,10 @@ export function Loans() {
                     <p className="text-gray-900">{selectedLoan?.rate}% p.a.</p>
                   </div>
                   <div>
+                    <label className="text-xs text-gray-400 uppercase font-semibold">Maturity Date</label>
+                    <p className="text-gray-900">{selectedLoan?.maturityDate || '—'}</p>
+                  </div>
+                  <div>
                     <label className="text-xs text-gray-400 uppercase font-semibold">Pending Balance</label>
                     <p className="text-red-500 font-bold tabular-nums">₹{fmt(selectedLoan?.pending || 0)}</p>
                   </div>
@@ -345,26 +362,34 @@ export function Loans() {
                     <input type="text" value={form.noteNo} onChange={e => setForm({...form, noteNo: e.target.value})}
                       className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none font-mono" />
                   </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Loan Date *</label>
-                  <CustomDatePicker
-                    value={form.loanDate}
-                    onChange={val => setForm({...form, loanDate: val})}
-                  />
-                </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Loan Date *</label>
+                    <CustomDatePicker
+                      value={form.loanDate}
+                      onChange={val => setForm({...form, loanDate: val})}
+                    />
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Maturity Date *</label>
+                    <CustomDatePicker
+                      value={form.maturityDate}
+                      onChange={val => setForm({...form, maturityDate: val})}
+                    />
+                  </div>
                   <div>
                     <label className="block text-xs font-semibold text-gray-600 mb-1">Amount *</label>
                     <input type="number" required value={form.amount} onChange={e => setForm({...form, amount: e.target.value})}
                       className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none" />
                   </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-600 mb-1">Interest Rate (%)</label>
-                    <input type="number" step="0.01" value={form.rate} onChange={e => setForm({...form, rate: e.target.value})}
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none" />
-                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Interest Rate (%)</label>
+                  <input type="number" step="0.01" value={form.rate} onChange={e => setForm({...form, rate: e.target.value})}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none" />
                 </div>
 
                 <div>

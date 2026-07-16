@@ -1,6 +1,6 @@
-import React, { useState, useMemo, useEffect } from 'react'
+import React, { useState, useMemo, useEffect, useReducer, useCallback } from 'react'
 import { Plus, Search, Trash2, Edit2, Eye, X } from 'lucide-react'
-import { toInputDate, fromInputDate } from '../utils/date'
+import { toInputDate, fromInputDate, getTodayFormatted } from '../utils/date'
 import DropdownSelect from '../components/ui/DropdownSelect'
 import CustomDatePicker from '../components/ui/CustomDatePicker'
 import { toTitleCase } from '../utils/text'
@@ -25,16 +25,26 @@ const modeStyle = {
 
 const fmt = (v) => new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(v)
 
+// ── Fetch state reducer (defined at module scope for stable reference) ────────
+const fetchInitial = { status: 'idle', payments: [], vendors: [], bills: [], paymentModes: [], error: null }
+function fetchReducer(state, action) {
+  switch (action.type) {
+    case 'FETCH_START':   return { ...state, status: 'loading', error: null }
+    case 'FETCH_SUCCESS': return { status: 'success', ...action.payload, error: null }
+    case 'FETCH_ERROR':   return { ...state, status: 'error', error: action.payload }
+    default:              return state
+  }
+}
+
 export function VendorPayments() {
   const toast = useToast()
   const confirm = useConfirm()
-  const [paymentModes, setPaymentModes] = useState([])
 
-  const [payments, setPayments] = useState([])
-  const [vendors, setVendors] = useState([])
-  const [bills, setBills] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+  // ── Fetch state: consolidated into one reducer to avoid impossible states ──
+  const [fetchState, fetchDispatch] = useReducer(fetchReducer, fetchInitial)
+  const { payments, vendors, bills, paymentModes, status: fetchStatus, error } = fetchState
+  const loading = fetchStatus === 'idle' || fetchStatus === 'loading'
+
   const [search, setSearch] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [modalMode, setModalMode] = useState('add') // 'add' | 'edit' | 'preview'
@@ -42,21 +52,23 @@ export function VendorPayments() {
 
   const emptyForm = {
     vendor: '',
-    date: '29-06-2026',
+    date: getTodayFormatted(),
     amount: '',
     mode: '',
     remarks: ''
   }
   const [form, setForm] = useState(emptyForm)
 
-  const fetchPaymentsData = async (signal) => {
+  // ── Fetch payments, vendors, bills, profile ───────────────────────────────
+  // Wrapped in useCallback so the reference is stable across renders.
+  const fetchPaymentsData = useCallback(async (signal) => {
+    fetchDispatch({ type: 'FETCH_START' })
     try {
-      setLoading(true)
       const [paymentsData, vendorsData, billsData, profileRes] = await Promise.all([
-        api.get('/payments', { signal }),
-        api.get('/vendors', { signal }),
-        api.get('/bills', { signal }),
-        api.get('/settings/profile', { signal })
+        api.get('/payments', signal ? { signal } : {}),
+        api.get('/vendors', signal ? { signal } : {}),
+        api.get('/bills', signal ? { signal } : {}),
+        api.get('/settings/profile', signal ? { signal } : {})
       ])
 
       const mappedPayments = paymentsData.map(p => {
@@ -96,38 +108,34 @@ export function VendorPayments() {
         status: b.status
       }))
 
+      const activeModes = profileRes?.data
+        ? (profileRes.data.paymentModes || []).filter(m => m.enabled)
+        : []
+
       if (!signal || !signal.aborted) {
-        setPayments(mappedPayments)
-        setVendors(vendorsData)
-        setBills(mappedBills)
-        
-        if (profileRes && profileRes.data) {
-          const activeModes = (profileRes.data.paymentModes || []).filter(m => m.enabled)
-          setPaymentModes(activeModes)
-        }
-        setLoading(false)
+        fetchDispatch({
+          type: 'FETCH_SUCCESS',
+          payload: { payments: mappedPayments, vendors: vendorsData, bills: mappedBills, paymentModes: activeModes }
+        })
       }
     } catch (err) {
       if (!signal || !signal.aborted) {
-        setError(err.message || 'Failed to fetch payments')
-        setLoading(false)
+        fetchDispatch({ type: 'FETCH_ERROR', payload: err.message || 'Failed to fetch payments' })
       }
     }
-  }
+  }, [])
 
   useEffect(() => {
     const controller = new AbortController()
     fetchPaymentsData(controller.signal)
     return () => controller.abort()
-  }, [])
+  }, [fetchPaymentsData])
 
   useEffect(() => {
-    const handleDataChanged = () => {
-      fetchPaymentsData()
-    }
+    const handleDataChanged = () => fetchPaymentsData()
     window.addEventListener('api-data-changed', handleDataChanged)
     return () => window.removeEventListener('api-data-changed', handleDataChanged)
-  }, [])
+  }, [fetchPaymentsData])
 
   const handleOpenAdd = () => {
     setForm(emptyForm)

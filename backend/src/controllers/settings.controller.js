@@ -16,31 +16,56 @@ exports.getProfile = async (req, res, next) => {
 
 exports.updateProfile = async (req, res, next) => {
   try {
-    const { businessName, ownerName, email, phone, address, gstin, website, logo, banks, paymentModes, usersList } = req.body
+    let { businessName, ownerName, email, phone, address, gstin, website, logo, banks, paymentModes, usersList } = req.body
 
-    let settings = await Settings.findOne()
-    if (!settings) {
-      settings = new Settings()
+    // Safely parse arrays — they may arrive as JSON strings
+    if (typeof paymentModes === 'string') {
+      try { paymentModes = JSON.parse(paymentModes) } catch { paymentModes = undefined }
+    }
+    if (typeof usersList === 'string') {
+      try { usersList = JSON.parse(usersList) } catch { usersList = undefined }
+    }
+    if (typeof banks === 'string') {
+      try { banks = JSON.parse(banks) } catch { banks = undefined }
     }
 
-    if (businessName !== undefined) settings.businessName = businessName
-    if (ownerName !== undefined) settings.ownerName = ownerName
-    if (email !== undefined) settings.email = email
-    if (phone !== undefined) settings.phone = phone
-    if (address !== undefined) settings.address = address
-    if (gstin !== undefined) settings.gstin = gstin
-    if (website !== undefined) settings.website = website
-    if (logo !== undefined) settings.logo = logo
-    if (banks !== undefined) settings.banks = banks
-    if (paymentModes !== undefined) settings.paymentModes = paymentModes
-    if (usersList !== undefined) settings.usersList = usersList
+    // Build $set payload — only include fields that are present in the request
+    const $set = {}
+    if (businessName !== undefined) $set.businessName = businessName
+    if (ownerName    !== undefined) $set.ownerName    = ownerName
+    if (email        !== undefined) $set.email        = email
+    if (phone        !== undefined) $set.phone        = phone
+    if (address      !== undefined) $set.address      = address
+    if (gstin        !== undefined) $set.gstin        = gstin
+    if (website      !== undefined) $set.website      = website
+    if (logo         !== undefined) $set.logo         = logo
 
-    await settings.save()
+    // Strip _id from subdocuments before saving (prevents Mongoose cast errors)
+    if (Array.isArray(banks)) {
+      $set.banks = banks
+    }
+    if (Array.isArray(paymentModes)) {
+      $set.paymentModes = paymentModes.map(({ name, enabled }) => ({ name, enabled }))
+    }
+    if (Array.isArray(usersList)) {
+      $set.usersList = usersList.map(({ name, email: e, role, status }) => ({ name, email: e, role, status }))
+    }
+
+    // Use findOneAndUpdate with $set — avoids re-validating the entire document
+    // and prevents cast errors on untouched subdocument arrays
+    const settings = await Settings.findOneAndUpdate(
+      {},
+      { $set },
+      { new: true, upsert: true, runValidators: false }
+    )
+
     res.status(200).json({ success: true, data: settings })
   } catch (error) {
+    console.error('[updateProfile] Error:', error.message)
     next(error)
   }
 }
+
 
 exports.getAppearance = async (req, res, next) => {
   try {
@@ -66,18 +91,19 @@ exports.getAppearance = async (req, res, next) => {
 exports.updateAppearance = async (req, res, next) => {
   try {
     const { theme, gradientValue, accentColor, currency, dateFormat, numberFormat } = req.body
-    let settings = await Settings.findOne()
-    if (!settings) {
-      settings = new Settings()
-    }
-    if (theme !== undefined) settings.theme = theme
-    if (gradientValue !== undefined) settings.gradientValue = gradientValue
-    if (accentColor !== undefined) settings.accentColor = accentColor
-    if (currency !== undefined) settings.currency = currency
-    if (dateFormat !== undefined) settings.dateFormat = dateFormat
-    if (numberFormat !== undefined) settings.numberFormat = numberFormat
+    const $set = {}
+    if (theme        !== undefined) $set.theme        = theme
+    if (gradientValue !== undefined) $set.gradientValue = gradientValue
+    if (accentColor  !== undefined) $set.accentColor  = accentColor
+    if (currency     !== undefined) $set.currency     = currency
+    if (dateFormat   !== undefined) $set.dateFormat   = dateFormat
+    if (numberFormat !== undefined) $set.numberFormat = numberFormat
 
-    await settings.save()
+    const settings = await Settings.findOneAndUpdate(
+      {},
+      { $set },
+      { new: true, upsert: true, runValidators: false }
+    )
     res.status(200).json({
       success: true,
       theme: settings.theme,
@@ -111,13 +137,14 @@ exports.getUiPrefs = async (req, res, next) => {
 exports.updateUiPrefs = async (req, res, next) => {
   try {
     const { sidebarCollapsed } = req.body
-    let settings = await Settings.findOne()
-    if (!settings) {
-      settings = new Settings()
-    }
-    if (sidebarCollapsed !== undefined) settings.sidebarCollapsed = sidebarCollapsed
+    const $set = {}
+    if (sidebarCollapsed !== undefined) $set.sidebarCollapsed = sidebarCollapsed
 
-    await settings.save()
+    const settings = await Settings.findOneAndUpdate(
+      {},
+      { $set },
+      { new: true, upsert: true, runValidators: false }
+    )
     res.status(200).json({
       success: true,
       sidebarCollapsed: settings.sidebarCollapsed
@@ -199,13 +226,19 @@ exports.restoreBackup = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'No file uploaded' })
     }
 
-    const { mimetype } = req.file
+    const { mimetype, originalname } = req.file
+    const ext = path.extname(originalname).toLowerCase()
+    const validExtensions = ['.xlsx', '.xls']
     const validMimeTypes = [
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'application/vnd.ms-excel'
+      'application/vnd.ms-excel',
+      'application/octet-stream'
     ]
 
-    if (!validMimeTypes.includes(mimetype)) {
+    const isExtensionValid = validExtensions.includes(ext)
+    const isMimetypeValid = validMimeTypes.includes(mimetype)
+
+    if (!isExtensionValid && !isMimetypeValid) {
       return res.status(400).json({ success: false, message: 'Only Excel files (.xlsx, .xls) are accepted' })
     }
 
@@ -238,22 +271,83 @@ exports.restoreBackup = async (req, res, next) => {
 
     // Restore Settings
     if (data.settings && Object.keys(data.settings).length > 0) {
-      const s = new Settings(data.settings)
+      const sData = { ...data.settings }
+      
+      // Parse arrays if they are stringified JSON strings
+      if (typeof sData.paymentModes === 'string') {
+        try { sData.paymentModes = JSON.parse(sData.paymentModes) } catch {}
+      }
+      if (typeof sData.usersList === 'string') {
+        try { sData.usersList = JSON.parse(sData.usersList) } catch {}
+      }
+      if (typeof sData.banks === 'string') {
+        try { sData.banks = JSON.parse(sData.banks) } catch {}
+      }
+
+      // Strip _id from subdocuments to prevent casting error
+      if (Array.isArray(sData.paymentModes)) {
+        sData.paymentModes = sData.paymentModes.map(({ name, enabled }) => ({ name, enabled }))
+      }
+      if (Array.isArray(sData.usersList)) {
+        sData.usersList = sData.usersList.map(({ name, email: e, role, status }) => ({ name, email: e, role, status }))
+      }
+
+      const s = new Settings(sData)
       await s.save()
     } else {
       const s = new Settings()
       await s.save()
     }
 
+    const cleanObj = (obj) => {
+      if (!obj || typeof obj !== 'object') return obj
+      const cleaned = {}
+      for (const key in obj) {
+        if (obj.hasOwnProperty(key)) {
+          let val = obj[key]
+          if (val === '' || val === '—' || val === 'null' || val === 'undefined') {
+            val = null
+          }
+          cleaned[key] = val
+        }
+      }
+      return cleaned
+    }
+
+    const cleanArray = (arr) => (arr || []).map(cleanObj)
+
     // Restore arrays
-    if (data.vendors && data.vendors.length > 0) await Vendor.insertMany(data.vendors)
-    if (data.financiers && data.financiers.length > 0) await Financier.insertMany(data.financiers)
-    if (data.loans && data.loans.length > 0) await Loan.insertMany(data.loans)
-    if (data.bills && data.bills.length > 0) await Bill.insertMany(data.bills)
-    if (data.payments && data.payments.length > 0) await Payment.insertMany(data.payments)
-    if (data.repayments && data.repayments.length > 0) await Repayment.insertMany(data.repayments)
-    if (data.cheques && data.cheques.length > 0) await Cheque.insertMany(data.cheques)
-    if (data.transactions && data.transactions.length > 0) await Transaction.insertMany(data.transactions)
+    if (data.vendors && data.vendors.length > 0) {
+      await Vendor.insertMany(cleanArray(data.vendors))
+    }
+    if (data.financiers && data.financiers.length > 0) {
+      await Financier.insertMany(cleanArray(data.financiers))
+    }
+    if (data.loans && data.loans.length > 0) {
+      await Loan.insertMany(cleanArray(data.loans))
+    }
+    if (data.bills && data.bills.length > 0) {
+      await Bill.insertMany(cleanArray(data.bills))
+    }
+    if (data.payments && data.payments.length > 0) {
+      let paymentsData = cleanArray(data.payments)
+      paymentsData = paymentsData.map(p => {
+        if (typeof p.allocations === 'string') {
+          try { p.allocations = JSON.parse(p.allocations) } catch { p.allocations = [] }
+        }
+        return p
+      })
+      await Payment.insertMany(paymentsData)
+    }
+    if (data.repayments && data.repayments.length > 0) {
+      await Repayment.insertMany(cleanArray(data.repayments))
+    }
+    if (data.cheques && data.cheques.length > 0) {
+      await Cheque.insertMany(cleanArray(data.cheques))
+    }
+    if (data.transactions && data.transactions.length > 0) {
+      await Transaction.insertMany(cleanArray(data.transactions))
+    }
 
     res.status(200).json({ success: true, message: 'Data restored successfully' })
   } catch (error) {

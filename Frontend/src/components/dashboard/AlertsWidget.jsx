@@ -26,11 +26,12 @@ export function AlertsWidget() {
       {/* Maturing Loans Alert Card */}
       {loanAlerts.length > 0 && (
         <div 
-          className="rounded-xl border p-5 flex flex-col justify-between transition-all"
+          className="rounded-xl border p-5 flex flex-col justify-between transition-all border-t-2"
           style={{
-            background: 'var(--color-bg-elevated)',
-            borderColor: 'rgba(245, 166, 35, 0.25)', // warning border
-            boxShadow: '0 4px 20px rgba(245, 166, 35, 0.05)'
+            background: 'var(--color-bg-surface)',
+            borderColor: 'var(--color-border)',
+            borderTopColor: 'var(--color-warning)',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.05)'
           }}
         >
           <div>
@@ -54,7 +55,7 @@ export function AlertsWidget() {
               </span>
             </div>
 
-            <div className="divide-y divide-slate-800 max-h-48 overflow-y-auto pr-1">
+            <div className="divide-y divide-[var(--color-border)] max-h-48 overflow-y-auto pr-1">
               {loanAlerts.map(alert => (
                 <div key={alert.id} className="py-3 flex items-center justify-between text-xs">
                   <div className="min-w-0 flex-1">
@@ -73,7 +74,7 @@ export function AlertsWidget() {
             </div>
           </div>
 
-          <div className="mt-4 pt-3 border-t border-slate-800/60">
+          <div className="mt-4 pt-3 border-t border-[var(--color-border)]">
             <Link 
               to="/loans" 
               className="flex items-center justify-end text-xs font-semibold hover:underline"
@@ -89,11 +90,12 @@ export function AlertsWidget() {
       {/* Bounced Cheques Alert Card */}
       {chequeAlerts.length > 0 && (
         <div 
-          className="rounded-xl border p-5 flex flex-col justify-between transition-all"
+          className="rounded-xl border p-5 flex flex-col justify-between transition-all border-t-2"
           style={{
-            background: 'var(--color-bg-elevated)',
-            borderColor: 'rgba(232, 69, 69, 0.25)', // danger border
-            boxShadow: '0 4px 20px rgba(232, 69, 69, 0.05)'
+            background: 'var(--color-bg-surface)',
+            borderColor: 'var(--color-border)',
+            borderTopColor: 'var(--color-danger)',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.05)'
           }}
         >
           <div>
@@ -117,7 +119,7 @@ export function AlertsWidget() {
               </span>
             </div>
 
-            <div className="divide-y divide-slate-800 max-h-48 overflow-y-auto pr-1">
+            <div className="divide-y divide-[var(--color-border)] max-h-48 overflow-y-auto pr-1">
               {chequeAlerts.map(alert => (
                 <div key={alert.id} className="py-3 flex items-center justify-between text-xs">
                   <div className="min-w-0 flex-1">
@@ -136,7 +138,7 @@ export function AlertsWidget() {
             </div>
           </div>
 
-          <div className="mt-4 pt-3 border-t border-slate-800/60">
+          <div className="mt-4 pt-3 border-t border-[var(--color-border)]">
             <Link 
               to="/cheques" 
               className="flex items-center justify-end text-xs font-semibold hover:underline"

@@ -9,6 +9,7 @@ import {
   LineChart, Line, CartesianGrid, AreaChart, Area, Legend, Cell
 } from 'recharts'
 import DropdownSelect from '../components/ui/DropdownSelect'
+import CustomDatePicker from '../components/ui/CustomDatePicker'
 
 const fmt = (v) => new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(v)
 const initials = (n) => (n || '').split(' ').slice(0, 2).map(w => w[0] || '').join('').toUpperCase() || '?'
@@ -37,8 +38,17 @@ const toTitleCase = (str) => {
 
 export function Reports() {
   const [activeTab, setActiveTab] = useState('Outstanding Aging')
-  const [fromDate, setFromDate] = useState('')
-  const [toDate, setToDate] = useState('')
+  const [fromDate, setFromDate] = useState('')  // DD-MM-YYYY (CustomDatePicker format)
+  const [toDate, setToDate] = useState('')      // DD-MM-YYYY (CustomDatePicker format)
+
+  // Parse DD-MM-YYYY string from CustomDatePicker into a JS Date (midnight local)
+  const parseDdMmYyyy = (str) => {
+    if (!str) return null
+    const parts = str.split('-')
+    if (parts.length !== 3) return null
+    const d = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]))
+    return isNaN(d.getTime()) ? null : d
+  }
 
   // Data states
   const [bills, setBills] = useState([])
@@ -47,6 +57,7 @@ export function Reports() {
   const [cheques, setCheques] = useState([])
   const [ledger, setLedger] = useState([])
   const [interestData, setInterestData] = useState({ summary: [], loans: [] })
+  const [loans, setLoans] = useState([])
   
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -54,13 +65,14 @@ export function Reports() {
   const fetchData = async (signal) => {
     try {
       setLoading(true)
-      const [billsData, paymentsData, repaymentsData, chequesData, ledgerData, interestStatements] = await Promise.all([
+      const [billsData, paymentsData, repaymentsData, chequesData, ledgerData, interestStatements, loansData] = await Promise.all([
         api.get('/bills', { signal }),
         api.get('/payments', { signal }),
         api.get('/loans/repayments/all', { signal }),
         api.get('/cheques', { signal }),
         api.get('/ledger', { signal }),
-        api.get('/reports/interest-statements', { signal })
+        api.get('/reports/interest-statements', { signal }),
+        api.get('/loans', { signal })
       ])
 
       if (!signal || !signal.aborted) {
@@ -70,6 +82,7 @@ export function Reports() {
         setCheques(chequesData)
         setLedger(ledgerData)
         setInterestData(interestStatements)
+        setLoans(loansData)
         setError(null)
       }
     } catch (err) {
@@ -99,54 +112,77 @@ export function Reports() {
 
   // ── DATE RANGE FILTERING LOGIC ──────────────────────────────────────────────
   const filteredBills = useMemo(() => {
+    const from = parseDdMmYyyy(fromDate)
+    const to = parseDdMmYyyy(toDate)
     return bills.filter(b => {
       if (!b.billDate) return true
       const date = new Date(b.billDate)
-      if (fromDate && date < new Date(fromDate)) return false
-      if (toDate && date > new Date(toDate)) return false
+      if (from && date < from) return false
+      if (to && date > to) return false
       return true
     })
   }, [bills, fromDate, toDate])
 
   const filteredPayments = useMemo(() => {
+    const from = parseDdMmYyyy(fromDate)
+    const to = parseDdMmYyyy(toDate)
     return payments.filter(p => {
       if (!p.paymentDate) return true
       const date = new Date(p.paymentDate)
-      if (fromDate && date < new Date(fromDate)) return false
-      if (toDate && date > new Date(toDate)) return false
+      if (from && date < from) return false
+      if (to && date > to) return false
       return true
     })
   }, [payments, fromDate, toDate])
 
   const filteredRepayments = useMemo(() => {
+    const from = parseDdMmYyyy(fromDate)
+    const to = parseDdMmYyyy(toDate)
     return repayments.filter(r => {
       if (!r.repaymentDate) return true
       const date = new Date(r.repaymentDate)
-      if (fromDate && date < new Date(fromDate)) return false
-      if (toDate && date > new Date(toDate)) return false
+      if (from && date < from) return false
+      if (to && date > to) return false
       return true
     })
   }, [repayments, fromDate, toDate])
 
   const filteredCheques = useMemo(() => {
+    const from = parseDdMmYyyy(fromDate)
+    const to = parseDdMmYyyy(toDate)
     return cheques.filter(c => {
       if (!c.chequeDate) return true
       const date = new Date(c.chequeDate)
-      if (fromDate && date < new Date(fromDate)) return false
-      if (toDate && date > new Date(toDate)) return false
+      if (from && date < from) return false
+      if (to && date > to) return false
       return true
     })
   }, [cheques, fromDate, toDate])
 
   const filteredLedger = useMemo(() => {
+    const from = parseDdMmYyyy(fromDate)
+    const to = parseDdMmYyyy(toDate)
     return ledger.filter(t => {
       if (!t.date) return true
       const date = new Date(t.date)
-      if (fromDate && date < new Date(fromDate)) return false
-      if (toDate && date > new Date(toDate)) return false
+      if (from && date < from) return false
+      if (to && date > to) return false
       return true
     })
   }, [ledger, fromDate, toDate])
+
+  const filteredLoans = useMemo(() => {
+    const from = parseDdMmYyyy(fromDate)
+    const to = parseDdMmYyyy(toDate)
+    return loans.filter(l => {
+      if (l.isDeleted) return false
+      if (!l.drawdownDate) return true
+      const date = new Date(l.drawdownDate)
+      if (from && date < from) return false
+      if (to && date > to) return false
+      return true
+    })
+  }, [loans, fromDate, toDate])
 
   // ── TAB 1: OUTSTANDING AGING REPORT ──────────────────────────────────────────
   const agingData = useMemo(() => {
@@ -227,14 +263,14 @@ export function Reports() {
     const summary = {}
     
     // Group active loans
-    bills.filter(b => b.paymentType === 'Loan' && !b.isDeleted).forEach(l => {
-      const fName = l.vendor || 'Unknown'
+    filteredLoans.forEach(l => {
+      const fName = l.financierId?.name || 'Unknown'
       if (!summary[fName]) {
         summary[fName] = { name: fName, borrowed: 0, repaid: 0, outstanding: 0, count: 0 }
       }
-      summary[fName].borrowed += l.amount
-      summary[fName].outstanding += l.outstandingAmount
-      summary[fName].repaid += (l.amount - l.outstandingAmount)
+      summary[fName].borrowed += l.principalAmount || 0
+      summary[fName].outstanding += l.outstandingPrincipal || 0
+      summary[fName].repaid += l.paidPrincipal || 0
       summary[fName].count += 1
     })
 
@@ -246,7 +282,7 @@ export function Reports() {
     }))
 
     return { list, chartData }
-  }, [bills])
+  }, [filteredLoans])
 
   // Filter interest summary by date range
   const filteredInterestSummary = useMemo(() => {
@@ -323,43 +359,41 @@ export function Reports() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900 dark:text-white" style={{ fontFamily: 'var(--font-display)' }}>Reports</h1>
-          <p className="text-sm text-gray-400 mt-0.5 font-medium">Bespoke financial summaries and dynamic data graphs</p>
+          <h1 className="text-2xl font-semibold" style={{ fontFamily: 'var(--font-display)', color: 'var(--color-text-primary)' }}>Reports</h1>
+          <p className="text-sm mt-0.5 font-medium" style={{ color: 'var(--color-text-muted)' }}>Bespoke financial summaries and dynamic data graphs</p>
         </div>
 
         {/* Global Date Range Filter */}
-        <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl p-3 flex flex-wrap items-center gap-3 shrink-0">
-          <div className="flex flex-col">
-            <span className="text-[10px] font-bold text-gray-400 mb-1">FROM DATE</span>
-            <input
-              type="date"
+        <div className="flex items-center gap-3 shrink-0 flex-wrap">
+          <div className="flex items-center gap-2" style={{ background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)', borderRadius: '12px', padding: '8px 12px' }}>
+            <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>From</span>
+            <CustomDatePicker
               value={fromDate}
-              onChange={e => setFromDate(e.target.value)}
-              className="px-2.5 py-1 text-xs bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary text-gray-800 dark:text-white"
+              onChange={setFromDate}
+              placeholder="Start date"
             />
-          </div>
-          <div className="flex flex-col">
-            <span className="text-[10px] font-bold text-gray-400 mb-1">TO DATE</span>
-            <input
-              type="date"
+            <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>To</span>
+            <CustomDatePicker
               value={toDate}
-              onChange={e => setToDate(e.target.value)}
-              className="px-2.5 py-1 text-xs bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary text-gray-800 dark:text-white"
+              onChange={setToDate}
+              placeholder="End date"
+              align="right"
             />
+            {(fromDate || toDate) && (
+              <button
+                onClick={() => { setFromDate(''); setToDate('') }}
+                className="text-xs font-semibold transition-opacity hover:opacity-70"
+                style={{ color: 'var(--color-primary)' }}
+              >
+                Clear
+              </button>
+            )}
           </div>
-          {(fromDate || toDate) && (
-            <button
-              onClick={() => { setFromDate(''); setToDate('') }}
-              className="mt-4 px-2.5 py-1.5 text-[10px] font-bold bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-gray-200 rounded-lg transition-colors"
-            >
-              Clear Filters
-            </button>
-          )}
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex flex-wrap items-center gap-1.5 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl p-1 w-fit">
+      <div className="flex flex-wrap items-center gap-1.5 rounded-xl p-1 w-fit" style={{ background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)' }}>
         {tabs.map(tab => (
           <button 
             key={tab} 
@@ -396,21 +430,21 @@ export function Reports() {
           {activeTab === 'Outstanding Aging' && (
             <>
               <div className="flex flex-wrap gap-4 w-full">
-                <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 px-5 py-4 flex-1 min-w-0">
-                  <p className="text-xs text-gray-400 mb-1 font-semibold uppercase tracking-wider">Total Outstanding Payables</p>
-                  <p className="text-2xl font-bold stat-value">₹{fmt(agingData.total)}</p>
+                <div className="rounded-xl px-5 py-4 flex-1 min-w-0" style={{ background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)' }}>
+                  <p className="text-xs mb-1 font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>Total Outstanding Payables</p>
+                  <p className="text-2xl font-bold" style={{ color: 'var(--color-text-primary)' }}>₹{fmt(agingData.total)}</p>
                 </div>
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Chart */}
-                <div className="lg:col-span-2 bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-5">
-                  <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4" style={{ fontFamily: 'var(--font-display)' }}>Aging Distribution</h3>
+                <div className="lg:col-span-2 rounded-xl p-5" style={{ background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)' }}>
+                  <h3 className="text-xs font-bold uppercase tracking-wider mb-4" style={{ fontFamily: 'var(--font-display)', color: 'var(--color-text-muted)' }}>Aging Distribution</h3>
                   <ResponsiveContainer width="100%" height={260}>
                     <BarChart data={agingData.chartData} barSize={36}>
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
-                      <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-                      <YAxis tickFormatter={v => `₹${v / 100000}L`} tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+                      <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'var(--color-text-muted)' }} axisLine={false} tickLine={false} />
+                      <YAxis tickFormatter={v => `₹${v / 100000}L`} tick={{ fontSize: 10, fill: 'var(--color-text-muted)' }} axisLine={false} tickLine={false} />
                       <Tooltip formatter={v => `₹${fmt(v)}`} contentStyle={{ background: 'var(--color-bg-elevated)', borderColor: 'var(--color-border)', borderRadius: '8px' }} />
                       <Bar dataKey="Outstanding" fill="var(--color-primary)" radius={[4, 4, 0, 0]} />
                     </BarChart>
@@ -418,12 +452,12 @@ export function Reports() {
                 </div>
 
                 {/* Table */}
-                <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-5 overflow-hidden flex flex-col">
-                  <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4" style={{ fontFamily: 'var(--font-display)' }}>Aging summary</h3>
+                <div className="rounded-xl p-5 flex flex-col" style={{ background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)' }}>
+                  <h3 className="text-xs font-bold uppercase tracking-wider mb-4" style={{ fontFamily: 'var(--font-display)', color: 'var(--color-text-muted)' }}>Aging summary</h3>
                   <div className="overflow-x-auto flex-1">
                     <table className="w-full text-xs">
                       <thead>
-                        <tr className="text-[10px] text-gray-400 font-bold border-b border-gray-100 dark:border-slate-700 pb-2">
+                        <tr style={{ borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}>
                           <th className="text-left pb-2">VENDOR</th>
                           <th className="text-right pb-2">0-30D</th>
                           <th className="text-right pb-2">31-60D</th>
@@ -432,19 +466,21 @@ export function Reports() {
                           <th className="text-right pb-2">TOTAL</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-gray-50 dark:divide-slate-700/40">
+                      <tbody>
                         {agingData.tableList.map((item, idx) => (
-                          <tr key={item.name || idx} className="hover:bg-slate-55 dark:hover:bg-slate-800/20">
-                            <td className="py-2.5 font-medium text-gray-900 dark:text-white max-w-[80px] truncate">{toTitleCase(item.name)}</td>
-                            <td className="py-2.5 text-right tabular-nums text-gray-500">{item.b1 > 0 ? `₹${fmt(item.b1)}` : '—'}</td>
-                            <td className="py-2.5 text-right tabular-nums text-gray-550">{item.b2 > 0 ? `₹${fmt(item.b2)}` : '—'}</td>
+                          <tr key={item.name || idx} style={{ borderBottom: '1px solid var(--color-border)' }}
+                            onMouseEnter={e => e.currentTarget.style.background = 'var(--color-bg-elevated)'}
+                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                            <td className="py-2.5 font-medium max-w-[80px] truncate" style={{ color: 'var(--color-text-primary)' }}>{toTitleCase(item.name)}</td>
+                            <td className="py-2.5 text-right tabular-nums" style={{ color: 'var(--color-text-muted)' }}>{item.b1 > 0 ? `₹${fmt(item.b1)}` : '—'}</td>
+                            <td className="py-2.5 text-right tabular-nums" style={{ color: 'var(--color-text-secondary)' }}>{item.b2 > 0 ? `₹${fmt(item.b2)}` : '—'}</td>
                             <td className="py-2.5 text-right tabular-nums text-orange-400">{item.b3 > 0 ? `₹${fmt(item.b3)}` : '—'}</td>
                             <td className="py-2.5 text-right tabular-nums text-red-500 font-semibold">{item.b4 > 0 ? `₹${fmt(item.b4)}` : '—'}</td>
-                            <td className="py-2.5 text-right font-bold tabular-nums text-gray-900 dark:text-white">₹{fmt(item.total)}</td>
+                            <td className="py-2.5 text-right font-bold tabular-nums" style={{ color: 'var(--color-text-primary)' }}>₹{fmt(item.total)}</td>
                           </tr>
                         ))}
                         {agingData.tableList.length === 0 && (
-                          <tr><td colSpan={6} className="py-4 text-center text-gray-400">No outstanding invoices.</td></tr>
+                          <tr><td colSpan={6} className="py-4 text-center" style={{ color: 'var(--color-text-muted)' }}>No outstanding invoices.</td></tr>
                         )}
                       </tbody>
                     </table>
@@ -472,12 +508,12 @@ export function Reports() {
               </div>
 
               {/* Table */}
-              <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-5 flex flex-col">
-                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4" style={{ fontFamily: 'var(--font-display)' }}>Payment Summary</h3>
+              <div className="rounded-xl border p-5" style={{ background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)' }}>
+                <h3 className="text-xs font-bold uppercase tracking-wider mb-4" style={{ fontFamily: 'var(--font-display)', color: 'var(--color-text-muted)' }}>Payment Summary</h3>
                 <div className="overflow-x-auto flex-1">
                   <table className="w-full text-xs">
                     <thead>
-                      <tr className="text-[10px] text-gray-400 font-bold border-b border-gray-100 dark:border-slate-700 pb-2">
+                      <tr                 style={{ borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}>
                         <th className="text-left pb-2">VENDOR</th>
                         <th className="text-right pb-2">PAYMENTS</th>
                         <th className="text-right pb-2">TOTAL PAID</th>
@@ -487,7 +523,7 @@ export function Reports() {
                     <tbody className="divide-y divide-gray-50 dark:divide-slate-700/40">
                       {vendorPaymentsSummary.list.map((item, idx) => (
                         <tr key={item.name || idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/20">
-                          <td className="py-2.5 font-medium text-gray-900 dark:text-white">{toTitleCase(item.name)}</td>
+                          <td style={{ color: 'var(--color-text-primary)' }}>{toTitleCase(item.name)}</td>
                           <td className="py-2.5 text-right tabular-nums text-gray-500">{item.count}</td>
                           <td className="py-2.5 text-right font-bold tabular-nums text-green-600 dark:text-green-400">₹{fmt(item.amount)}</td>
                           <td className="py-2.5 text-right tabular-nums text-gray-400">{item.lastDate ? item.lastDate.toISOString().split('T')[0] : '—'}</td>
@@ -508,8 +544,8 @@ export function Reports() {
             <div className="space-y-6">
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Financier Summary Chart */}
-                <div className="lg:col-span-2 bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-5">
-                  <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4" style={{ fontFamily: 'var(--font-display)' }}>Financier Loans vs Repayments</h3>
+              <div className="lg:col-span-2 rounded-xl p-5" style={{ background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)' }}>
+                <h3 className="text-xs font-bold uppercase tracking-wider mb-4" style={{ fontFamily: 'var(--font-display)', color: 'var(--color-text-muted)' }}>Financier Loans vs Repayments</h3>
                   <ResponsiveContainer width="100%" height={250}>
                     <BarChart data={loanRepaymentsSummary.chartData} barSize={20}>
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
@@ -529,7 +565,7 @@ export function Reports() {
                   <div className="overflow-x-auto flex-1">
                     <table className="w-full text-xs">
                       <thead>
-                        <tr className="text-[10px] text-gray-400 font-bold border-b border-gray-100 dark:border-slate-700 pb-2">
+                        <tr                 style={{ borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}>
                           <th className="text-left pb-2">FINANCIER</th>
                           <th className="text-right pb-2">LOANS</th>
                           <th className="text-right pb-2">BORROWED</th>
@@ -540,9 +576,9 @@ export function Reports() {
                       <tbody className="divide-y divide-gray-50 dark:divide-slate-700/40">
                         {loanRepaymentsSummary.list.map((item, idx) => (
                           <tr key={item.name || idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/20">
-                            <td className="py-2.5 font-medium text-gray-900 dark:text-white">{toTitleCase(item.name)}</td>
+                            <td style={{ color: 'var(--color-text-primary)' }}>{toTitleCase(item.name)}</td>
                             <td className="py-2.5 text-right tabular-nums text-gray-500">{item.count}</td>
-                            <td className="py-2.5 text-right font-bold tabular-nums text-gray-900 dark:text-white">₹{fmt(item.borrowed)}</td>
+                            <td style={{ color: 'var(--color-text-primary)' }}>₹{fmt(item.borrowed)}</td>
                             <td className="py-2.5 text-right tabular-nums text-blue-600">₹{fmt(item.repaid)}</td>
                             <td className="py-2.5 text-right font-bold tabular-nums text-orange-500">₹{fmt(item.outstanding)}</td>
                           </tr>
@@ -559,8 +595,8 @@ export function Reports() {
               {/* Monthly Interest Statement Sub-section */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Interest Statement Chart */}
-                <div className="lg:col-span-2 bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-5">
-                  <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4" style={{ fontFamily: 'var(--font-display)' }}>Amortized Interest Split Trend</h3>
+              <div className="lg:col-span-2 rounded-xl p-5" style={{ background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)' }}>
+                <h3 className="text-xs font-bold uppercase tracking-wider mb-4" style={{ fontFamily: 'var(--font-display)', color: 'var(--color-text-muted)' }}>Amortized Interest Split Trend</h3>
                   <ResponsiveContainer width="100%" height={250}>
                     <BarChart data={filteredInterestSummary} barSize={20}>
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
@@ -580,7 +616,7 @@ export function Reports() {
                   <div className="overflow-x-auto flex-1">
                     <table className="w-full text-xs">
                       <thead>
-                        <tr className="text-[10px] text-gray-400 font-bold border-b border-gray-100 dark:border-slate-700 pb-2">
+                        <tr                 style={{ borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}>
                           <th className="text-left pb-2">MONTH</th>
                           <th className="text-right pb-2">PRINCIPAL</th>
                           <th className="text-right pb-2">INTEREST</th>
@@ -590,10 +626,10 @@ export function Reports() {
                       <tbody className="divide-y divide-gray-50 dark:divide-slate-700/40">
                         {filteredInterestSummary.map((item, idx) => (
                           <tr key={item.month || idx} className="hover:bg-slate-55 dark:hover:bg-slate-800/20">
-                            <td className="py-2.5 font-medium text-gray-900 dark:text-white font-mono">{item.month}</td>
-                            <td className="py-2.5 text-right tabular-nums text-gray-700 dark:text-gray-300">₹{fmt(item.principal)}</td>
+                            <td style={{ color: 'var(--color-text-primary)' }}>{item.month}</td>
+                            <td style={{ color: 'var(--color-text-secondary)' }}>₹{fmt(item.principal)}</td>
                             <td className="py-2.5 text-right tabular-nums text-red-500 font-semibold">₹{fmt(item.interest)}</td>
-                            <td className="py-2.5 text-right font-bold tabular-nums text-gray-900 dark:text-white">₹{fmt(item.principal + item.interest)}</td>
+                            <td style={{ color: 'var(--color-text-primary)' }}>₹{fmt(item.principal + item.interest)}</td>
                           </tr>
                         ))}
                         {filteredInterestSummary.length === 0 && (
@@ -630,12 +666,12 @@ export function Reports() {
               </div>
 
               {/* Table */}
-              <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-5 flex flex-col">
-                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4" style={{ fontFamily: 'var(--font-display)' }}>Cheque Metrics</h3>
+              <div className="rounded-xl border p-5" style={{ background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)' }}>
+                <h3 className="text-xs font-bold uppercase tracking-wider mb-4" style={{ fontFamily: 'var(--font-display)', color: 'var(--color-text-muted)' }}>Cheque Metrics</h3>
                 <div className="overflow-x-auto flex-1">
                   <table className="w-full text-xs">
                     <thead>
-                      <tr className="text-[10px] text-gray-400 font-bold border-b border-gray-100 dark:border-slate-700 pb-2">
+                      <tr                 style={{ borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}>
                         <th className="text-left pb-2">STATUS</th>
                         <th className="text-right pb-2">COUNT</th>
                         <th className="text-right pb-2">TOTAL VALUE</th>
@@ -644,14 +680,14 @@ export function Reports() {
                     <tbody className="divide-y divide-gray-50 dark:divide-slate-700/40">
                       {chequeStatusData.list.map((item, idx) => (
                         <tr key={item.name || idx} className="hover:bg-slate-55 dark:hover:bg-slate-800/20">
-                          <td className="py-2.5 font-semibold text-gray-900 dark:text-white">
+                          <td className="py-2.5 font-semibold" style={{ color: 'var(--color-text-primary)' }}>
                             <span className={`inline-block w-2 h-2 rounded-full mr-2 ${
                               item.name === 'Cleared' ? 'bg-green-500' : item.name === 'Pending' ? 'bg-yellow-500' : 'bg-red-500'
                             }`}></span>
                             {item.name}
                           </td>
                           <td className="py-2.5 text-right tabular-nums text-gray-500">{item.count}</td>
-                          <td className="py-2.5 text-right font-bold tabular-nums text-gray-900 dark:text-white">₹{fmt(item.amount)}</td>
+                          <td style={{ color: 'var(--color-text-primary)' }}>₹{fmt(item.amount)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -691,12 +727,12 @@ export function Reports() {
               </div>
 
               {/* Table */}
-              <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-5 flex flex-col">
-                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4" style={{ fontFamily: 'var(--font-display)' }}>Flow Summary</h3>
+              <div className="rounded-xl border p-5" style={{ background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)' }}>
+                <h3 className="text-xs font-bold uppercase tracking-wider mb-4" style={{ fontFamily: 'var(--font-display)', color: 'var(--color-text-muted)' }}>Flow Summary</h3>
                 <div className="overflow-x-auto flex-1">
                   <table className="w-full text-xs">
                     <thead>
-                      <tr className="text-[10px] text-gray-400 font-bold border-b border-gray-100 dark:border-slate-700 pb-2">
+                      <tr                 style={{ borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}>
                         <th className="text-left pb-2">MONTH</th>
                         <th className="text-right pb-2">INFLOW</th>
                         <th className="text-right pb-2">OUTFLOW</th>
@@ -708,9 +744,9 @@ export function Reports() {
                         const net = item.debit - item.credit
                         return (
                           <tr key={item.month || idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/20">
-                            <td className="py-2.5 font-medium text-gray-900 dark:text-white font-mono">{item.month}</td>
-                            <td className="py-2.5 text-right tabular-nums text-gray-700 dark:text-gray-300">₹{fmt(item.debit)}</td>
-                            <td className="py-2.5 text-right tabular-nums text-gray-700 dark:text-gray-300">₹{fmt(item.credit)}</td>
+                            <td style={{ color: 'var(--color-text-primary)' }}>{item.month}</td>
+                            <td style={{ color: 'var(--color-text-secondary)' }}>₹{fmt(item.debit)}</td>
+                            <td style={{ color: 'var(--color-text-secondary)' }}>₹{fmt(item.credit)}</td>
                             <td className={`py-2.5 text-right font-bold tabular-nums ${
                               net >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-500'
                             }`}>

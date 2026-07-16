@@ -1,45 +1,60 @@
-import { useState, useEffect } from 'react'
+import { useReducer, useEffect, useCallback } from 'react'
 import api from '../utils/api'
 
-export function useDashboardAlerts() {
-  const [alerts, setAlerts] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+// ── Reducer ───────────────────────────────────────────────────────────────────
+// Consolidates alerts, loading, and error into a single state object.
+// This prevents impossible intermediate states and ensures all three values
+// transition atomically on every fetch cycle.
+const initialState = { status: 'idle', alerts: [], error: null }
 
-  const fetchAlerts = async (signal) => {
+function reducer(state, action) {
+  switch (action.type) {
+    case 'FETCH_START':
+      return { ...state, status: 'loading', error: null }
+    case 'FETCH_SUCCESS':
+      return { status: 'success', alerts: action.payload, error: null }
+    case 'FETCH_ERROR':
+      return { ...state, status: 'error', error: action.payload }
+    default:
+      return state
+  }
+}
+
+export function useDashboardAlerts() {
+  const [state, dispatch] = useReducer(reducer, initialState)
+
+  const fetchAlerts = useCallback(async (signal) => {
+    dispatch({ type: 'FETCH_START' })
     try {
-      setLoading(true)
-      const res = await api.get('/dashboard/alerts', { signal })
+      const res = await api.get('/dashboard/alerts', signal ? { signal } : {})
       if (!signal || !signal.aborted) {
-        setAlerts(res)
-        setError(null)
+        dispatch({ type: 'FETCH_SUCCESS', payload: res })
       }
     } catch (err) {
       if (!signal || !signal.aborted) {
-        setError(err.message || 'Failed to fetch dashboard alerts')
-      }
-    } finally {
-      if (!signal || !signal.aborted) {
-        setLoading(false)
+        dispatch({ type: 'FETCH_ERROR', payload: err.message || 'Failed to fetch dashboard alerts' })
       }
     }
-  }
+  }, [])
 
   useEffect(() => {
     const controller = new AbortController()
     fetchAlerts(controller.signal)
     return () => controller.abort()
-  }, [])
+  }, [fetchAlerts])
 
   useEffect(() => {
-    const handleDataChanged = () => {
-      fetchAlerts()
-    }
+    const handleDataChanged = () => fetchAlerts()
     window.addEventListener('api-data-changed', handleDataChanged)
     return () => window.removeEventListener('api-data-changed', handleDataChanged)
-  }, [])
+  }, [fetchAlerts])
 
-  return { alerts, loading, error, refetch: fetchAlerts }
+  return {
+    alerts:  state.alerts,
+    loading: state.status === 'loading' || state.status === 'idle',
+    error:   state.error,
+    refetch: fetchAlerts
+  }
 }
 
 export default useDashboardAlerts

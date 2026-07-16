@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useNavigate, useBlocker, useBeforeUnload } from 'react-router-dom'
 import { 
   User, Store, Building2, Coins, CreditCard, Database, Palette, Info, 
   Search, Plus, Trash2, Edit2, X, Check, Upload, RefreshCw,
@@ -340,17 +340,43 @@ export function Settings() {
     website: '',
     logo: ''
   })
+  const [profileSnapshot, setProfileSnapshot] = useState(null)
   const [profileErrors, setProfileErrors] = useState({})
   const [hasChanges, setHasChanges] = useState(false)
   const [lastSaved, setLastSaved] = useState(null)
   const [dragOver, setDragOver] = useState(false)
-  
+
+  const isDirty = useMemo(() => {
+    if (!profileSnapshot) return false
+    return (
+      (profile.businessName || '') !== (profileSnapshot.businessName || '') ||
+      (profile.ownerName || '') !== (profileSnapshot.ownerName || '') ||
+      (profile.email || '') !== (profileSnapshot.email || '') ||
+      (profile.phone || '') !== (profileSnapshot.phone || '') ||
+      (profile.address || '') !== (profileSnapshot.address || '') ||
+      (profile.gstin || '') !== (profileSnapshot.gstin || '') ||
+      (profile.website || '') !== (profileSnapshot.website || '') ||
+      (profile.logo || '') !== (profileSnapshot.logo || '')
+    )
+  }, [profile, profileSnapshot])
+
   const fetchProfile = async (signal) => {
     try {
       const res = await api.get('/settings/profile', { signal })
       if (res.success && res.data) {
         if (!signal || !signal.aborted) {
-          setProfile(res.data)
+          const profileData = {
+            businessName: res.data.businessName || '',
+            ownerName: res.data.ownerName || '',
+            email: res.data.email || '',
+            phone: res.data.phone || '',
+            address: res.data.address || '',
+            gstin: res.data.gstin || '',
+            website: res.data.website || '',
+            logo: res.data.logo || ''
+          }
+          setProfile(profileData)
+          setProfileSnapshot(profileData)
           setHasChanges(false)
         }
       }
@@ -366,6 +392,64 @@ export function Settings() {
     fetchProfile(controller.signal)
     return () => controller.abort()
   }, [])
+
+  // Tab switch guard
+  const handleTabClick = async (tabId) => {
+    if (activeTab === 'profile' && isDirty) {
+      const confirmed = await confirm('You have unsaved changes. Discard and continue?', {
+        title: 'Unsaved Changes',
+        confirmText: 'Yes',
+        cancelText: 'No',
+        variant: 'warning'
+      })
+      if (!confirmed) {
+        return // keep user on Business Profile
+      }
+      // Yes discards and switches tab: reset state to snapshot
+      setProfile(profileSnapshot)
+    }
+    setActiveTab(tabId)
+  }
+
+  // Router route leave blocker guard
+  const blocker = useBlocker(
+    useCallback(
+      ({ currentValue, nextLocation }) =>
+        activeTab === 'profile' && isDirty && currentValue.pathname !== nextLocation.pathname,
+      [activeTab, isDirty]
+    )
+  )
+
+  useEffect(() => {
+    if (blocker.state === 'blocked') {
+      confirm('You have unsaved changes. Discard and continue?', {
+        title: 'Unsaved Changes',
+        confirmText: 'Yes',
+        cancelText: 'No',
+        variant: 'warning'
+      }).then((confirmed) => {
+        if (confirmed) {
+          setProfile(profileSnapshot)
+          blocker.proceed()
+        } else {
+          blocker.reset()
+        }
+      })
+    }
+  }, [blocker.state, isDirty, profileSnapshot])
+
+  // Native window leave/refresh guard
+  useBeforeUnload(
+    useCallback(
+      (event) => {
+        if (activeTab === 'profile' && isDirty) {
+          event.preventDefault()
+          event.returnValue = 'You have unsaved changes. Discard and continue?'
+        }
+      },
+      [activeTab, isDirty]
+    )
+  )
 
   const handleProfileChange = (e) => {
     const { name, value } = e.target
@@ -481,9 +565,22 @@ export function Settings() {
     }
 
     try {
-      const res = await api.post('/settings/profile', profile)
+      // Only send scalar profile fields — never include array sub-documents
+      // (paymentModes, usersList, banks) or MongoDB metadata in this call
+      const payload = {
+        businessName: profile.businessName,
+        ownerName: profile.ownerName,
+        email: profile.email,
+        phone: profile.phone,
+        address: profile.address,
+        gstin: profile.gstin,
+        website: profile.website,
+        logo: profile.logo,
+      }
+      const res = await api.post('/settings/profile', payload)
       if (res.success) {
         showToast('Business profile updated successfully')
+        setProfileSnapshot(payload)
         setHasChanges(false)
         setLastSaved(new Date().toLocaleTimeString())
       }
@@ -814,7 +911,7 @@ export function Settings() {
   const saveBanksToStorage = async (newBanks) => {
     setBanks(newBanks)
     try {
-      await api.post('/settings/profile', { ...profile, banks: newBanks })
+      await api.post('/settings/profile', { banks: newBanks })
     } catch (err) {
       showToast('Failed to save banks configuration to database', 'error')
     }
@@ -870,7 +967,7 @@ export function Settings() {
   const saveModesToStorage = async (newModes) => {
     setPaymentModes(newModes)
     try {
-      await api.post('/settings/profile', { ...profile, paymentModes: newModes })
+      await api.post('/settings/profile', { paymentModes: newModes })
     } catch (err) {
       showToast('Failed to save payment modes to database', 'error')
     }
@@ -927,7 +1024,7 @@ export function Settings() {
   const saveUsersToStorage = async (newUsers) => {
     setUsers(newUsers)
     try {
-      await api.post('/settings/profile', { ...profile, usersList: newUsers })
+      await api.post('/settings/profile', { usersList: newUsers })
     } catch (err) {
       showToast('Failed to save users list to database', 'error')
     }
@@ -1405,46 +1502,62 @@ export function Settings() {
               </div>
 
               {/* Unsaved changes status indicator */}
-              {!hasChanges && lastSaved && (
+              {!isDirty && lastSaved && (
                 <div className="flex justify-end pt-2 text-[11px] text-gray-400 font-medium">
                   Last saved at {lastSaved}
                 </div>
               )}
 
               {/* Sticky Action Footer */}
-              {hasChanges && (
-                <div 
-                  className="fixed bottom-0 left-0 right-0 z-50 py-4 px-6 flex justify-between items-center border-t backdrop-blur-sm"
-                  style={{
-                    background: 'rgba(17, 24, 39, 0.95)',
-                    borderColor: 'var(--color-border)',
-                    boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.25)',
-                  }}
-                >
-                  <div className="flex items-center space-x-2 text-xs font-semibold text-amber-500">
-                    <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
-                    <span>Unsaved Changes</span>
-                  </div>
-                  <div className="flex items-center space-x-3">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        fetchProfile()
-                        setHasChanges(false)
-                      }}
-                      className="px-4 py-2 text-xs font-semibold text-gray-300 border border-slate-700 rounded-lg hover:bg-slate-800 transition-colors"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      className="px-5 py-2 text-xs font-semibold bg-brand-primary text-white rounded-lg hover:opacity-90 transition-opacity shadow-md btn-primary"
-                    >
-                      Save Changes
-                    </button>
-                  </div>
+              <div 
+                className="fixed bottom-0 left-0 right-0 z-50 py-4 px-6 flex justify-between items-center border-t backdrop-blur-sm"
+                style={{
+                  background: 'rgba(17, 24, 39, 0.95)',
+                  borderColor: 'var(--color-border)',
+                  boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.25)',
+                }}
+              >
+                <div className="flex items-center space-x-2 text-xs font-semibold text-amber-500">
+                  {isDirty && (
+                    <>
+                      <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+                      <span>Unsaved Changes</span>
+                    </>
+                  )}
                 </div>
-              )}
+                <div className="flex items-center space-x-3">
+                  <button
+                    type="button"
+                    disabled={!isDirty}
+                    onClick={() => {
+                      if (profileSnapshot) {
+                        setProfile(profileSnapshot)
+                      }
+                    }}
+                    className={`px-4 py-2 text-xs font-semibold rounded-lg transition-colors ${
+                      isDirty 
+                        ? 'text-gray-300 border border-slate-700 hover:bg-slate-800 cursor-pointer' 
+                        : 'text-gray-600 border border-slate-800 cursor-not-allowed opacity-50'
+                    }`}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!isDirty}
+                    className="px-5 py-2 text-xs font-semibold text-white rounded-lg transition-all shadow-md"
+                    style={{
+                      background: isDirty ? 'var(--gradient-primary)' : 'var(--color-bg-elevated)',
+                      border: isDirty ? 'none' : '1px solid var(--color-border)',
+                      cursor: isDirty ? 'pointer' : 'not-allowed',
+                      opacity: isDirty ? 1 : 0.5,
+                      color: isDirty ? '#fff' : 'var(--color-text-muted)'
+                    }}
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              </div>
             </form>
           </div>
         )
@@ -1454,8 +1567,8 @@ export function Settings() {
           <div className="space-y-6">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-bold text-gray-900">Vendors Management</h2>
-                <p className="text-xs text-gray-400 mt-0.5">Administer vendor directory listings, categories, and credit parameters</p>
+                <h2 className="text-lg font-bold" style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>Vendors Management</h2>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>Administer vendor directory listings, categories, and credit parameters</p>
               </div>
               <button onClick={handleOpenAddVendor} className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-semibold bg-brand-primary text-white rounded-lg hover:opacity-90 transition-opacity shadow-sm">
                 <Plus size={14} />
@@ -1464,9 +1577,10 @@ export function Settings() {
             </div>
 
             <div className="relative w-full">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--color-text-muted)' }} />
               <input type="text" placeholder="Search vendors..." value={vendorSearch} onChange={e => setVendorSearch(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary" />
+                className="w-full pl-9 pr-3 py-2 text-sm rounded-lg focus:outline-none focus:ring-2"
+                style={{ background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }} />
             </div>
 
             {filteredVendors.length === 0 ? (
@@ -1476,10 +1590,10 @@ export function Settings() {
                 <EmptyState icon="search" title="No Results" description="No vendors match your search keywords" />
               )
             ) : (
-              <div className="overflow-x-auto border border-gray-200 rounded-lg">
+              <div className="overflow-x-auto rounded-lg" style={{ border: '1px solid var(--color-border)' }}>
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider bg-gray-50 border-b border-gray-200">
+                    <tr className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)', background: 'var(--color-bg-elevated)', borderBottom: '1px solid var(--color-border)' }}>
                       <th className="px-4 py-2.5">Name</th>
                       <th className="px-4 py-2.5">Type</th>
                       <th className="px-4 py-2.5">Phone</th>
@@ -1488,10 +1602,12 @@ export function Settings() {
                       <th className="px-4 py-2.5 text-right">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-200">
+                  <tbody>
                     {filteredVendors.map(v => (
-                      <tr key={v._id} className="hover:bg-gray-50/50 transition-colors text-sm text-gray-700">
-                        <td className="px-4 py-3 font-semibold text-gray-900">{v.name}</td>
+                      <tr key={v._id} className="transition-colors text-sm" style={{ color: 'var(--color-text-secondary)', borderBottom: '1px solid var(--color-border)' }}
+                        onMouseEnter={e => e.currentTarget.style.background = 'var(--color-bg-elevated)'}
+                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                        <td className="px-4 py-3 font-semibold" style={{ color: 'var(--color-text-primary)' }}>{v.name}</td>
                         <td className="px-4 py-3 text-xs">
                           <Badge variant="neutral">{v.type === 'smallVendor' ? 'Small Vendor' : 'Big Vendor'}</Badge>
                         </td>
@@ -1522,8 +1638,8 @@ export function Settings() {
           <div className="space-y-6">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-bold text-gray-900">Financiers Management</h2>
-                <p className="text-xs text-gray-400 mt-0.5">Administer financier profiles, lenders, and interest parameters</p>
+                <h2 className="text-lg font-bold" style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>Financiers Management</h2>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>Administer financier profiles, lenders, and interest parameters</p>
               </div>
               <button onClick={handleOpenAddFinancier} className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-semibold bg-brand-primary text-white rounded-lg hover:opacity-90 transition-opacity shadow-sm">
                 <Plus size={14} />
@@ -1532,9 +1648,10 @@ export function Settings() {
             </div>
 
             <div className="relative w-full">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--color-text-muted)' }} />
               <input type="text" placeholder="Search financiers..." value={financierSearch} onChange={e => setFinancierSearch(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary" />
+                className="w-full pl-9 pr-3 py-2 text-sm rounded-lg focus:outline-none focus:ring-2"
+                style={{ background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }} />
             </div>
 
             {filteredFinanciers.length === 0 ? (
@@ -1544,10 +1661,10 @@ export function Settings() {
                 <EmptyState icon="search" title="No Results" description="No financiers match your search keywords" />
               )
             ) : (
-              <div className="overflow-x-auto border border-gray-200 rounded-lg">
+              <div className="overflow-x-auto rounded-lg" style={{ border: '1px solid var(--color-border)' }}>
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider bg-gray-50 border-b border-gray-200">
+                    <tr className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)', background: 'var(--color-bg-elevated)', borderBottom: '1px solid var(--color-border)' }}>
                       <th className="px-4 py-2.5">Name</th>
                       <th className="px-4 py-2.5">Phone</th>
                       <th className="px-4 py-2.5">Address</th>
@@ -1556,10 +1673,12 @@ export function Settings() {
                       <th className="px-4 py-2.5 text-right">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-200">
+                  <tbody>
                     {filteredFinanciers.map(f => (
-                      <tr key={f._id} className="hover:bg-gray-50/50 transition-colors text-sm text-gray-700">
-                        <td className="px-4 py-3 font-semibold text-gray-900">{f.name}</td>
+                      <tr key={f._id} className="transition-colors text-sm" style={{ color: 'var(--color-text-secondary)', borderBottom: '1px solid var(--color-border)' }}
+                        onMouseEnter={e => e.currentTarget.style.background = 'var(--color-bg-elevated)'}
+                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                        <td className="px-4 py-3 font-semibold" style={{ color: 'var(--color-text-primary)' }}>{f.name}</td>
                         <td className="px-4 py-3 font-mono">{f.phone || '—'}</td>
                         <td className="px-4 py-3 truncate max-w-[200px]">{f.address || '—'}</td>
                         <td className="px-4 py-3 font-mono">{f.defaultInterestRate}%</td>
@@ -1587,8 +1706,8 @@ export function Settings() {
         return (
           <div className="space-y-6">
             <div>
-              <h2 className="text-lg font-bold text-gray-900">Loan Management</h2>
-              <p className="text-xs text-gray-400 mt-0.5">Edit parameters, toggle statuses, and audit loan details across financiers</p>
+              <h2 className="text-lg font-bold" style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>Loan Management</h2>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>Edit parameters, toggle statuses, and audit loan details across financiers</p>
             </div>
 
             <div className="flex flex-wrap gap-3">
@@ -1621,10 +1740,10 @@ export function Settings() {
                 <EmptyState icon="search" title="No Loans Match" description="Try adjusting your financier or status filters" />
               )
             ) : (
-              <div className="overflow-x-auto border border-gray-200 rounded-lg">
+              <div className="overflow-x-auto rounded-lg" style={{ border: '1px solid var(--color-border)' }}>
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider bg-gray-50 border-b border-gray-200">
+                    <tr className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)', background: 'var(--color-bg-elevated)', borderBottom: '1px solid var(--color-border)' }}>
                       <th className="px-4 py-2.5">Note #</th>
                       <th className="px-4 py-2.5">Financier</th>
                       <th className="px-4 py-2.5">Date</th>
@@ -1635,19 +1754,21 @@ export function Settings() {
                       <th className="px-4 py-2.5 text-right">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-200">
+                  <tbody>
                     {filteredLoans.map(l => {
                       const isClosed = l.status.toUpperCase() === 'SETTLED'
                       return (
-                        <tr key={l._id} className="hover:bg-gray-50/50 transition-colors text-sm text-gray-700">
-                          <td className="px-4 py-3 font-semibold text-gray-900">{l.noteNumber || l.loanReference}</td>
+                        <tr key={l._id} className="transition-colors text-sm" style={{ color: 'var(--color-text-secondary)', borderBottom: '1px solid var(--color-border)' }}
+                          onMouseEnter={e => e.currentTarget.style.background = 'var(--color-bg-elevated)'}
+                          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                          <td className="px-4 py-3 font-semibold" style={{ color: 'var(--color-text-primary)' }}>{l.noteNumber || l.loanReference}</td>
                           <td className="px-4 py-3">{l.financierId?.name || '—'}</td>
                           <td className="px-4 py-3 font-mono">{formatDate(l.date || l.drawdownDate)}</td>
-                          <td className="px-4 py-3 text-right font-semibold text-gray-900 tabular-nums">{formatCurrency(l.amount || l.principalAmount)}</td>
+                          <td className="px-4 py-3 text-right font-semibold tabular-nums" style={{ color: 'var(--color-text-primary)' }}>{formatCurrency(l.amount || l.principalAmount)}</td>
                           <td className="px-4 py-3 text-right font-semibold text-green-600 tabular-nums">{formatCurrency(l.paid || l.paidPrincipal || 0)}</td>
                           <td className="px-4 py-3 text-right font-bold text-orange-500 tabular-nums">{formatCurrency(l.outstanding || l.outstandingPrincipal || 0)}</td>
                           <td className="px-4 py-3">
-                            <Badge variant={!isClosed ? 'success' : 'success'}>
+                            <Badge variant={!isClosed ? 'success' : 'neutral'}>
                               {!isClosed ? 'Active' : 'Closed'}
                             </Badge>
                           </td>
@@ -1674,24 +1795,26 @@ export function Settings() {
         return (
           <div className="space-y-6">
             <div>
-              <h2 className="text-lg font-bold text-gray-900">Cheque Banks</h2>
-              <p className="text-xs text-gray-400 mt-0.5">Manage the list of active banking partners loaded in cheque forms</p>
+              <h2 className="text-lg font-bold" style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>Cheque Banks</h2>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>Manage the list of active banking partners loaded in cheque forms</p>
             </div>
 
             {banks.length === 0 ? (
               <EmptyState icon="bank" title="No Banks Added" description="Add a bank to use it in the cheque registry" />
             ) : (
-              <div className="overflow-x-auto border border-gray-200 rounded-lg max-w-md">
+              <div className="overflow-x-auto rounded-lg max-w-md" style={{ border: '1px solid var(--color-border)' }}>
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider bg-gray-50 border-b border-gray-200">
+                    <tr className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)', background: 'var(--color-bg-elevated)', borderBottom: '1px solid var(--color-border)' }}>
                       <th className="px-4 py-2.5">Bank Name</th>
                       <th className="px-4 py-2.5 text-right">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-200">
+                  <tbody>
                     {banks.map((b, idx) => (
-                      <tr key={b || idx} className="hover:bg-gray-50/50 transition-colors text-sm text-gray-700">
+                      <tr key={b || idx} className="transition-colors text-sm" style={{ borderBottom: '1px solid var(--color-border)' }}
+                        onMouseEnter={e => e.currentTarget.style.background = 'var(--color-bg-elevated)'}
+                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                         <td className="px-4 py-3.5">
                           {editingBankIndex === idx ? (
                             <input 
@@ -1702,18 +1825,19 @@ export function Settings() {
                                 if (e.key === 'Enter') handleSaveEditBank(idx)
                                 if (e.key === 'Escape') setEditingBankIndex(-1)
                               }}
-                              className="px-2 py-1 text-sm border border-gray-200 rounded w-full focus:outline-none focus:ring-1 focus:ring-brand-primary"
+                              className="px-2 py-1 text-sm rounded w-full focus:outline-none focus:ring-1 focus:ring-brand-primary"
+                              style={{ background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }}
                               autoFocus
                             />
                           ) : (
-                            <span className="font-semibold text-gray-900">{b}</span>
+                            <span className="font-semibold" style={{ color: 'var(--color-text-primary)' }}>{b}</span>
                           )}
                         </td>
                         <td className="px-4 py-3.5 text-right">
                           {editingBankIndex === idx ? (
                             <div className="inline-flex space-x-2">
                               <button onClick={() => handleSaveEditBank(idx)} className="text-xs font-bold text-brand-primary">Save</button>
-                              <button onClick={() => setEditingBankIndex(-1)} className="text-xs font-bold text-gray-400">Cancel</button>
+                              <button onClick={() => setEditingBankIndex(-1)} className="text-xs font-bold" style={{ color: 'var(--color-text-muted)' }}>Cancel</button>
                             </div>
                           ) : (
                             <div className="inline-flex space-x-2">
@@ -1735,7 +1859,8 @@ export function Settings() {
                 placeholder="Enter bank name..." 
                 value={bankInput} 
                 onChange={e => setBankInput(e.target.value)}
-                className="flex-1 px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary"
+                className="flex-1 px-3 py-1.5 text-sm rounded-lg focus:outline-none focus:ring-2"
+                style={{ background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }}
               />
               <button type="submit" className="px-3.5 py-1.5 text-xs font-semibold bg-brand-primary text-white rounded-lg hover:opacity-90 transition-opacity">
                 Add Bank
@@ -1748,25 +1873,27 @@ export function Settings() {
         return (
           <div className="space-y-6">
             <div>
-              <h2 className="text-lg font-bold text-gray-900">Payment Modes</h2>
-              <p className="text-xs text-gray-400 mt-0.5">Enable, disable, or declare custom payment types used in transactions</p>
+              <h2 className="text-lg font-bold" style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>Payment Modes</h2>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>Enable, disable, or declare custom payment types used in transactions</p>
             </div>
 
             {paymentModes.length === 0 ? (
               <EmptyState icon="wallet" title="No Payment Modes" description="Add a payment mode to use it across the app" />
             ) : (
-              <div className="overflow-x-auto border border-gray-200 rounded-lg max-w-lg">
+              <div className="overflow-x-auto rounded-lg max-w-lg" style={{ border: '1px solid var(--color-border)' }}>
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider bg-gray-50 border-b border-gray-200">
+                    <tr className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)', background: 'var(--color-bg-elevated)', borderBottom: '1px solid var(--color-border)' }}>
                       <th className="px-4 py-2.5">Mode Name</th>
                       <th className="px-4 py-2.5">Enabled</th>
                       <th className="px-4 py-2.5 text-right">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-200">
+                  <tbody>
                     {paymentModes.map((m, idx) => (
-                      <tr key={m.name || idx} className="hover:bg-gray-50/50 transition-colors text-sm text-gray-700">
+                      <tr key={m.name || idx} className="transition-colors text-sm" style={{ borderBottom: '1px solid var(--color-border)' }}
+                        onMouseEnter={e => e.currentTarget.style.background = 'var(--color-bg-elevated)'}
+                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                         <td className="px-4 py-3.5">
                           {editingModeIndex === idx ? (
                             <input 
@@ -1777,11 +1904,12 @@ export function Settings() {
                                 if (e.key === 'Enter') handleSaveEditMode(idx)
                                 if (e.key === 'Escape') setEditingModeIndex(-1)
                               }}
-                              className="px-2 py-1 text-sm border border-gray-200 rounded w-full focus:outline-none focus:ring-1 focus:ring-brand-primary"
+                              className="px-2 py-1 text-sm rounded w-full focus:outline-none focus:ring-1 focus:ring-brand-primary"
+                              style={{ background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }}
                               autoFocus
                             />
                           ) : (
-                            <span className="font-semibold text-gray-900">{m.name}</span>
+                            <span className="font-semibold" style={{ color: 'var(--color-text-primary)' }}>{m.name}</span>
                           )}
                         </td>
                         <td className="px-4 py-3.5">
@@ -1789,25 +1917,21 @@ export function Settings() {
                             type="button"
                             onClick={() => handleToggleMode(idx)}
                             className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                              m.enabled
-                                ? 'bg-brand-primary'
-                                : 'bg-gray-300 dark:bg-slate-600'
+                              m.enabled ? 'bg-brand-primary' : 'bg-gray-300 dark:bg-slate-600'
                             }`}
                             role="switch"
                             aria-checked={m.enabled}
                           >
-                            <span
-                              className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                                m.enabled ? 'translate-x-4' : 'translate-x-0'
-                              }`}
-                            />
+                            <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                              m.enabled ? 'translate-x-4' : 'translate-x-0'
+                            }`} />
                           </button>
                         </td>
                         <td className="px-4 py-3.5 text-right">
                           {editingModeIndex === idx ? (
                             <div className="inline-flex space-x-2">
                               <button onClick={() => handleSaveEditMode(idx)} className="text-xs font-bold text-brand-primary">Save</button>
-                              <button onClick={() => setEditingModeIndex(-1)} className="text-xs font-bold text-gray-400">Cancel</button>
+                              <button onClick={() => setEditingModeIndex(-1)} className="text-xs font-bold" style={{ color: 'var(--color-text-muted)' }}>Cancel</button>
                             </div>
                           ) : (
                             <div className="inline-flex space-x-2">
@@ -1829,7 +1953,8 @@ export function Settings() {
                 placeholder="Enter custom mode name..." 
                 value={modeInput} 
                 onChange={e => setModeInput(e.target.value)}
-                className="flex-1 px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary"
+                className="flex-1 px-3 py-1.5 text-sm rounded-lg focus:outline-none focus:ring-2"
+                style={{ background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }}
               />
               <button type="submit" className="px-3.5 py-1.5 text-xs font-semibold bg-brand-primary text-white rounded-lg hover:opacity-90 transition-opacity">
                 Add Mode
@@ -1855,10 +1980,10 @@ export function Settings() {
             {users.length === 0 ? (
               <EmptyState icon="user" title="No Users Found" description="Invite a user to give them access to Vastrams" />
             ) : (
-              <div className="overflow-x-auto border border-gray-200 rounded-lg max-w-2xl">
+              <div className="overflow-x-auto rounded-lg max-w-2xl" style={{ border: '1px solid var(--color-border)' }}>
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider bg-gray-50 border-b border-gray-200">
+                    <tr className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)', background: 'var(--color-bg-elevated)', borderBottom: '1px solid var(--color-border)' }}>
                       <th className="px-4 py-2.5">Name</th>
                       <th className="px-4 py-2.5">Email</th>
                       <th className="px-4 py-2.5">Role</th>
@@ -1866,19 +1991,22 @@ export function Settings() {
                       <th className="px-4 py-2.5 text-right">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-200">
+                  <tbody>
                     {users.map(u => (
-                      <tr key={u.id} className="hover:bg-gray-50/50 transition-colors text-sm text-gray-700">
-                        <td className="px-4 py-3 font-semibold text-gray-900">{u.name}</td>
+                      <tr key={u.id} className="transition-colors text-sm" style={{ color: 'var(--color-text-secondary)', borderBottom: '1px solid var(--color-border)' }}
+                        onMouseEnter={e => e.currentTarget.style.background = 'var(--color-bg-elevated)'}
+                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                        <td className="px-4 py-3 font-semibold" style={{ color: 'var(--color-text-primary)' }}>{u.name}</td>
                         <td className="px-4 py-3 font-mono text-xs">{u.email}</td>
                         <td className="px-4 py-3">
                           <select 
                             value={u.role} 
                             onChange={e => handleChangeUserRole(u.id, e.target.value)}
-                            className="px-2 py-0.5 text-xs border border-gray-200 rounded bg-white dark:bg-slate-800 dark:text-slate-100 dark:border-slate-700 focus:outline-none"
+                            className="px-2 py-0.5 text-xs rounded focus:outline-none"
+                            style={{ background: 'var(--color-bg-elevated)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }}
                           >
-                            <option value="Admin" className="bg-white text-gray-900 dark:bg-slate-800 dark:text-slate-100">Admin</option>
-                            <option value="Viewer" className="bg-white text-gray-900 dark:bg-slate-800 dark:text-slate-100">Viewer</option>
+                            <option value="Admin">Admin</option>
+                            <option value="Viewer">Viewer</option>
                           </select>
                         </td>
                         <td className="px-4 py-3">
@@ -1906,8 +2034,8 @@ export function Settings() {
             {/* Export Section */}
             <div className="space-y-4">
               <div>
-                <h2 className="text-lg font-bold text-gray-900">Export Data</h2>
-                <p className="text-xs text-gray-400 mt-0.5">Download full snapshots of vendors, loans, checks, and settings</p>
+                <h2 className="text-lg font-bold" style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>Export Data</h2>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>Download full snapshots of vendors, loans, checks, and settings</p>
               </div>
               <div className="flex flex-wrap gap-4">
                 <button onClick={handleExportExcel} className="flex items-center space-x-1.5 px-4 py-2 text-xs font-semibold bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 dark:bg-slate-800 dark:text-slate-100 dark:border-slate-700 transition-colors">
@@ -2102,7 +2230,7 @@ export function Settings() {
                   return (
                     <button
                       key={tab.id}
-                      onClick={() => setActiveTab(tab.id)}
+                      onClick={() => handleTabClick(tab.id)}
                       className={`flex items-center space-x-2 px-2.5 py-1.5 rounded-lg text-xs font-semibold w-full transition-all text-left ${
                         isActive
                           ? 'bg-brand-primary text-white shadow-sm'
@@ -2130,9 +2258,9 @@ export function Settings() {
       {/* --- VENDOR MODAL --- */}
       {showVendorModal && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl border border-gray-200 max-w-lg w-full p-6 space-y-4 shadow-xl">
+          <div className="rounded-xl border max-w-lg w-full p-6 space-y-4 shadow-2xl" style={{ background: 'var(--color-bg-surface)', borderColor: 'var(--color-border)' }}>
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide">
+              <h3 className="text-sm font-bold uppercase tracking-wide" style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>
                 {vendorModalMode === 'add' ? 'Add New Vendor' : 'Edit Vendor Parameters'}
               </h3>
               <button onClick={() => setShowVendorModal(false)} className="text-gray-400 hover:text-gray-900"><X size={16} /></button>
@@ -2140,12 +2268,13 @@ export function Settings() {
             <form onSubmit={handleSaveVendor} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div className="md:col-span-2">
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Vendor Name *</label>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--color-text-secondary)' }}>Vendor Name *</label>
                   <input type="text" value={vendorForm.name} onChange={e => setVendorForm({ ...vendorForm, name: e.target.value })}
-                    className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary" />
+                    className="w-full px-3 py-1.5 text-sm rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary"
+                    style={{ background: 'var(--color-bg-elevated)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }} />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Vendor Type</label>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--color-text-secondary)' }}>Vendor Type</label>
                   <DropdownSelect
                     value={vendorForm.type}
                     onChange={val => setVendorForm({ ...vendorForm, type: val })}
@@ -2156,27 +2285,30 @@ export function Settings() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Phone Number</label>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--color-text-secondary)' }}>Phone Number</label>
                   <input type="text" value={vendorForm.phone} onChange={e => setVendorForm({ ...vendorForm, phone: e.target.value })}
-                    className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none" />
+                    className="w-full px-3 py-1.5 text-sm rounded-lg focus:outline-none"
+                    style={{ background: 'var(--color-bg-elevated)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }} />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Email</label>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--color-text-secondary)' }}>Email</label>
                   <input type="email" value={vendorForm.email} onChange={e => setVendorForm({ ...vendorForm, email: e.target.value })}
-                    className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none" />
+                    className="w-full px-3 py-1.5 text-sm rounded-lg focus:outline-none"
+                    style={{ background: 'var(--color-bg-elevated)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }} />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">GSTIN</label>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--color-text-secondary)' }}>GSTIN</label>
                   <input type="text" value={vendorForm.gstin} onChange={e => setVendorForm({ ...vendorForm, gstin: e.target.value })}
                     className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none font-mono uppercase" />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Opening Balance</label>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--color-text-secondary)' }}>Opening Balance</label>
                   <input type="number" value={vendorForm.openingBalance} onChange={e => setVendorForm({ ...vendorForm, openingBalance: Number(e.target.value) })}
-                    className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none" />
+                    className="w-full px-3 py-1.5 text-sm rounded-lg focus:outline-none"
+                    style={{ background: 'var(--color-bg-elevated)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }} />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Status</label>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--color-text-secondary)' }}>Status</label>
                   <DropdownSelect
                     value={vendorForm.status}
                     onChange={val => setVendorForm({ ...vendorForm, status: val })}
@@ -2187,7 +2319,7 @@ export function Settings() {
                   />
                 </div>
                 <div className="md:col-span-2">
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Address</label>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--color-text-secondary)' }}>Address</label>
                   <textarea rows={2} value={vendorForm.address} onChange={e => setVendorForm({ ...vendorForm, address: e.target.value })}
                     className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none resize-none" />
                 </div>
@@ -2204,9 +2336,9 @@ export function Settings() {
       {/* --- FINANCIER MODAL --- */}
       {showFinancierModal && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl border border-gray-200 max-w-lg w-full p-6 space-y-4 shadow-xl">
+          <div className="rounded-xl border max-w-lg w-full p-6 space-y-4 shadow-2xl" style={{ background: 'var(--color-bg-surface)', borderColor: 'var(--color-border)' }}>
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide">
+              <h3 className="text-sm font-bold uppercase tracking-wide" style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>
                 {financierModalMode === 'add' ? 'Add New Financier' : 'Edit Financier Parameters'}
               </h3>
               <button onClick={() => setShowFinancierModal(false)} className="text-gray-400 hover:text-gray-900"><X size={16} /></button>
@@ -2262,9 +2394,9 @@ export function Settings() {
       {/* --- EDIT LOAN MODAL --- */}
       {showLoanModal && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl border border-gray-200 max-w-sm w-full p-6 space-y-4 shadow-xl">
+          <div className="rounded-xl border max-w-sm w-full p-6 space-y-4 shadow-2xl" style={{ background: 'var(--color-bg-surface)', borderColor: 'var(--color-border)' }}>
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Edit Loan parameters</h3>
+              <h3 className="text-sm font-bold uppercase tracking-wide" style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>Edit Loan parameters</h3>
               <button onClick={() => setShowLoanModal(false)} className="text-gray-400 hover:text-gray-900"><X size={16} /></button>
             </div>
             <form onSubmit={handleSaveLoan} className="space-y-4">
@@ -2304,9 +2436,9 @@ export function Settings() {
       {/* --- INVITE USER MODAL --- */}
       {showInviteModal && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl border border-gray-200 max-w-sm w-full p-6 space-y-4 shadow-xl">
+          <div className="rounded-xl border max-w-sm w-full p-6 space-y-4 shadow-2xl" style={{ background: 'var(--color-bg-surface)', borderColor: 'var(--color-border)' }}>
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Invite New User</h3>
+              <h3 className="text-sm font-bold uppercase tracking-wide" style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>Invite New User</h3>
               <button onClick={() => setShowInviteModal(false)} className="text-gray-400 hover:text-gray-900"><X size={16} /></button>
             </div>
             <form onSubmit={handleInviteUser} className="space-y-4">
@@ -2345,7 +2477,7 @@ export function Settings() {
       {/* --- RESET MODAL 1 --- */}
       {showResetModal1 && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl border border-gray-200 max-w-sm w-full p-6 space-y-4 shadow-xl">
+          <div className="rounded-xl border max-w-sm w-full p-6 space-y-4 shadow-2xl" style={{ background: 'var(--color-bg-surface)', borderColor: 'var(--color-border)' }}>
             <h3 className="text-sm font-bold text-red-500 uppercase tracking-wide">Are you sure?</h3>
             <p className="text-xs text-gray-500 leading-relaxed">This will permanently wipe all financial ledgers, bills, loans, cheques, and custom settings. This action is irreversible.</p>
             <div className="flex justify-end space-x-2 pt-2">

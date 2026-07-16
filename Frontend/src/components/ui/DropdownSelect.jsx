@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react'
 import { ChevronDown, Check } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
-export function DropdownSelect({ value, onChange, options = [], placeholder = "Select...", className = "" }) {
+export function DropdownSelect({ value, onChange, options = [], placeholder = "Select...", className = "", actionLabel = null, onAction = null }) {
   const [isOpen, setIsOpen] = useState(false)
   const containerRef = useRef(null)
 
@@ -45,31 +45,32 @@ export function DropdownSelect({ value, onChange, options = [], placeholder = "S
 
   const btnPlaceholder = hasOptions ? placeholder : emptyMessage
   const selectedOption = normalizedOptions.find(o => String(o.value) === String(value))
+  const isButtonDisabled = !hasOptions && !onAction
 
   return (
-    <div className="flex items-center space-x-2 w-full">
-      <div className={`relative flex-1 ${className}`} ref={containerRef}>
+    <div className="flex items-center space-x-2 w-full flex-wrap gap-y-1">
+      <div className={`relative flex-1 min-w-[120px] ${className}`} ref={containerRef}>
         <button
           type="button"
-          disabled={!hasOptions}
+          disabled={isButtonDisabled}
           onClick={() => setIsOpen(!isOpen)}
           className="w-full flex items-center justify-between px-3 py-2 text-sm rounded-lg transition-all focus:outline-none animate-all"
           style={{
             background: 'var(--color-bg-elevated)',
             border: `1px solid var(--color-border)`,
             color: selectedOption ? 'var(--color-text-primary)' : 'var(--color-text-muted)',
-            opacity: hasOptions ? 1 : 0.5,
-            cursor: hasOptions ? 'pointer' : 'not-allowed',
+            opacity: isButtonDisabled ? 0.5 : 1,
+            cursor: isButtonDisabled ? 'not-allowed' : 'pointer',
           }}
-          onFocus={e => { if (hasOptions) e.currentTarget.style.borderColor = 'var(--color-primary)' }}
-          onBlur={e => { if (hasOptions) e.currentTarget.style.borderColor = 'var(--color-border)' }}
+          onFocus={e => { if (!isButtonDisabled) e.currentTarget.style.borderColor = 'var(--color-primary)' }}
+          onBlur={e => { if (!isButtonDisabled) e.currentTarget.style.borderColor = 'var(--color-border)' }}
         >
           <span className="truncate font-medium">
             {selectedOption ? selectedOption.label : btnPlaceholder}
           </span>
           <ChevronDown size={16} className="shrink-0 ml-2" style={{ color: 'var(--color-text-muted)' }} />
         </button>
-        {isOpen && hasOptions && (
+        {isOpen && (hasOptions || onAction) && (
           <div
             className="absolute z-[100] mt-1 w-full rounded-lg py-1 max-h-60 overflow-y-auto focus:outline-none"
             style={{
@@ -105,6 +106,22 @@ export function DropdownSelect({ value, onChange, options = [], placeholder = "S
                 </button>
               )
             })}
+
+            {actionLabel && onAction && (
+              <div className="sticky bottom-0 bg-[var(--color-bg-elevated)] p-1 border-t border-[var(--color-border)]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onAction()
+                    setIsOpen(false)
+                  }}
+                  className="w-full py-1.5 px-3 rounded-md text-xs font-semibold text-white text-center hover:opacity-95 transition-opacity"
+                  style={{ background: 'var(--gradient-primary)' }}
+                >
+                  {actionLabel}
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -112,7 +129,7 @@ export function DropdownSelect({ value, onChange, options = [], placeholder = "S
         <Link 
           to={addPath}
           className="text-xs font-semibold hover:underline shrink-0 px-1 transition-all"
-          style={{ color: 'var(--color-primary)' }}
+          style={{ color: 'var(--color-primary)', whiteSpace: 'nowrap' }}
         >
           + Add one
         </Link>

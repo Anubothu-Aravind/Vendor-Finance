@@ -72,7 +72,7 @@ export function Dashboard() {
   // ── Pie chart data: derived, not stored ─────────────────────────────────────
   const pieData = useMemo(() => [
     { name: 'Vendor Payables', value: summary?.kpis.vendorOutstanding ?? 0, color: 'var(--color-primary)' },
-    { name: 'Loan Outstanding', value: summary?.kpis.financierOutstanding ?? 0, color: 'var(--color-text-muted)' },
+    { name: 'Loan Outstanding', value: summary?.kpis.financierOutstanding ?? 0, color: 'var(--color-info)' },
   ], [summary])
 
   // ── Recent transactions: slice + map — no separate state ────────────────────

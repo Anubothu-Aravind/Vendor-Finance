@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react'
 import { Plus, Search, Trash2, Edit2, Eye, X, Building2 } from 'lucide-react'
-import { toInputDate, fromInputDate } from '../utils/date'
+import { toInputDate, fromInputDate, getTodayFormatted } from '../utils/date'
 import DropdownSelect from '../components/ui/DropdownSelect'
 import CustomDatePicker from '../components/ui/CustomDatePicker'
 import { toTitleCase } from '../utils/text'
@@ -31,10 +31,11 @@ export function FinancierPayments() {
 
   const emptyForm = {
     financier: '',
-    date: '29-06-2026',
+    date: getTodayFormatted(),
     amount: '',
     mode: '',
-    remarks: ''
+    remarks: '',
+    chequeNo: ''
   }
   const [form, setForm] = useState(emptyForm)
 
@@ -118,6 +119,19 @@ export function FinancierPayments() {
   const handleSave = async (e) => {
     e.preventDefault()
     const amt = Number(form.amount) || 0
+    
+    if (form.mode === 'Cheque') {
+      if (!form.chequeNo || form.chequeNo.length !== 6) {
+        toast('Cheque number must be exactly 6 digits', 'error')
+        return
+      }
+    }
+
+    if (isOverBalance) {
+      toast('Amount cannot exceed the total outstanding balance', 'error')
+      return
+    }
+
     const modeMapping = {
       'Cash': 'CASH',
       'Cheque': 'CHEQUE',
@@ -135,7 +149,7 @@ export function FinancierPayments() {
             repaymentDate: toInputDate(form.date),
             repaymentMode: modeMapping[form.mode] || 'BANK_TRANSFER',
             referenceNumber: 'REP-' + String(Math.floor(100 + Math.random() * 900)),
-            chequeNumber: form.mode === 'Cheque' ? 'CHQ-' + String(Math.floor(10000 + Math.random() * 90000)) : undefined,
+            chequeNumber: form.mode === 'Cheque' ? form.chequeNo : undefined,
             principalPaid: alloc.adjusted,
             interestPaid: 0
           })
@@ -190,6 +204,26 @@ export function FinancierPayments() {
     (r.remarks || '').toLowerCase().includes(search.toLowerCase()) ||
     (r.mode || '').toLowerCase().includes(search.toLowerCase())
   )
+
+  const selectedFinancierLoans = useMemo(() => {
+    return loans.filter(l => !l.isDeleted && l.financierId?.name === form.financier && l.outstandingPrincipal > 0)
+  }, [loans, form.financier])
+
+  const totalOutstandingBalance = useMemo(() => {
+    return selectedFinancierLoans.reduce((sum, l) => sum + l.outstandingPrincipal, 0)
+  }, [selectedFinancierLoans])
+
+  const isOverBalance = Number(form.amount) > totalOutstandingBalance
+
+  const handleAmountChange = (e) => {
+    let val = e.target.value.replace(/[^0-9.]/g, '')
+    const parts = val.split('.')
+    if (parts[0].length > 12) {
+      parts[0] = parts[0].slice(0, 12)
+    }
+    val = parts.join('.')
+    setForm(prev => ({ ...prev, amount: val }))
+  }
 
   const totalRepaid = repayments.reduce((s, r) => s + r.amount, 0)
 
@@ -438,9 +472,20 @@ export function FinancierPayments() {
 
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1">Amount *</label>
-                  <input type="number" required value={form.amount} onChange={e => setForm({...form, amount: e.target.value})}
+                  <input type="text" required value={form.amount} onChange={handleAmountChange}
                     className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none" />
+                  {isOverBalance && (
+                    <p className="text-red-500 text-xs mt-1">Amount cannot exceed the total outstanding balance of ₹{fmt(totalOutstandingBalance)}.</p>
+                  )}
                 </div>
+
+                {form.mode === 'Cheque' && (
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Cheque Number *</label>
+                    <input type="text" required placeholder="e.g. 123456" value={form.chequeNo || ''} onChange={e => setForm({...form, chequeNo: e.target.value.slice(0, 6).replace(/[^0-9]/g, '')})}
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none font-mono" />
+                  </div>
+                )}
 
                 {/* FIFO Real-Time Loan Allocation Preview */}
                 {form.amount && Number(form.amount) > 0 && (
@@ -488,7 +533,7 @@ export function FinancierPayments() {
 
                 <div className="flex justify-end space-x-3 pt-4 border-t border-gray-100 mt-6">
                   <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">Cancel</button>
-                  <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-brand-primary rounded-lg hover:bg-brand-primary/90">
+                  <button type="submit" disabled={isOverBalance} style={{ opacity: isOverBalance ? 0.5 : 1, cursor: isOverBalance ? 'not-allowed' : 'pointer' }} className="px-4 py-2 text-sm font-medium text-white bg-brand-primary rounded-lg hover:bg-brand-primary/90">
                     {modalMode === 'add' ? 'Confirm & Save' : 'Update Repayment'}
                   </button>
                 </div>

@@ -41,7 +41,7 @@
   --color-info:           #4A9EFF;
 
   /* Sidebar */
-  --color-sidebar-bg:          #0D1320;
+  --color-sidebar-bg:          #050811;
   --color-sidebar-active:      rgba(0, 200, 150, 0.08);
   --color-sidebar-text:        #8A9BB0;
   --color-sidebar-active-text: #00C896;
@@ -77,7 +77,7 @@ html.light {
   --color-text-muted:     #94A3B8;
   --color-text-inverse:   #FFFFFF;
 
-  --color-sidebar-bg:          #1A2235;
+  --color-sidebar-bg:          #090D16;
   --color-sidebar-active:      rgba(0, 200, 150, 0.12);
   --color-sidebar-text:        #8A9BB0;
   --color-sidebar-active-text: #00C896;
@@ -117,7 +117,7 @@ html.light body {
   }
 
   /* Display headings use Montserrat */
-  h1, h2, h3,
+  h1, h2, h3, h4, h5, h6,
   .page-title,
   .brand-name,
   .nav-logo,
@@ -125,7 +125,8 @@ html.light body {
   .section-header,
   .modal-title,
   .card-title {
-    font-family: var(--font-display);
+    font-family: var(--font-display) !important;
+    font-weight: 700 !important;
   }
 
   /* ── GLOBAL BUTTON RESET ──────────────────────────────────────────

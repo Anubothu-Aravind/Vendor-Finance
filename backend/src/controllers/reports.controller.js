@@ -30,13 +30,16 @@ exports.getOutstandingSummary = async (req, res, next) => {
 
       if (unpaidBills.length > 0) {
         const sortedDue = unpaidBills
-          .map(b => new Date(b.dueDate))
+          .map(b => b.dueDate ? new Date(b.dueDate) : null)
+          .filter(d => d && !isNaN(d.getTime()))
           .sort((a, b) => a - b)
-        oldestDue = sortedDue[0]
         
-        if (oldestDue < now) {
-          const diffTime = Math.abs(now - oldestDue)
-          daysOverdue = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+        if (sortedDue.length > 0) {
+          oldestDue = sortedDue[0]
+          if (oldestDue < now) {
+            const diffTime = Math.abs(now - oldestDue)
+            daysOverdue = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+          }
         }
       }
 
@@ -48,7 +51,7 @@ exports.getOutstandingSummary = async (req, res, next) => {
         total: totalAmount,
         paid: paidAmount,
         outstanding: vendor.outstandingBalance,
-        oldestDue: oldestDue ? oldestDue.toISOString().split('T')[0] : null,
+        oldestDue: oldestDue && !isNaN(oldestDue.getTime()) ? oldestDue.toISOString().split('T')[0] : null,
         daysOverdue: daysOverdue
       })
     }
@@ -66,13 +69,16 @@ exports.getOutstandingSummary = async (req, res, next) => {
 
       if (activeLoans.length > 0) {
         const sortedDue = activeLoans
-          .map(l => new Date(l.nextDueDate))
+          .map(l => l.maturityDate ? new Date(l.maturityDate) : null)
+          .filter(d => d && !isNaN(d.getTime()))
           .sort((a, b) => a - b)
-        oldestDue = sortedDue[0]
         
-        if (oldestDue < now) {
-          const diffTime = Math.abs(now - oldestDue)
-          daysOverdue = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+        if (sortedDue.length > 0) {
+          oldestDue = sortedDue[0]
+          if (oldestDue < now) {
+            const diffTime = Math.abs(now - oldestDue)
+            daysOverdue = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+          }
         }
       }
 
@@ -84,7 +90,7 @@ exports.getOutstandingSummary = async (req, res, next) => {
         total: totalAmount,
         paid: paidAmount,
         outstanding: financier.outstandingBalance,
-        oldestDue: oldestDue ? oldestDue.toISOString().split('T')[0] : null,
+        oldestDue: oldestDue && !isNaN(oldestDue.getTime()) ? oldestDue.toISOString().split('T')[0] : null,
         daysOverdue: daysOverdue
       })
     }

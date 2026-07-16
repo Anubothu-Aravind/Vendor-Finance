@@ -127,9 +127,9 @@ export function Sidebar({ onClose }) {
                 onClick={onClose}
                 title={sidebarCollapsed ? item.label : undefined}
                 className={({ isActive }) => [
-                  'flex items-center py-2 rounded-lg text-[13px] font-medium transition-all relative',
+                  'flex items-center py-1.5 rounded-lg text-[13px] font-medium transition-all relative',
                   isActive ? 'sidebar-active-indicator' : '',
-                  sidebarCollapsed ? 'justify-center px-0' : 'pl-3 pr-2.5 space-x-2.5'
+                  sidebarCollapsed ? 'justify-center px-0' : 'pl-3 pr-2.5 space-x-2'
                 ].join(' ')}
                 style={({ isActive }) => ({
                   background: isActive ? 'var(--color-sidebar-active)' : 'transparent',

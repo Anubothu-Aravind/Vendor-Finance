@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { Plus, Search, Trash2, Edit2, Eye, X, CheckCircle, XCircle, AlertCircle } from 'lucide-react'
-import { toInputDate, fromInputDate } from '../utils/date'
+import { toInputDate, fromInputDate, getTodayFormatted } from '../utils/date'
 import DropdownSelect from '../components/ui/DropdownSelect'
 import CustomDatePicker from '../components/ui/CustomDatePicker'
 import { toTitleCase } from '../utils/text'
@@ -53,7 +53,7 @@ export function ChequeRegistry() {
 
   const emptyForm = {
     chequeNo: '',
-    date: '',
+    date: getTodayFormatted(),
     amount: '',
     bank: '',
     partyType: '',
@@ -144,6 +144,13 @@ export function ChequeRegistry() {
   const handleSave = async (e) => {
     e.preventDefault()
     const amt = Number(form.amount) || 0
+
+    if (modalMode === 'add') {
+      if (!form.chequeNo || form.chequeNo.length !== 6) {
+        toast('Cheque number must be exactly 6 digits', 'error')
+        return
+      }
+    }
 
     const partyOptions = form.partyType === 'Vendor' ? vendors : financiers
     const partyRecord = partyOptions.find(p => p.name === form.party || p._id === form.partyId)
@@ -369,43 +376,43 @@ export function ChequeRegistry() {
       {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-800 w-[480px] rounded-xl border border-gray-200 dark:border-slate-700 shadow-xl p-6">
-            <div className="flex justify-between items-center mb-4 border-b border-gray-100 dark:border-slate-700 pb-3">
-              <h2 className="text-base font-semibold text-gray-900 dark:text-white uppercase tracking-wide">
+          <div className="w-[480px] rounded-xl border shadow-xl p-6" style={{ background: 'var(--color-bg-surface)', borderColor: 'var(--color-border)' }}>
+            <div className="flex justify-between items-center mb-4 border-b pb-3" style={{ borderColor: 'var(--color-border)' }}>
+              <h2 className="text-base font-semibold uppercase tracking-wide" style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>
                 {modalMode === 'add' ? 'Add Cheque' : modalMode === 'edit' ? 'Update Cheque Status' : 'Cheque Details Preview'}
               </h2>
               <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
             </div>
 
             {modalMode === 'preview' ? (
-              <div className="space-y-4 text-sm text-gray-600 dark:text-gray-300">
+              <div className="space-y-4 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="text-xs text-gray-400 uppercase font-semibold">Cheque Number</label>
-                    <p className="font-mono text-gray-900 dark:text-white font-bold">{selectedCheque?.chequeNo}</p>
+                    <label className="text-xs uppercase font-semibold" style={{ color: 'var(--color-text-muted)' }}>Cheque Number</label>
+                    <p className="font-mono font-bold" style={{ color: 'var(--color-text-primary)' }}>{selectedCheque?.chequeNo}</p>
                   </div>
                   <div>
-                    <label className="text-xs text-gray-400 uppercase font-semibold">Cheque Date</label>
-                    <p className="text-gray-900 dark:text-white font-medium">{selectedCheque?.date}</p>
+                    <label className="text-xs uppercase font-semibold" style={{ color: 'var(--color-text-muted)' }}>Cheque Date</label>
+                    <p className="font-medium" style={{ color: 'var(--color-text-primary)' }}>{selectedCheque?.date}</p>
                   </div>
                   <div>
-                    <label className="text-xs text-gray-400 uppercase font-semibold">Amount</label>
+                    <label className="text-xs uppercase font-semibold" style={{ color: 'var(--color-text-muted)' }}>Amount</label>
                     <p className="text-brand-primary font-bold tabular-nums">₹{fmt(selectedCheque?.amount || 0)}</p>
                   </div>
                   <div>
-                    <label className="text-xs text-gray-400 uppercase font-semibold">Bank Name</label>
-                    <p className="text-gray-900 dark:text-white">{selectedCheque?.bank !== '—' ? toTitleCase(selectedCheque?.bank) : '—'}</p>
+                    <label className="text-xs uppercase font-semibold" style={{ color: 'var(--color-text-muted)' }}>Bank Name</label>
+                    <p style={{ color: 'var(--color-text-primary)' }}>{selectedCheque?.bank !== '—' ? toTitleCase(selectedCheque?.bank) : '—'}</p>
                   </div>
                   <div>
-                    <label className="text-xs text-gray-400 uppercase font-semibold block mb-1">Party Type</label>
+                    <label className="text-xs uppercase font-semibold block mb-1" style={{ color: 'var(--color-text-muted)' }}>Party Type</label>
                     <PartyTypeBadge type={selectedCheque?.partyType} />
                   </div>
                   <div>
-                    <label className="text-xs text-gray-400 uppercase font-semibold block mb-1">Party Name</label>
-                    <p className="text-gray-900 dark:text-white font-semibold text-sm mt-0.5">{toTitleCase(selectedCheque?.party)}</p>
+                    <label className="text-xs uppercase font-semibold block mb-1" style={{ color: 'var(--color-text-muted)' }}>Party Name</label>
+                    <p className="font-semibold text-sm mt-0.5" style={{ color: 'var(--color-text-primary)' }}>{toTitleCase(selectedCheque?.party)}</p>
                   </div>
                   <div>
-                    <label className="text-xs text-gray-400 uppercase font-semibold block mb-1">Status</label>
+                    <label className="text-xs uppercase font-semibold block mb-1" style={{ color: 'var(--color-text-muted)' }}>Status</label>
                     <div className="mt-0.5">
                       <Badge variant={
                         selectedCheque?.status?.toLowerCase() === 'cleared' ? 'success' :
@@ -417,11 +424,11 @@ export function ChequeRegistry() {
                     </div>
                   </div>
                   <div className="col-span-2">
-                    <label className="text-xs text-gray-400 uppercase font-semibold">Remarks</label>
-                    <p className="text-gray-900 dark:text-white">{selectedCheque?.remarks || '—'}</p>
+                    <label className="text-xs uppercase font-semibold" style={{ color: 'var(--color-text-muted)' }}>Remarks</label>
+                    <p style={{ color: 'var(--color-text-primary)' }}>{selectedCheque?.remarks || '—'}</p>
                   </div>
                 </div>
-                <div className="flex justify-end pt-4 border-t border-gray-100 dark:border-slate-700 mt-6">
+                <div className="flex justify-end pt-4 border-t mt-6" style={{ borderColor: 'var(--color-border)' }}>
                   <button onClick={() => setShowModal(false)} className="px-4 py-2 bg-brand-primary text-white text-sm rounded-lg hover:bg-brand-primary/95">Close</button>
                 </div>
               </div>
@@ -429,8 +436,8 @@ export function ChequeRegistry() {
               /* Edit mode — only allow updating status */
               <form onSubmit={handleSave} className="space-y-4">
                 <div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">Cheque <span className="font-mono font-bold">{selectedCheque?.chequeNo}</span> — ₹{fmt(selectedCheque?.amount || 0)} — {toTitleCase(selectedCheque?.party)}</p>
-                  <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Update Status</label>
+                  <p className="text-xs mb-3" style={{ color: 'var(--color-text-secondary)' }}>Cheque <span className="font-mono font-bold" style={{ color: 'var(--color-text-primary)' }}>{selectedCheque?.chequeNo}</span> — ₹{fmt(selectedCheque?.amount || 0)} — {toTitleCase(selectedCheque?.party)}</p>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--color-text-secondary)' }}>Update Status</label>
                   <DropdownSelect
                     value={form.status}
                     onChange={val => setForm({...form, status: val})}
@@ -443,8 +450,8 @@ export function ChequeRegistry() {
                     ]}
                   />
                 </div>
-                <div className="flex justify-end space-x-3 pt-4 border-t border-gray-100 dark:border-slate-700 mt-6">
-                  <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700">Cancel</button>
+                <div className="flex justify-end space-x-3 pt-4 border-t mt-6" style={{ borderColor: 'var(--color-border)' }}>
+                  <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-sm border rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700" style={{ color: 'var(--color-text-secondary)', borderColor: 'var(--color-border)' }}>Cancel</button>
                   <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-brand-primary rounded-lg hover:bg-brand-primary/90">Update Status</button>
                 </div>
               </form>
@@ -452,12 +459,13 @@ export function ChequeRegistry() {
               <form onSubmit={handleSave} className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Cheque Number * (6 digits)</label>
-                    <input type="text" required pattern="\d{6}" maxLength={6} value={form.chequeNo} onChange={e => setForm({...form, chequeNo: e.target.value})}
-                      className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg focus:outline-none font-mono" />
+                    <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--color-text-secondary)' }}>Cheque Number * (6 digits)</label>
+                    <input type="text" required pattern="\d{6}" maxLength={6} value={form.chequeNo} onChange={e => setForm({...form, chequeNo: e.target.value.replace(/[^0-9]/g, '').slice(0, 6)})}
+                      className="w-full px-3 py-2 text-sm rounded-lg focus:outline-none font-mono"
+                      style={{ background: 'var(--color-bg-elevated)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }} />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Cheque Date *</label>
+                    <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--color-text-secondary)' }}>Cheque Date *</label>
                     <CustomDatePicker
                       value={form.date}
                       onChange={val => setForm({...form, date: val})}
@@ -467,12 +475,13 @@ export function ChequeRegistry() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Amount *</label>
+                    <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--color-text-secondary)' }}>Amount *</label>
                     <input type="number" required value={form.amount} onChange={e => setForm({...form, amount: e.target.value})}
-                      className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg focus:outline-none" />
+                      className="w-full px-3 py-2 text-sm rounded-lg focus:outline-none"
+                      style={{ background: 'var(--color-bg-elevated)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }} />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Bank Name</label>
+                    <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--color-text-secondary)' }}>Bank Name</label>
                     <DropdownSelect
                       value={form.bank}
                       onChange={val => setForm({...form, bank: val})}
@@ -484,7 +493,7 @@ export function ChequeRegistry() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Party Type</label>
+                    <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--color-text-secondary)' }}>Party Type</label>
                     <DropdownSelect
                       value={form.partyType}
                       onChange={val => setForm({...form, partyType: val, party: '', partyId: ''})}
@@ -496,7 +505,7 @@ export function ChequeRegistry() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Party Name</label>
+                    <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--color-text-secondary)' }}>Party Name</label>
                     <DropdownSelect
                       value={form.party}
                       onChange={val => setForm({...form, party: val})}
@@ -506,8 +515,8 @@ export function ChequeRegistry() {
                   </div>
                 </div>
 
-                <div className="flex justify-end space-x-3 pt-4 border-t border-gray-100 dark:border-slate-700 mt-6">
-                  <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700">Cancel</button>
+                <div className="flex justify-end space-x-3 pt-4 border-t mt-6" style={{ borderColor: 'var(--color-border)' }}>
+                  <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-sm border rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700" style={{ color: 'var(--color-text-secondary)', borderColor: 'var(--color-border)' }}>Cancel</button>
                   <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-brand-primary rounded-lg hover:bg-brand-primary/90">
                     Save Cheque
                   </button>

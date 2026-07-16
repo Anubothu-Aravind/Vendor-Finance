@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-react'
 
-export function CustomDatePicker({ value, onChange, placeholder = "Pick a date", className = "" }) {
+export function CustomDatePicker({ value, onChange, placeholder = "Pick a date", className = "", align = "left" }) {
   const [isOpen, setIsOpen] = useState(false)
   const containerRef = useRef(null)
 
@@ -19,6 +19,8 @@ export function CustomDatePicker({ value, onChange, placeholder = "Pick a date",
   const initialDate = parseValue(value)
   const [currentMonth, setCurrentMonth] = useState(initialDate.getMonth())
   const [currentYear, setCurrentYear] = useState(initialDate.getFullYear())
+  const [viewMode, setViewMode] = useState('days') // 'days' | 'months' | 'years'
+  const [yearStart, setYearStart] = useState(initialDate.getFullYear() - 5)
 
   useEffect(() => {
     function handleClickOutside(event) {
@@ -36,6 +38,8 @@ export function CustomDatePicker({ value, onChange, placeholder = "Pick a date",
       const d = parseValue(value)
       setCurrentMonth(d.getMonth())
       setCurrentYear(d.getFullYear())
+      setYearStart(d.getFullYear() - 5)
+      setViewMode('days')
     }
   }, [isOpen, value])
 
@@ -96,11 +100,13 @@ export function CustomDatePicker({ value, onChange, placeholder = "Pick a date",
         key={`day-${day}`}
         type="button"
         onClick={() => handleSelectDay(day)}
-        className={`h-8 w-8 text-xs rounded-lg transition-colors flex items-center justify-center ${
-          active
-            ? 'bg-brand-primary text-white font-semibold'
-            : 'text-gray-900 hover:bg-gray-100'
-        }`}
+        className="h-8 w-8 text-xs rounded-lg transition-colors flex items-center justify-center font-medium"
+        style={{
+          background: active ? 'var(--gradient-primary)' : 'transparent',
+          color: active ? '#fff' : 'var(--color-text-primary)'
+        }}
+        onMouseEnter={e => { if(!active) e.currentTarget.style.background = 'var(--color-bg-elevated)' }}
+        onMouseLeave={e => { if(!active) e.currentTarget.style.background = 'transparent' }}
       >
         {day}
       </button>
@@ -119,45 +125,219 @@ export function CustomDatePicker({ value, onChange, placeholder = "Pick a date",
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white text-gray-900 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-brand-primary text-left"
+        className="w-full flex items-center px-3 py-2 text-sm rounded-lg shadow-sm focus:outline-none focus:ring-1 focus:ring-brand-primary text-left"
+        style={{
+          background: 'var(--color-bg-surface)',
+          border: '1px solid var(--color-border)',
+          color: 'var(--color-text-primary)'
+        }}
       >
         <CalendarIcon size={16} className="text-gray-400 shrink-0 mr-2" />
         <span className="truncate flex-1">{value || placeholder}</span>
       </button>
       {isOpen && (
-        <div className="absolute z-[100] mt-1 p-3 rounded-lg border border-gray-200 bg-white shadow-lg w-[280px]">
-          {/* Header */}
-          <div className="flex items-center justify-between mb-3">
-            <button
-              type="button"
-              onClick={handlePrevMonth}
-              className="p-1 hover:bg-gray-100 rounded-md text-gray-600 transition-colors"
-            >
-              <ChevronLeft size={16} />
-            </button>
-            <span className="text-xs font-bold text-gray-900">
-              {monthNames[currentMonth]} {currentYear}
-            </span>
-            <button
-              type="button"
-              onClick={handleNextMonth}
-              className="p-1 hover:bg-gray-100 rounded-md text-gray-600 transition-colors"
-            >
-              <ChevronRight size={16} />
-            </button>
-          </div>
+        <div 
+          className={`absolute z-[100] mt-1 p-3 rounded-lg border shadow-lg w-[280px] ${align === 'right' ? 'right-0' : 'left-0'}`}
+          style={{
+            background: 'var(--color-bg-surface)',
+            borderColor: 'var(--color-border)',
+            color: 'var(--color-text-primary)'
+          }}
+        >
+          {/* View Mode: Days */}
+          {viewMode === 'days' && (
+            <>
+              {/* Header */}
+              <div className="flex items-center justify-between mb-3">
+                <button
+                  type="button"
+                  onClick={handlePrevMonth}
+                  className="p-1 rounded-md transition-colors"
+                  style={{ color: 'var(--color-text-secondary)' }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'var(--color-bg-elevated)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                >
+                  <ChevronLeft size={16} />
+                </button>
+                <div className="flex items-center space-x-1.5 text-xs font-bold" style={{ color: 'var(--color-text-primary)' }}>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('months')}
+                    className="transition-colors px-1 py-0.5 rounded"
+                    style={{ fontFamily: 'var(--font-display)' }}
+                    onMouseEnter={e => { e.currentTarget.style.color = 'var(--color-primary)'; e.currentTarget.style.background = 'var(--color-bg-elevated)' }}
+                    onMouseLeave={e => { e.currentTarget.style.color = 'var(--color-text-primary)'; e.currentTarget.style.background = 'transparent' }}
+                  >
+                    {monthNames[currentMonth]}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setYearStart(currentYear - 5)
+                      setViewMode('years')
+                    }}
+                    className="transition-colors px-1 py-0.5 rounded"
+                    style={{ fontFamily: 'var(--font-display)' }}
+                    onMouseEnter={e => { e.currentTarget.style.color = 'var(--color-primary)'; e.currentTarget.style.background = 'var(--color-bg-elevated)' }}
+                    onMouseLeave={e => { e.currentTarget.style.color = 'var(--color-text-primary)'; e.currentTarget.style.background = 'transparent' }}
+                  >
+                    {currentYear}
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleNextMonth}
+                  className="p-1 rounded-md transition-colors"
+                  style={{ color: 'var(--color-text-secondary)' }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'var(--color-bg-elevated)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                >
+                  <ChevronRight size={16} />
+                </button>
+              </div>
 
-          {/* Days of week */}
-          <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-semibold text-gray-400 mb-1">
-            {daysOfWeek.map(d => (
-              <div key={d} className="h-8 flex items-center justify-center">{d}</div>
-            ))}
-          </div>
+              {/* Days of week */}
+              <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-semibold mb-1" style={{ color: 'var(--color-text-muted)' }}>
+                {daysOfWeek.map(d => (
+                  <div key={d} className="h-8 flex items-center justify-center">{d}</div>
+                ))}
+              </div>
 
-          {/* Days grid */}
-          <div className="grid grid-cols-7 gap-1 h-[216px]">
-            {dayCells}
-          </div>
+              {/* Days grid */}
+              <div className="grid grid-cols-7 gap-1 h-[216px]">
+                {dayCells}
+              </div>
+            </>
+          )}
+
+          {/* View Mode: Months */}
+          {viewMode === 'months' && (
+            <>
+              {/* Header */}
+              <div className="flex items-center justify-between mb-3">
+                <button
+                  type="button"
+                  onClick={() => setCurrentYear(prev => prev - 1)}
+                  className="p-1 rounded-md transition-colors"
+                  style={{ color: 'var(--color-text-secondary)' }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'var(--color-bg-elevated)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                >
+                  <ChevronLeft size={16} />
+                </button>
+                <div className="text-xs font-bold" style={{ color: 'var(--color-text-primary)' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setYearStart(currentYear - 5)
+                      setViewMode('years')
+                    }}
+                    className="transition-colors px-2 py-0.5 rounded"
+                    style={{ fontFamily: 'var(--font-display)' }}
+                    onMouseEnter={e => { e.currentTarget.style.color = 'var(--color-primary)'; e.currentTarget.style.background = 'var(--color-bg-elevated)' }}
+                    onMouseLeave={e => { e.currentTarget.style.color = 'var(--color-text-primary)'; e.currentTarget.style.background = 'transparent' }}
+                  >
+                    {currentYear}
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setCurrentYear(prev => prev + 1)}
+                  className="p-1 rounded-md transition-colors"
+                  style={{ color: 'var(--color-text-secondary)' }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'var(--color-bg-elevated)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                >
+                  <ChevronRight size={16} />
+                </button>
+              </div>
+
+              {/* Months Grid */}
+              <div className="grid grid-cols-3 gap-2 mt-2 h-[216px] items-center">
+                {monthNames.map((m, idx) => {
+                  const isCurrent = idx === currentMonth
+                  return (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => {
+                        setCurrentMonth(idx)
+                        setViewMode('days')
+                      }}
+                      className="py-2 text-xs rounded-lg transition-colors flex items-center justify-center font-medium"
+                      style={{
+                        background: isCurrent ? 'var(--gradient-primary)' : 'transparent',
+                        color: isCurrent ? '#fff' : 'var(--color-text-primary)'
+                      }}
+                      onMouseEnter={e => { if(!isCurrent) e.currentTarget.style.background = 'var(--color-bg-elevated)' }}
+                      onMouseLeave={e => { if(!isCurrent) e.currentTarget.style.background = 'transparent' }}
+                    >
+                      {m.slice(0, 3)}
+                    </button>
+                  )
+                })}
+              </div>
+            </>
+          )}
+
+          {/* View Mode: Years */}
+          {viewMode === 'years' && (
+            <>
+              {/* Header */}
+              <div className="flex items-center justify-between mb-3">
+                <button
+                  type="button"
+                  onClick={() => setYearStart(prev => prev - 12)}
+                  className="p-1 rounded-md transition-colors"
+                  style={{ color: 'var(--color-text-secondary)' }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'var(--color-bg-elevated)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                >
+                  <ChevronLeft size={16} />
+                </button>
+                <div className="text-xs font-bold" style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>
+                  <span>{yearStart} – {yearStart + 11}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setYearStart(prev => prev + 12)}
+                  className="p-1 rounded-md transition-colors"
+                  style={{ color: 'var(--color-text-secondary)' }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'var(--color-bg-elevated)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                >
+                  <ChevronRight size={16} />
+                </button>
+              </div>
+
+              {/* Years Grid */}
+              <div className="grid grid-cols-4 gap-2 mt-2 h-[216px] items-center">
+                {Array.from({ length: 12 }).map((_, idx) => {
+                  const year = yearStart + idx
+                  const isCurrent = year === currentYear
+                  return (
+                    <button
+                      key={year}
+                      type="button"
+                      onClick={() => {
+                        setCurrentYear(year)
+                        setViewMode('days')
+                      }}
+                      className="py-2 text-xs rounded-lg transition-colors flex items-center justify-center font-medium"
+                      style={{
+                        background: isCurrent ? 'var(--gradient-primary)' : 'transparent',
+                        color: isCurrent ? '#fff' : 'var(--color-text-primary)'
+                      }}
+                      onMouseEnter={e => { if(!isCurrent) e.currentTarget.style.background = 'var(--color-bg-elevated)' }}
+                      onMouseLeave={e => { if(!isCurrent) e.currentTarget.style.background = 'transparent' }}
+                    >
+                      {year}
+                    </button>
+                  )
+                })}
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>

@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Download } from 'lucide-react'
+import * as XLSX from 'xlsx'
 import DropdownSelect from '../components/ui/DropdownSelect'
 import CustomDatePicker from '../components/ui/CustomDatePicker'
 import { toTitleCase } from '../utils/text'
@@ -8,8 +10,17 @@ import Badge from '../components/ui/Badge'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Skeleton, SkeletonTableRow } from '../components/ui/Skeleton'
 import api from '../utils/api'
+import { useToast } from '../hooks/useToast'
 
 const fmt = (v) => new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(v)
+
+// Parse DD-MMM-YYYY (the formatted date) back to a Date for range comparison
+const parseFormattedDate = (str) => {
+  if (!str || str === '—') return null
+  try {
+    return new Date(str)
+  } catch { return null }
+}
 
 // Map backend transaction type to UI display
 const txTypeLabel = (type) => {
@@ -37,6 +48,8 @@ const formatDate = (iso) => {
 }
 
 export function RunningLedger() {
+  const toast = useToast()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [vendors, setVendors] = useState([])
   const [financiers, setFinanciers] = useState([])
   const [partiesLoading, setPartiesLoading] = useState(true)
@@ -48,6 +61,69 @@ export function RunningLedger() {
   const [ledger, setLedger] = useState([])
   const [ledgerLoading, setLedgerLoading] = useState(false)
   const [error, setError] = useState(null)
+
+  useEffect(() => {
+    const partyParam = searchParams.get('party')
+    if (partyParam && partyParam !== party) {
+      setParty(partyParam)
+      const parts = partyParam.split('|')
+      if (parts.length === 3) {
+        setPartyType(parts[0])
+        setPartyId(parts[1])
+      }
+    }
+    const fromParam = searchParams.get('from') || ''
+    if (fromParam !== fromDate) {
+      setFromDate(fromParam)
+    }
+    const toParam = searchParams.get('to') || ''
+    if (toParam !== toDate) {
+      setToDate(toParam)
+    }
+  }, [searchParams])
+
+  const handlePartyChange = (val) => {
+    setParty(val)
+    const parts = val.split('|')
+    if (parts.length === 3) {
+      setPartyType(parts[0])
+      setPartyId(parts[1])
+    }
+    const newParams = new URLSearchParams(searchParams)
+    newParams.set('party', val)
+    setSearchParams(newParams)
+  }
+
+  const handleFromDateChange = (val) => {
+    setFromDate(val)
+    const newParams = new URLSearchParams(searchParams)
+    if (val) {
+      newParams.set('from', val)
+    } else {
+      newParams.delete('from')
+    }
+    setSearchParams(newParams)
+  }
+
+  const handleToDateChange = (val) => {
+    setToDate(val)
+    const newParams = new URLSearchParams(searchParams)
+    if (val) {
+      newParams.set('to', val)
+    } else {
+      newParams.delete('to')
+    }
+    setSearchParams(newParams)
+  }
+
+  const handleClearDates = () => {
+    setFromDate('')
+    setToDate('')
+    const newParams = new URLSearchParams(searchParams)
+    newParams.delete('from')
+    newParams.delete('to')
+    setSearchParams(newParams)
+  }
 
   useEffect(() => {
     const controller = new AbortController()
@@ -95,6 +171,7 @@ export function RunningLedger() {
           runningBal = t.runningBalance !== undefined ? t.runningBalance : (runningBal + debit - credit)
           return {
             id: t._id,
+            rawDate: t.date, // keep ISO for filtering
             date: formatDate(t.date),
             ref: t.referenceId?.toString?.()?.slice(-8)?.toUpperCase() || '—',
             type: txTypeLabel(t.type),
@@ -135,22 +212,63 @@ export function RunningLedger() {
   }))
   const partyOptions = [...vendorOptions, ...financierOptions]
 
-  const handlePartyChange = (val) => {
-    setParty(val)
-    const parts = val.split('|')
-    if (parts.length === 3) {
-      setPartyType(parts[0])
-      setPartyId(parts[1])
-    }
-  }
 
-  // Filter by date if set
+
+  // Filter by date range using the raw ISO dates
   const filteredLedger = ledger.filter(row => {
     if (!fromDate && !toDate) return true
-    // row.date is formatted; compare using original date would be better
-    // Simple approach: show all rows when dates set (backend doesn't support date filter in statement)
+    const rowDate = row.rawDate ? new Date(row.rawDate) : null
+    if (!rowDate) return true
+    const rowDay = new Date(rowDate.getFullYear(), rowDate.getMonth(), rowDate.getDate())
+    if (fromDate) {
+      // fromDate is in dd-MM-yyyy format from CustomDatePicker
+      const [fd, fm, fy] = fromDate.split('-').map(Number)
+      const from = new Date(fy, fm - 1, fd)
+      if (rowDay < from) return false
+    }
+    if (toDate) {
+      const [td, tm, ty] = toDate.split('-').map(Number)
+      const to = new Date(ty, tm - 1, td)
+      if (rowDay > to) return false
+    }
     return true
   })
+
+  const handleExport = () => {
+    if (!filteredLedger.length) {
+      toast('No data to export', 'error')
+      return
+    }
+    try {
+      const partyName = party ? party.split('|')[2] || 'Ledger' : 'Ledger'
+      const exportData = filteredLedger.map(row => ({
+        Date: row.date,
+        Reference: row.ref,
+        Type: row.type,
+        Description: row.description,
+        'Debit (Liability)': row.debit > 0 ? row.debit : '',
+        'Credit (Payment)': row.credit > 0 ? row.credit : '',
+        'Running Balance': row.balance,
+      }))
+      // Add totals row
+      exportData.push({
+        Date: 'TOTALS',
+        Reference: '',
+        Type: '',
+        Description: '',
+        'Debit (Liability)': filteredLedger.reduce((s, r) => s + r.debit, 0),
+        'Credit (Payment)': filteredLedger.reduce((s, r) => s + r.credit, 0),
+        'Running Balance': filteredLedger[filteredLedger.length - 1]?.balance ?? 0,
+      })
+      const ws = XLSX.utils.json_to_sheet(exportData)
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, 'Ledger')
+      XLSX.writeFile(wb, `${partyName}_ledger.xlsx`)
+      toast('Ledger exported successfully')
+    } catch (err) {
+      toast('Export failed: ' + err.message, 'error')
+    }
+  }
 
   const totalDebit = filteredLedger.reduce((s, r) => s + r.debit, 0)
   const totalCredit = filteredLedger.reduce((s, r) => s + r.credit, 0)
@@ -160,8 +278,8 @@ export function RunningLedger() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Running Ledger</h1>
-        <p className="text-sm text-gray-400 mt-0.5">Transaction ledger with running balances</p>
+        <h1 className="text-2xl font-semibold" style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>Running Ledger</h1>
+        <p className="text-sm mt-0.5" style={{ color: 'var(--color-text-muted)' }}>Transaction ledger with running balances per party</p>
       </div>
 
       {/* Error Banner */}
@@ -172,11 +290,11 @@ export function RunningLedger() {
       )}
 
       {/* Table */}
-      <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700">
+      <div className="rounded-xl" style={{ background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)' }}>
         {/* Filters Bar */}
-        <div className="px-5 py-3 border-b border-gray-100 dark:border-slate-700 flex items-center space-x-3 flex-wrap gap-y-2">
+        <div className="px-5 py-3 flex items-center space-x-3 flex-wrap gap-y-2" style={{ borderBottom: '1px solid var(--color-border)' }}>
           <div className="flex items-center space-x-2">
-            <span className="text-sm text-gray-500 dark:text-gray-400 font-medium">Party</span>
+            <span className="text-sm font-medium" style={{ color: 'var(--color-text-muted)' }}>Party</span>
             <div className="w-64">
               {partiesLoading ? (
                 <Skeleton className="h-8 w-full rounded-lg" />
@@ -191,21 +309,40 @@ export function RunningLedger() {
             </div>
           </div>
           <div className="flex items-center space-x-2">
-            <span className="text-sm text-gray-500 dark:text-gray-400">From</span>
+            <span className="text-sm" style={{ color: 'var(--color-text-muted)' }}>From</span>
             <CustomDatePicker
               value={fromDate}
-              onChange={val => setFromDate(val)}
+              onChange={handleFromDateChange}
             />
           </div>
           <div className="flex items-center space-x-2">
-            <span className="text-sm text-gray-500 dark:text-gray-400">To</span>
+            <span className="text-sm" style={{ color: 'var(--color-text-muted)' }}>To</span>
             <CustomDatePicker
               value={toDate}
-              onChange={val => setToDate(val)}
+              onChange={handleToDateChange}
             />
           </div>
+          {(fromDate || toDate) && (
+            <button
+              onClick={handleClearDates}
+              className="text-xs font-semibold text-brand-primary hover:opacity-80 transition-opacity"
+            >
+              Clear
+            </button>
+          )}
           <div className="flex-1" />
-          <button className="flex items-center space-x-1.5 text-sm text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-slate-600 px-3 py-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700">
+          <button
+            onClick={handleExport}
+            disabled={!party || filteredLedger.length === 0}
+            className="flex items-center space-x-1.5 text-sm px-3 py-1.5 rounded-lg transition-colors"
+            style={{
+              background: (!party || filteredLedger.length === 0) ? 'var(--color-bg-elevated)' : 'var(--gradient-primary)',
+              color: (!party || filteredLedger.length === 0) ? 'var(--color-text-muted)' : '#fff',
+              border: '1px solid var(--color-border)',
+              cursor: (!party || filteredLedger.length === 0) ? 'not-allowed' : 'pointer',
+              opacity: (!party || filteredLedger.length === 0) ? 0.6 : 1,
+            }}
+          >
             <Download size={14} />
             <span>Export</span>
           </button>

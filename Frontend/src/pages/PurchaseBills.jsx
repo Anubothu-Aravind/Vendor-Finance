@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useReducer, useCallback } from 'react'
 import { Plus, Search, Trash2, Edit2, Eye, X } from 'lucide-react'
-import { toInputDate, fromInputDate } from '../utils/date'
+import { toInputDate, fromInputDate, getTodayFormatted } from '../utils/date'
 import DropdownSelect from '../components/ui/DropdownSelect'
 import CustomDatePicker from '../components/ui/CustomDatePicker'
 import { toTitleCase } from '../utils/text'
@@ -25,13 +25,26 @@ const statusStyle = {
 
 const fmt = (v) => new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(v)
 
+// ── Fetch state reducer (defined at module scope for stable reference) ────────
+const fetchInitial = { status: 'idle', bills: [], vendors: [], error: null }
+function fetchReducer(state, action) {
+  switch (action.type) {
+    case 'FETCH_START':   return { ...state, status: 'loading', error: null }
+    case 'FETCH_SUCCESS': return { status: 'success', bills: action.payload.bills, vendors: action.payload.vendors, error: null }
+    case 'FETCH_ERROR':   return { ...state, status: 'error', error: action.payload }
+    default:              return state
+  }
+}
+
 export function PurchaseBills() {
   const toast = useToast()
   const confirm = useConfirm()
-  const [bills, setBills] = useState([])
-  const [vendors, setVendors] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+
+  // ── Fetch state: consolidated into one reducer to avoid impossible states ──
+  const [fetchState, fetchDispatch] = useReducer(fetchReducer, fetchInitial)
+  const { bills, vendors, status: fetchStatus, error } = fetchState
+  const loading = fetchStatus === 'idle' || fetchStatus === 'loading'
+
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [showModal, setShowModal] = useState(false)
@@ -43,19 +56,35 @@ export function PurchaseBills() {
     billNo: '',
     paymentType: '',
     customPaymentType: '',
-    date: '29-06-2026',
-    dueDate: '29-07-2026',
+    date: getTodayFormatted(),
+    dueDate: getTodayFormatted(),
     amount: '',
     remarks: '',
   }
   const [form, setForm] = useState(emptyForm)
 
-  const fetchBillsAndVendors = async (signal) => {
+  // Sub-modal states for adding vendor inline
+  const emptyVendorForm = {
+    name: '',
+    type: 'smallVendor',
+    phone: '',
+    email: '',
+    address: '',
+    gstin: '',
+    openingBalance: '',
+    status: 'Active'
+  }
+  const [showAddVendorInline, setShowAddVendorInline] = useState(false)
+  const [vendorForm, setVendorForm] = useState(emptyVendorForm)
+
+  // ── Fetch bills + vendors ───────────────────────────────────────────────────
+  // Wrapped in useCallback so the reference is stable across renders.
+  const fetchBillsAndVendors = useCallback(async (signal) => {
+    fetchDispatch({ type: 'FETCH_START' })
     try {
-      setLoading(true)
       const [billsData, vendorsData] = await Promise.all([
-        api.get('/bills', { signal }),
-        api.get('/vendors', { signal })
+        api.get('/bills', signal ? { signal } : {}),
+        api.get('/vendors', signal ? { signal } : {})
       ])
 
       const mapped = billsData.map(b => {
@@ -84,31 +113,26 @@ export function PurchaseBills() {
       })
 
       if (!signal || !signal.aborted) {
-        setBills(mapped)
-        setVendors(vendorsData)
-        setLoading(false)
+        fetchDispatch({ type: 'FETCH_SUCCESS', payload: { bills: mapped, vendors: vendorsData } })
       }
     } catch (err) {
       if (!signal || !signal.aborted) {
-        setError(err.message || 'Failed to fetch bills')
-        setLoading(false)
+        fetchDispatch({ type: 'FETCH_ERROR', payload: err.message || 'Failed to fetch bills' })
       }
     }
-  }
+  }, [])
 
   useEffect(() => {
     const controller = new AbortController()
     fetchBillsAndVendors(controller.signal)
     return () => controller.abort()
-  }, [])
+  }, [fetchBillsAndVendors])
 
   useEffect(() => {
-    const handleDataChanged = () => {
-      fetchBillsAndVendors()
-    }
+    const handleDataChanged = () => fetchBillsAndVendors()
     window.addEventListener('api-data-changed', handleDataChanged)
     return () => window.removeEventListener('api-data-changed', handleDataChanged)
-  }, [])
+  }, [fetchBillsAndVendors])
 
   const vendorListOptions = useMemo(() => {
     return vendors.map(v => ({ value: v._id, label: toTitleCase(v.name) }))
@@ -176,6 +200,35 @@ export function PurchaseBills() {
       } catch (err) {
         toast(err.message || 'Failed to delete bill', 'error')
       }
+    }
+  }
+
+  const handleSaveVendorInline = async (e) => {
+    e.preventDefault()
+    if (!vendorForm.name) {
+      toast('Vendor name is required', 'error')
+      return
+    }
+    try {
+      const res = await api.post('/vendors', {
+        ...vendorForm,
+        openingBalance: Number(vendorForm.openingBalance) || 0
+      })
+      toast('Vendor added successfully')
+      
+      // Refresh vendors list
+      await fetchBillsAndVendors()
+      
+      // Auto-select the newly created vendor ID
+      const newVendorId = res?._id || res?.data?._id
+      if (newVendorId) {
+        setForm(prev => ({ ...prev, vendor: newVendorId }))
+      }
+      
+      setShowAddVendorInline(false)
+      setVendorForm(emptyVendorForm)
+    } catch (err) {
+      toast(err.message || 'Error saving vendor', 'error')
     }
   }
 
@@ -413,6 +466,11 @@ export function PurchaseBills() {
                     onChange={val => setForm({...form, vendor: val})}
                     placeholder="Select Vendor"
                     options={vendorListOptions}
+                    actionLabel="＋ Add New Vendor"
+                    onAction={() => {
+                      setVendorForm(emptyVendorForm)
+                      setShowAddVendorInline(true)
+                    }}
                   />
                 </div>
 
@@ -483,6 +541,81 @@ export function PurchaseBills() {
                 </div>
               </form>
             )}
+          </div>
+        </div>
+      )}
+
+      {showAddVendorInline && (
+        <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4">
+          <div className="rounded-xl border max-w-lg w-full p-6 space-y-4 shadow-2xl" style={{ background: 'var(--color-bg-surface)', borderColor: 'var(--color-border)' }}>
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold uppercase tracking-wide" style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>Add New Vendor</h3>
+              <button onClick={() => setShowAddVendorInline(false)} className="text-gray-400 hover:text-gray-900"><X size={16} /></button>
+            </div>
+            <form onSubmit={handleSaveVendorInline} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--color-text-secondary)' }}>Vendor Name *</label>
+                  <input type="text" required value={vendorForm.name} onChange={e => setVendorForm({ ...vendorForm, name: e.target.value })}
+                    className="w-full px-3 py-1.5 text-sm rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary"
+                    style={{ background: 'var(--color-bg-elevated)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }} />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--color-text-secondary)' }}>Vendor Type</label>
+                  <DropdownSelect
+                    value={vendorForm.type}
+                    onChange={val => setVendorForm({ ...vendorForm, type: val })}
+                    options={[
+                      { value: 'smallVendor', label: 'Small Vendor' },
+                      { value: 'largeVendor', label: 'Big Vendor' }
+                    ]}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--color-text-secondary)' }}>Phone Number</label>
+                  <input type="text" value={vendorForm.phone} onChange={e => setVendorForm({ ...vendorForm, phone: e.target.value })}
+                    className="w-full px-3 py-1.5 text-sm rounded-lg focus:outline-none"
+                    style={{ background: 'var(--color-bg-elevated)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }} />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--color-text-secondary)' }}>Email</label>
+                  <input type="email" value={vendorForm.email} onChange={e => setVendorForm({ ...vendorForm, email: e.target.value })}
+                    className="w-full px-3 py-1.5 text-sm rounded-lg focus:outline-none"
+                    style={{ background: 'var(--color-bg-elevated)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }} />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--color-text-secondary)' }}>GSTIN</label>
+                  <input type="text" value={vendorForm.gstin} onChange={e => setVendorForm({ ...vendorForm, gstin: e.target.value.toUpperCase() })}
+                    className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none font-mono uppercase" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--color-text-secondary)' }}>Opening Balance</label>
+                  <input type="number" value={vendorForm.openingBalance} onChange={e => setVendorForm({ ...vendorForm, openingBalance: e.target.value })}
+                    className="w-full px-3 py-1.5 text-sm rounded-lg focus:outline-none"
+                    style={{ background: 'var(--color-bg-elevated)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }} />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--color-text-secondary)' }}>Status</label>
+                  <DropdownSelect
+                    value={vendorForm.status}
+                    onChange={val => setVendorForm({ ...vendorForm, status: val })}
+                    options={[
+                      { value: 'Active', label: 'Active' },
+                      { value: 'Inactive', label: 'Inactive' }
+                    ]}
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--color-text-secondary)' }}>Address</label>
+                  <textarea rows={2} value={vendorForm.address} onChange={e => setVendorForm({ ...vendorForm, address: e.target.value })}
+                    className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none resize-none" />
+                </div>
+              </div>
+              <div className="flex justify-end space-x-2 pt-2">
+                <button type="button" onClick={() => setShowAddVendorInline(false)} className="px-3.5 py-2 text-xs font-semibold text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">Cancel</button>
+                <button type="submit" className="px-3.5 py-2 text-xs font-semibold bg-brand-primary text-white rounded-lg hover:opacity-90">Save Vendor</button>
+              </div>
+            </form>
           </div>
         </div>
       )}

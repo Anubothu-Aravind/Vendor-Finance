@@ -13,7 +13,7 @@ export function toTitleCase(str) {
 
   // Split by camelCase, underscores, and hyphens to split words
   const words = str
-    .replace(/([A-Z])/g, ' $1')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
     .replace(/[_-]+/g, ' ')
     .trim()
     .split(/\s+/)
