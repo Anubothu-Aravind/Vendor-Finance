@@ -142,11 +142,10 @@ export function Dashboard() {
               onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--color-border)'}
             >
               <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] font-semibold uppercase tracking-wider truncate max-w-[120px]"
+                <span className="text-[10px] font-semibold uppercase tracking-wider truncate max-w-[150px]"
                   style={{ color: 'var(--color-text-muted)' }}>
                   {kpi.label}
                 </span>
-                <kpi.icon size={16} style={{ color: 'var(--color-text-muted)' }} className="shrink-0" />
               </div>
               <div>
                 <p className="text-xl font-bold tabular-nums stat-value"
@@ -288,7 +287,7 @@ export function Dashboard() {
           style={{ background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)' }}>
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>Recent Transactions</h3>
-            <Link to="/transaction-history" className="text-xs font-medium hover:underline" style={{ color: 'var(--color-primary)' }}>View All</Link>
+            <Link to="/transaction-history" className="text-xs font-medium hover:opacity-80 transition-opacity" style={{ color: 'var(--color-primary)' }}>View All</Link>
           </div>
           <div className="overflow-x-auto">
             {loading ? (
@@ -340,7 +339,7 @@ export function Dashboard() {
           style={{ background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)' }}>
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>Upcoming Cheques</h3>
-            <Link to="/cheques" className="text-xs font-medium hover:underline" style={{ color: 'var(--color-primary)' }}>View All</Link>
+            <Link to="/cheques" className="text-xs font-medium hover:opacity-80 transition-opacity" style={{ color: 'var(--color-primary)' }}>View All</Link>
           </div>
           <div className="space-y-3.5">
             {loading ? (

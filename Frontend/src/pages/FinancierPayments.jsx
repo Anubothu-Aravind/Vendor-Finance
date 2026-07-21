@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react'
+import React, { useState, useEffect, useReducer, useCallback, useMemo } from 'react'
 import { Plus, Search, Trash2, Edit2, Eye, X, Building2 } from 'lucide-react'
 import { toInputDate, fromInputDate, getTodayFormatted } from '../utils/date'
 import DropdownSelect from '../components/ui/DropdownSelect'
@@ -9,6 +9,10 @@ import Badge from '../components/ui/Badge'
 import api from '../utils/api'
 import { useToast } from '../hooks/useToast'
 import { useConfirm } from '../hooks/useConfirm'
+import { useDirtyForm } from '../hooks/useDirtyForm'
+import { useDirtyStateContext } from '../context/DirtyStateContext'
+import { useSaveConfirmation } from '../hooks/useSaveConfirmation'
+import { SaveConfirmationModal } from '../components/ui/SaveConfirmationModal'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Skeleton, SkeletonTableRow } from '../components/ui/Skeleton'
 
@@ -38,6 +42,36 @@ export function FinancierPayments() {
     chequeNo: ''
   }
   const [form, setForm] = useState(emptyForm)
+  const [initialFormSnapshot, setInitialFormSnapshot] = useState(emptyForm)
+  const { confirmNavigation } = useDirtyStateContext()
+  const { confirmConfig, isSaving, requestSaveConfirmation } = useSaveConfirmation()
+
+  const isFormDirty = useMemo(() => {
+    if (!showModal || modalMode === 'preview') return false
+    return (
+      (form.financier || '') !== (initialFormSnapshot.financier || '') ||
+      (form.date || '') !== (initialFormSnapshot.date || '') ||
+      (form.amount || '') !== (initialFormSnapshot.amount || '') ||
+      (form.mode || '') !== (initialFormSnapshot.mode || '') ||
+      (form.chequeNo || '') !== (initialFormSnapshot.chequeNo || '') ||
+      (form.remarks || '') !== (initialFormSnapshot.remarks || '')
+    )
+  }, [showModal, modalMode, form, initialFormSnapshot])
+
+  const closeModal = useCallback(() => {
+    confirmNavigation(() => {
+      setShowModal(false)
+      setForm(emptyForm)
+    })
+  }, [confirmNavigation])
+
+  useDirtyForm({
+    id: 'financier-payment-form',
+    title: modalMode === 'add' ? 'Record Repayment Form' : 'Edit Repayment Form',
+    isDirty: isFormDirty,
+    onSave: () => handleSave(),
+    onDiscard: () => setForm(emptyForm)
+  })
 
   const fetchRepaymentsData = async (signal) => {
     try {
@@ -99,6 +133,7 @@ export function FinancierPayments() {
 
   const handleOpenAdd = () => {
     setForm(emptyForm)
+    setInitialFormSnapshot(emptyForm)
     setModalMode('add')
     setShowModal(true)
   }
@@ -110,14 +145,16 @@ export function FinancierPayments() {
   }
 
   const handleOpenEdit = (repay) => {
+    const editObj = { ...repay }
     setSelectedRepay(repay)
-    setForm({ ...repay })
+    setForm(editObj)
+    setInitialFormSnapshot(editObj)
     setModalMode('edit')
     setShowModal(true)
   }
 
-  const handleSave = async (e) => {
-    e.preventDefault()
+  const handleSave = (e) => {
+    if (e) e.preventDefault()
     const amt = Number(form.amount) || 0
     
     if (form.mode === 'Cheque') {
@@ -132,34 +169,53 @@ export function FinancierPayments() {
       return
     }
 
-    const modeMapping = {
-      'Cash': 'CASH',
-      'Cheque': 'CHEQUE',
-      'NEFT': 'BANK_TRANSFER',
-      'RTGS': 'BANK_TRANSFER',
-      'UPI': 'BANK_TRANSFER',
-      'Bank Transfer': 'BANK_TRANSFER'
-    }
+    requestSaveConfirmation({
+      title: 'Confirm Loan Repayment Record',
+      message: `You are about to record a repayment of ₹${amt} to "${form.financier}".`,
+      initialValues: initialFormSnapshot,
+      currentValues: form,
+      labelMap: {
+        financier: 'Financier',
+        date: 'Repayment Date',
+        amount: 'Repayment Amount',
+        mode: 'Payment Mode',
+        chequeNo: 'Cheque Number',
+        remarks: 'Remarks'
+      },
+      onSaveApi: async () => {
+        const modeMapping = {
+          'Cash': 'CASH',
+          'Cheque': 'CHEQUE',
+          'NEFT': 'BANK_TRANSFER',
+          'RTGS': 'BANK_TRANSFER',
+          'UPI': 'BANK_TRANSFER',
+          'Bank Transfer': 'BANK_TRANSFER'
+        }
 
-    try {
-      for (const alloc of fifoAllocations) {
-        if (alloc.adjusted > 0) {
-          await api.post(`/loans/${alloc.loanId}/repayments`, {
-            amount: alloc.adjusted,
-            repaymentDate: toInputDate(form.date),
-            repaymentMode: modeMapping[form.mode] || 'BANK_TRANSFER',
-            referenceNumber: 'REP-' + String(Math.floor(100 + Math.random() * 900)),
-            chequeNumber: form.mode === 'Cheque' ? form.chequeNo : undefined,
-            principalPaid: alloc.adjusted,
-            interestPaid: 0
-          })
+        try {
+          for (const alloc of fifoAllocations) {
+            if (alloc.adjusted > 0) {
+              await api.post(`/loans/${alloc.loanId}/repayments`, {
+                amount: alloc.adjusted,
+                repaymentDate: toInputDate(form.date),
+                repaymentMode: modeMapping[form.mode] || 'BANK_TRANSFER',
+                referenceNumber: 'REP-' + String(Math.floor(100 + Math.random() * 900)),
+                chequeNumber: form.mode === 'Cheque' ? form.chequeNo : undefined,
+                principalPaid: alloc.adjusted,
+                interestPaid: 0
+              })
+            }
+          }
+          await fetchRepaymentsData()
+          setShowModal(false)
+          setForm(emptyForm)
+          toast('Financier repayment recorded successfully', 'success')
+        } catch (err) {
+          toast(err.message || 'Failed to save repayment', 'error')
+          return false
         }
       }
-      await fetchRepaymentsData()
-      setShowModal(false)
-    } catch (err) {
-      toast(err.message || 'Failed to save repayment', 'error')
-    }
+    })
   }
 
   const handleDelete = async (id) => {
@@ -361,13 +417,13 @@ export function FinancierPayments() {
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm overflow-y-auto">
-          <div className="bg-white w-[540px] rounded-xl border border-gray-200 shadow-xl p-6 my-8">
-            <div className="flex justify-between items-center mb-4 border-b border-gray-100 pb-3">
-              <h2 className="text-base font-semibold text-gray-900 uppercase tracking-wide">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm overflow-y-auto" onClick={closeModal}>
+          <div className="bg-white dark:bg-slate-800 w-[540px] rounded-xl border border-gray-200 dark:border-slate-700 shadow-xl p-6 my-8" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4 border-b border-gray-100 dark:border-slate-700 pb-3">
+              <h2 className="text-base font-semibold text-gray-900 dark:text-white uppercase tracking-wide">
                 {modalMode === 'add' ? 'Record Repayment' : modalMode === 'edit' ? 'Edit Repayment Details' : 'Repayment & Loan FIFO Preview'}
               </h2>
-              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
+              <button onClick={closeModal} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"><X size={18} /></button>
             </div>
 
             {modalMode === 'preview' ? (
@@ -531,8 +587,8 @@ export function FinancierPayments() {
                     className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none" />
                 </div>
 
-                <div className="flex justify-end space-x-3 pt-4 border-t border-gray-100 mt-6">
-                  <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">Cancel</button>
+                <div className="flex justify-end space-x-3 pt-4 border-t border-gray-100 dark:border-slate-700 mt-6">
+                  <button type="button" onClick={closeModal} className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 dark:text-gray-300 dark:border-slate-600 dark:hover:bg-slate-700">Cancel</button>
                   <button type="submit" disabled={isOverBalance} style={{ opacity: isOverBalance ? 0.5 : 1, cursor: isOverBalance ? 'not-allowed' : 'pointer' }} className="px-4 py-2 text-sm font-medium text-white bg-brand-primary rounded-lg hover:bg-brand-primary/90">
                     {modalMode === 'add' ? 'Confirm & Save' : 'Update Repayment'}
                   </button>
@@ -542,6 +598,7 @@ export function FinancierPayments() {
           </div>
         </div>
       )}
+      <SaveConfirmationModal {...confirmConfig} isSaving={isSaving} />
     </div>
   )
 }

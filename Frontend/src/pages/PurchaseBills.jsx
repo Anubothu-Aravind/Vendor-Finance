@@ -9,6 +9,10 @@ import Badge from '../components/ui/Badge'
 import api from '../utils/api'
 import { useToast } from '../hooks/useToast'
 import { useConfirm } from '../hooks/useConfirm'
+import { useDirtyForm } from '../hooks/useDirtyForm'
+import { useDirtyStateContext } from '../context/DirtyStateContext'
+import { useSaveConfirmation } from '../hooks/useSaveConfirmation'
+import { SaveConfirmationModal } from '../components/ui/SaveConfirmationModal'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Skeleton, SkeletonTableRow } from '../components/ui/Skeleton'
 
@@ -62,6 +66,38 @@ export function PurchaseBills() {
     remarks: '',
   }
   const [form, setForm] = useState(emptyForm)
+  const [initialFormSnapshot, setInitialFormSnapshot] = useState(emptyForm)
+  const { confirmNavigation } = useDirtyStateContext()
+  const { confirmConfig, isSaving, requestSaveConfirmation } = useSaveConfirmation()
+
+  const isFormDirty = useMemo(() => {
+    if (!showModal || modalMode === 'preview') return false
+    return (
+      (form.vendor || '') !== (initialFormSnapshot.vendor || '') ||
+      (form.billNo || '') !== (initialFormSnapshot.billNo || '') ||
+      (form.paymentType || '') !== (initialFormSnapshot.paymentType || '') ||
+      (form.customPaymentType || '') !== (initialFormSnapshot.customPaymentType || '') ||
+      (form.date || '') !== (initialFormSnapshot.date || '') ||
+      (form.dueDate || '') !== (initialFormSnapshot.dueDate || '') ||
+      (form.amount || '') !== (initialFormSnapshot.amount || '') ||
+      (form.remarks || '') !== (initialFormSnapshot.remarks || '')
+    )
+  }, [showModal, modalMode, form, initialFormSnapshot])
+
+  const closeModal = useCallback(() => {
+    confirmNavigation(() => {
+      setShowModal(false)
+      setForm(emptyForm)
+    })
+  }, [confirmNavigation])
+
+  useDirtyForm({
+    id: 'purchase-bill-form',
+    title: modalMode === 'add' ? 'Add Purchase Bill Form' : 'Edit Purchase Bill Form',
+    isDirty: isFormDirty,
+    onSave: () => handleSave(),
+    onDiscard: () => setForm(emptyForm)
+  })
 
   // Sub-modal states for adding vendor inline
   const emptyVendorForm = {
@@ -140,6 +176,7 @@ export function PurchaseBills() {
 
   const handleOpenAdd = () => {
     setForm(emptyForm)
+    setInitialFormSnapshot(emptyForm)
     setModalMode('add')
     setShowModal(true)
   }
@@ -151,45 +188,68 @@ export function PurchaseBills() {
   }
 
   const handleOpenEdit = (bill) => {
-    setSelectedBill(bill)
-    setForm({
+    const editObj = {
       ...bill,
       vendor: bill.vendorId || bill.vendor,
       customPaymentType: ['Credit', 'cash'].includes(bill.paymentType) ? '' : bill.paymentType,
       paymentType: ['Credit', 'cash'].includes(bill.paymentType) ? bill.paymentType : 'custom'
-    })
+    }
+    setSelectedBill(bill)
+    setForm(editObj)
+    setInitialFormSnapshot(editObj)
     setModalMode('edit')
     setShowModal(true)
   }
 
-  const handleSave = async (e) => {
-    e.preventDefault()
-    let savedPaymentType = form.paymentType
-    if (form.paymentType === 'custom') {
-      savedPaymentType = form.customPaymentType || 'Custom'
-    }
+  const handleSave = (e) => {
+    if (e) e.preventDefault()
+    requestSaveConfirmation({
+      title: modalMode === 'add' ? 'Confirm Add Purchase Bill' : 'Confirm Update Bill',
+      message: `You are about to save changes for Bill #${form.billNo || 'New'}.`,
+      initialValues: initialFormSnapshot,
+      currentValues: form,
+      labelMap: {
+        vendor: 'Vendor',
+        billNo: 'Bill Number',
+        paymentType: 'Payment Terms',
+        customPaymentType: 'Custom Terms',
+        date: 'Bill Date',
+        dueDate: 'Due Date',
+        amount: 'Bill Amount',
+        remarks: 'Remarks'
+      },
+      onSaveApi: async () => {
+        let savedPaymentType = form.paymentType
+        if (form.paymentType === 'custom') {
+          savedPaymentType = form.customPaymentType || 'Custom'
+        }
 
-    const payload = {
-      billNumber: form.billNo,
-      vendorId: form.vendor,
-      paymentType: savedPaymentType,
-      billDate: toInputDate(form.date),
-      dueDate: toInputDate(form.dueDate),
-      amount: Number(form.amount) || 0,
-      remarks: form.remarks
-    }
+        const payload = {
+          billNumber: form.billNo,
+          vendorId: form.vendor,
+          paymentType: savedPaymentType,
+          billDate: toInputDate(form.date),
+          dueDate: toInputDate(form.dueDate),
+          amount: Number(form.amount) || 0,
+          remarks: form.remarks
+        }
 
-    try {
-      if (modalMode === 'add') {
-        await api.post('/bills', payload)
-      } else {
-        await api.put(`/bills/${selectedBill.id}`, payload)
+        try {
+          if (modalMode === 'add') {
+            await api.post('/bills', payload)
+          } else {
+            await api.put(`/bills/${selectedBill.id}`, payload)
+          }
+          await fetchBillsAndVendors()
+          setShowModal(false)
+          setForm(emptyForm)
+          toast(modalMode === 'add' ? 'Purchase Bill created successfully' : 'Purchase Bill updated successfully', 'success')
+        } catch (err) {
+          toast(err.message || 'Failed to save bill', 'error')
+          return false
+        }
       }
-      await fetchBillsAndVendors()
-      setShowModal(false)
-    } catch (err) {
-      toast(err.message || 'Failed to save bill', 'error')
-    }
+    })
   }
 
   const handleDelete = async (id) => {
@@ -406,13 +466,13 @@ export function PurchaseBills() {
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="bg-white w-[500px] rounded-xl border border-gray-200 shadow-xl p-6">
-            <div className="flex justify-between items-center mb-4 border-b border-gray-100 pb-3">
-              <h2 className="text-base font-semibold text-gray-900 uppercase tracking-wide">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={closeModal}>
+          <div className="bg-white dark:bg-slate-800 w-[500px] rounded-xl border border-gray-200 dark:border-slate-700 shadow-xl p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4 border-b border-gray-100 dark:border-slate-700 pb-3">
+              <h2 className="text-base font-semibold text-gray-900 dark:text-white uppercase tracking-wide">
                 {modalMode === 'add' ? 'Add Purchase Bill' : modalMode === 'edit' ? 'Edit Purchase Bill' : 'Purchase Bill Preview'}
               </h2>
-              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
+              <button onClick={closeModal} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"><X size={18} /></button>
             </div>
 
             {modalMode === 'preview' ? (
@@ -534,7 +594,7 @@ export function PurchaseBills() {
                 </div>
 
                 <div className="flex justify-end space-x-3 pt-4 border-t border-gray-100 mt-6">
-                  <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">Cancel</button>
+                  <button type="button" onClick={closeModal} className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 dark:text-gray-300 dark:border-slate-600 dark:hover:bg-slate-700">Cancel</button>
                   <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-brand-primary rounded-lg hover:bg-brand-primary/90">
                     {modalMode === 'add' ? 'Save Bill' : 'Update Bill'}
                   </button>
@@ -619,6 +679,8 @@ export function PurchaseBills() {
           </div>
         </div>
       )}
+      {/* Save Confirmation Dialog */}
+      <SaveConfirmationModal {...confirmConfig} isSaving={isSaving} />
     </>
   )
 }

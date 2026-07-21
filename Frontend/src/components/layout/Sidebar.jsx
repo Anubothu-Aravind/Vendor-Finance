@@ -19,6 +19,7 @@ import {
 } from 'lucide-react'
 import { useAuth } from '../../hooks/AuthContext'
 import { usePreferences } from '../../hooks/usePreferences'
+import { useDirtyStateContext } from '../../context/DirtyStateContext'
 
 const navGroups = [
   {
@@ -68,16 +69,17 @@ const navGroups = [
 
 export function Sidebar({ onClose }) {
   const { user, logout } = useAuth()
+  const { confirmNavigation } = useDirtyStateContext()
   const { sidebarCollapsed, setSidebarCollapsed } = usePreferences()
   const initials = (user?.name || 'AU').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
 
   return (
     <aside 
-      style={{ background: 'var(--color-sidebar-bg)', borderRight: '1px solid var(--color-border)' }}
-      className={`flex flex-col h-screen shrink-0 transition-all duration-200 ${sidebarCollapsed ? 'w-16' : 'w-56'}`}
+      style={{ borderRight: '1px solid rgba(255,255,255,0.07)' }}
+      className={`sidebar-bg flex flex-col min-h-screen h-full sticky top-0 shrink-0 transition-all duration-200 ${sidebarCollapsed ? 'w-16' : 'w-56'}`}
     >
       {/* Brand Header */}
-      <div style={{ borderBottom: '1px solid var(--color-border)' }} className={`h-14 flex items-center shrink-0 ${sidebarCollapsed ? 'justify-center' : 'px-5'}`}>
+      <div style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }} className={`h-14 flex items-center shrink-0 ${sidebarCollapsed ? 'justify-center' : 'px-5'}`}>
         {sidebarCollapsed ? (
           <div className="flex flex-col items-center justify-center space-y-1">
             <div 
@@ -96,11 +98,14 @@ export function Sidebar({ onClose }) {
                 style={{ background: 'var(--gradient-primary)', color: '#fff' }}>
                 V
               </div>
-              <span className="font-bold tracking-wide text-sm nav-logo" style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>VASTRAMS</span>
+              <span className="font-bold tracking-wide text-sm nav-logo" style={{ color: '#fff', fontFamily: 'var(--font-display)' }}>VASTRAMS</span>
             </div>
             <button 
               onClick={() => setSidebarCollapsed(true)} 
-              className="p-1 hover:bg-slate-800 rounded transition-colors text-slate-400 hover:text-slate-100"
+              className="p-1 rounded transition-colors"
+              style={{ color: 'rgba(255,255,255,0.35)' }}
+              onMouseEnter={e => e.currentTarget.style.color = 'rgba(255,255,255,0.8)'}
+              onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.35)'}
               title="Collapse Sidebar"
             >
               <ChevronLeft size={16} />
@@ -115,7 +120,7 @@ export function Sidebar({ onClose }) {
           <div key={idx} className="space-y-0.5">
             {!sidebarCollapsed && (
               <p className="text-[10px] font-semibold uppercase tracking-widest px-2 pb-1"
-                style={{ color: 'var(--color-text-muted)' }}>
+                style={{ color: 'rgba(255,255,255,0.25)' }}>
                 {group.title}
               </p>
             )}
@@ -132,12 +137,12 @@ export function Sidebar({ onClose }) {
                   sidebarCollapsed ? 'justify-center px-0' : 'pl-3 pr-2.5 space-x-2'
                 ].join(' ')}
                 style={({ isActive }) => ({
-                  background: isActive ? 'var(--color-sidebar-active)' : 'transparent',
-                  color: isActive ? 'var(--color-sidebar-active-text)' : 'var(--color-sidebar-text)',
+                  background: isActive ? 'rgba(0, 200, 150, 0.13)' : 'transparent',
+                  color: isActive ? '#00C896' : 'rgba(255,255,255,0.5)',
                 })}
                 onMouseEnter={e => {
                   const isActive = e.currentTarget.getAttribute('aria-current') === 'page'
-                  if (!isActive) e.currentTarget.style.background = 'var(--color-bg-hover)'
+                  if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.07)'
                 }}
                 onMouseLeave={e => {
                   const isActive = e.currentTarget.getAttribute('aria-current') === 'page'
@@ -146,8 +151,14 @@ export function Sidebar({ onClose }) {
               >
                 {({ isActive }) => (
                   <>
-                    <item.icon size={16} style={{ color: isActive ? 'var(--color-primary)' : 'var(--color-text-muted)', flexShrink: 0 }} />
-                    {!sidebarCollapsed && <span>{item.label}</span>}
+                    {sidebarCollapsed ? (
+                      <item.icon size={18} style={{ color: isActive ? 'var(--color-primary)' : 'rgba(255,255,255,0.45)', flexShrink: 0 }} />
+                    ) : (
+                      <>
+                        <item.icon size={14} style={{ color: isActive ? 'var(--color-primary)' : 'rgba(255,255,255,0.4)', flexShrink: 0 }} />
+                        <span className="font-medium">{item.label}</span>
+                      </>
+                    )}
                   </>
                 )}
               </NavLink>
@@ -158,7 +169,7 @@ export function Sidebar({ onClose }) {
 
       {/* Footer User Info */}
       <div 
-        style={{ borderTop: '1px solid var(--color-border)' }} 
+        style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }} 
         className={`p-4 shrink-0 flex ${sidebarCollapsed ? 'flex-col items-center space-y-3 justify-center' : 'items-center justify-between'}`}
       >
         {sidebarCollapsed ? (
@@ -173,9 +184,9 @@ export function Sidebar({ onClose }) {
             </div>
             <button onClick={logout}
               className="p-1 transition-colors rounded"
-              style={{ color: 'var(--color-text-muted)' }}
+              style={{ color: 'rgba(255,255,255,0.3)' }}
               onMouseEnter={e => e.currentTarget.style.color = 'var(--color-danger)'}
-              onMouseLeave={e => e.currentTarget.style.color = 'var(--color-text-muted)'}
+              onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.3)'}
               title="Log Out">
               <LogOut size={16} />
             </button>
@@ -188,15 +199,15 @@ export function Sidebar({ onClose }) {
                 {initials}
               </div>
               <div className="min-w-0">
-                <p className="text-xs font-semibold truncate" style={{ color: 'var(--color-text-primary)' }}>{user?.name || 'Admin User'}</p>
-                <p className="text-[10px] truncate" style={{ color: 'var(--color-text-muted)' }}>{user?.email || 'admin@vastrams.in'}</p>
+                <p className="text-xs font-semibold truncate" style={{ color: 'rgba(255,255,255,0.85)' }}>{user?.name || 'Admin User'}</p>
+                <p className="text-[10px] truncate" style={{ color: 'rgba(255,255,255,0.35)' }}>{user?.email || 'admin@vastrams.in'}</p>
               </div>
             </div>
-            <button onClick={logout}
+            <button onClick={() => confirmNavigation(logout)}
               className="p-1 transition-colors rounded"
-              style={{ color: 'var(--color-text-muted)' }}
+              style={{ color: 'rgba(255,255,255,0.3)' }}
               onMouseEnter={e => e.currentTarget.style.color = 'var(--color-danger)'}
-              onMouseLeave={e => e.currentTarget.style.color = 'var(--color-text-muted)'}
+              onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.3)'}
               title="Log Out">
               <LogOut size={16} />
             </button>

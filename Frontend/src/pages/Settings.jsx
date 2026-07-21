@@ -11,6 +11,10 @@ import CustomDatePicker from '../components/ui/CustomDatePicker'
 import EmptyState from '../components/ui/EmptyState'
 import { useToast } from '../hooks/useToast'
 import { useConfirm } from '../hooks/useConfirm'
+import { useDirtyForm } from '../hooks/useDirtyForm'
+import { useDirtyStateContext } from '../context/DirtyStateContext'
+import { useSaveConfirmation } from '../hooks/useSaveConfirmation'
+import { SaveConfirmationModal } from '../components/ui/SaveConfirmationModal'
 import Badge from '../components/ui/Badge'
 import { usePreferences } from '../hooks/usePreferences'
 import { toInputDate, fromInputDate } from '../utils/date'
@@ -86,7 +90,6 @@ function AppearanceTab({ preferences, setPreferences, applyGradient, accentGradi
                     fontWeight: 'bold',
                   }}>✓</span>
                 )}
-                <Icon size={22} style={{ color: isActive ? 'var(--color-primary)' : 'var(--color-text-secondary)' }} />
                 <div style={{ fontSize: '14px', fontWeight: 500, fontFamily: 'var(--font-display)' }}>{label}</div>
                 <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', fontFamily: 'var(--font-body)' }}>{desc}</div>
               </button>
@@ -131,7 +134,6 @@ function AppearanceTab({ preferences, setPreferences, applyGradient, accentGradi
                   transition: 'all 120ms',
                 }}
               >
-                {CatIcon && <CatIcon size={14} style={{ color: isActive ? 'var(--color-primary)' : 'var(--color-text-muted)' }} />}
                 <span>{cat}</span>
               </button>
             )
@@ -366,6 +368,7 @@ export function Settings() {
       if (res.success && res.data) {
         if (!signal || !signal.aborted) {
           const profileData = {
+            ...res.data,
             businessName: res.data.businessName || '',
             ownerName: res.data.ownerName || '',
             email: res.data.email || '',
@@ -373,7 +376,10 @@ export function Settings() {
             address: res.data.address || '',
             gstin: res.data.gstin || '',
             website: res.data.website || '',
-            logo: res.data.logo || ''
+            logo: res.data.logo || '',
+            banks: res.data.banks || [],
+            paymentModes: res.data.paymentModes || [],
+            usersList: res.data.usersList || []
           }
           setProfile(profileData)
           setProfileSnapshot(profileData)
@@ -393,63 +399,27 @@ export function Settings() {
     return () => controller.abort()
   }, [])
 
-  // Tab switch guard
-  const handleTabClick = async (tabId) => {
-    if (activeTab === 'profile' && isDirty) {
-      const confirmed = await confirm('You have unsaved changes. Discard and continue?', {
-        title: 'Unsaved Changes',
-        confirmText: 'Yes',
-        cancelText: 'No',
-        variant: 'warning'
-      })
-      if (!confirmed) {
-        return // keep user on Business Profile
-      }
-      // Yes discards and switches tab: reset state to snapshot
+  const { confirmNavigation } = useDirtyStateContext()
+  const { confirmConfig, isSaving, requestSaveConfirmation } = useSaveConfirmation()
+
+  useDirtyForm({
+    id: 'settings-profile',
+    title: 'Company Profile Settings',
+    isDirty: activeTab === 'profile' && isDirty,
+    onSave: () => saveProfile(),
+    onDiscard: () => {
       setProfile(profileSnapshot)
+      setHasChanges(false)
     }
-    setActiveTab(tabId)
+  })
+
+  // Tab switch guard using global confirmNavigation
+  const handleTabClick = (tabId) => {
+    if (activeTab === tabId) return
+    confirmNavigation(() => {
+      setActiveTab(tabId)
+    })
   }
-
-  // Router route leave blocker guard
-  const blocker = useBlocker(
-    useCallback(
-      ({ currentValue, nextLocation }) =>
-        activeTab === 'profile' && isDirty && currentValue.pathname !== nextLocation.pathname,
-      [activeTab, isDirty]
-    )
-  )
-
-  useEffect(() => {
-    if (blocker.state === 'blocked') {
-      confirm('You have unsaved changes. Discard and continue?', {
-        title: 'Unsaved Changes',
-        confirmText: 'Yes',
-        cancelText: 'No',
-        variant: 'warning'
-      }).then((confirmed) => {
-        if (confirmed) {
-          setProfile(profileSnapshot)
-          blocker.proceed()
-        } else {
-          blocker.reset()
-        }
-      })
-    }
-  }, [blocker.state, isDirty, profileSnapshot])
-
-  // Native window leave/refresh guard
-  useBeforeUnload(
-    useCallback(
-      (event) => {
-        if (activeTab === 'profile' && isDirty) {
-          event.preventDefault()
-          event.returnValue = 'You have unsaved changes. Discard and continue?'
-        }
-      },
-      [activeTab, isDirty]
-    )
-  )
 
   const handleProfileChange = (e) => {
     const { name, value } = e.target
@@ -536,7 +506,7 @@ export function Settings() {
     setHasChanges(true)
   }
 
-  const saveProfile = async (e) => {
+  const saveProfile = (e) => {
     if (e) e.preventDefault()
     const errors = {}
     if (!profile.businessName) errors.businessName = 'Business Name is required'
@@ -564,29 +534,46 @@ export function Settings() {
       return
     }
 
-    try {
-      // Only send scalar profile fields — never include array sub-documents
-      // (paymentModes, usersList, banks) or MongoDB metadata in this call
-      const payload = {
-        businessName: profile.businessName,
-        ownerName: profile.ownerName,
-        email: profile.email,
-        phone: profile.phone,
-        address: profile.address,
-        gstin: profile.gstin,
-        website: profile.website,
-        logo: profile.logo,
+    requestSaveConfirmation({
+      title: 'Confirm Profile Update',
+      message: 'You are about to save changes to your business profile.',
+      initialValues: profileSnapshot,
+      currentValues: profile,
+      labelMap: {
+        businessName: 'Business Name',
+        ownerName: 'Owner Name',
+        email: 'Email',
+        phone: 'Phone',
+        address: 'Address',
+        gstin: 'GSTIN',
+        website: 'Website',
+        logo: 'Logo'
+      },
+      onSaveApi: async () => {
+        const payload = {
+          businessName: profile.businessName,
+          ownerName: profile.ownerName,
+          email: profile.email,
+          phone: profile.phone,
+          address: profile.address,
+          gstin: profile.gstin,
+          website: profile.website,
+          logo: profile.logo,
+        }
+        try {
+          const res = await api.post('/settings/profile', payload)
+          if (res.success) {
+            showToast('Business profile updated successfully', 'success')
+            setProfileSnapshot(payload)
+            setHasChanges(false)
+            setLastSaved(new Date().toLocaleTimeString())
+          }
+        } catch (err) {
+          showToast(err.message || 'Failed to save business profile', 'error')
+          return false
+        }
       }
-      const res = await api.post('/settings/profile', payload)
-      if (res.success) {
-        showToast('Business profile updated successfully')
-        setProfileSnapshot(payload)
-        setHasChanges(false)
-        setLastSaved(new Date().toLocaleTimeString())
-      }
-    } catch (err) {
-      showToast(err.message || 'Failed to save business profile', 'error')
-    }
+    })
   }
 
   // --- TAB 2: Vendors Management ---
@@ -1330,7 +1317,7 @@ export function Settings() {
                         <img src={profile.logo} alt="Logo Preview" className="object-contain h-full w-full" />
                       </div>
                     ) : (
-                      <Store size={28} className="text-gray-400 mb-1" />
+                      <div className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1">No Logo</div>
                     )}
                     <p className="text-[10px] text-gray-400 mt-1">Drag logo here or upload</p>
                     <div className="flex gap-2 mt-2">
@@ -1570,8 +1557,7 @@ export function Settings() {
                 <h2 className="text-lg font-bold" style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>Vendors Management</h2>
                 <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>Administer vendor directory listings, categories, and credit parameters</p>
               </div>
-              <button onClick={handleOpenAddVendor} className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-semibold bg-brand-primary text-white rounded-lg hover:opacity-90 transition-opacity shadow-sm">
-                <Plus size={14} />
+              <button onClick={handleOpenAddVendor} className="px-3 py-1.5 text-xs font-semibold bg-brand-primary text-white rounded-lg hover:opacity-90 transition-opacity shadow-sm">
                 <span>Add Vendor</span>
               </button>
             </div>
@@ -1641,8 +1627,7 @@ export function Settings() {
                 <h2 className="text-lg font-bold" style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>Financiers Management</h2>
                 <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>Administer financier profiles, lenders, and interest parameters</p>
               </div>
-              <button onClick={handleOpenAddFinancier} className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-semibold bg-brand-primary text-white rounded-lg hover:opacity-90 transition-opacity shadow-sm">
-                <Plus size={14} />
+              <button onClick={handleOpenAddFinancier} className="px-3 py-1.5 text-xs font-semibold bg-brand-primary text-white rounded-lg hover:opacity-90 transition-opacity shadow-sm">
                 <span>Add Financier</span>
               </button>
             </div>
@@ -1971,8 +1956,7 @@ export function Settings() {
                 <h2 className="text-lg font-bold text-gray-900">Users & Access</h2>
                 <p className="text-xs text-gray-400 mt-0.5">Control administrative access permissions and role allocations</p>
               </div>
-              <button onClick={() => setShowInviteModal(true)} className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-semibold bg-brand-primary text-white rounded-lg hover:opacity-90 transition-opacity shadow-sm">
-                <Plus size={14} />
+              <button onClick={() => setShowInviteModal(true)} className="px-3 py-1.5 text-xs font-semibold bg-brand-primary text-white rounded-lg hover:opacity-90 transition-opacity shadow-sm">
                 <span>Invite User</span>
               </button>
             </div>
@@ -2237,7 +2221,6 @@ export function Settings() {
                           : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-800'
                       }`}
                     >
-                      <tab.icon size={13} className="shrink-0" />
                       <span>{tab.label}</span>
                     </button>
                   )
@@ -2545,6 +2528,7 @@ export function Settings() {
           </div>
         </div>
       )}
+      <SaveConfirmationModal {...confirmConfig} isSaving={isSaving} />
     </div>
   )
 }

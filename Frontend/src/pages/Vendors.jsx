@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useReducer, useCallback } from 'react'
+import React, { useState, useEffect, useReducer, useCallback, useMemo } from 'react'
 import { Plus, Search, Trash2, Edit2, Eye, X } from 'lucide-react'
 import DropdownSelect from '../components/ui/DropdownSelect'
 import { toTitleCase } from '../utils/text'
@@ -7,6 +7,10 @@ import Badge from '../components/ui/Badge'
 import api from '../utils/api'
 import { useToast } from '../hooks/useToast'
 import { useConfirm } from '../hooks/useConfirm'
+import { useDirtyForm } from '../hooks/useDirtyForm'
+import { useDirtyStateContext } from '../context/DirtyStateContext'
+import { useSaveConfirmation } from '../hooks/useSaveConfirmation'
+import { SaveConfirmationModal } from '../components/ui/SaveConfirmationModal'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Skeleton, SkeletonTableRow } from '../components/ui/Skeleton'
 
@@ -67,6 +71,39 @@ export function Vendors() {
   }
   const [form, setForm] = useState(emptyForm)
   const [formErrors, setFormErrors] = useState({})
+  const [initialFormSnapshot, setInitialFormSnapshot] = useState(emptyForm)
+  const { confirmNavigation } = useDirtyStateContext()
+
+  const isFormDirty = useMemo(() => {
+    if (!showModal || modalMode === 'preview') return false
+    return (
+      (form.name || '') !== (initialFormSnapshot.name || '') ||
+      (form.phone || '') !== (initialFormSnapshot.phone || '') ||
+      (form.gstin || '') !== (initialFormSnapshot.gstin || '') ||
+      (form.address || '') !== (initialFormSnapshot.address || '') ||
+      (form.bankName || '') !== (initialFormSnapshot.bankName || '') ||
+      (form.accountNo || '') !== (initialFormSnapshot.accountNo || '') ||
+      (form.ifsc || '') !== (initialFormSnapshot.ifsc || '') ||
+      (form.category || '') !== (initialFormSnapshot.category || '')
+    )
+  }, [showModal, modalMode, form, initialFormSnapshot])
+
+  const closeModal = useCallback(() => {
+    confirmNavigation(() => {
+      setShowModal(false)
+      setForm(emptyForm)
+    })
+  }, [confirmNavigation])
+
+  useDirtyForm({
+    id: 'vendor-form',
+    title: modalMode === 'add' ? 'Add Vendor Form' : 'Edit Vendor Form',
+    isDirty: isFormDirty,
+    onSave: () => handleSave(),
+    onDiscard: () => {
+      setForm(emptyForm)
+    }
+  })
 
   // ── Fetch vendors ─────────────────────────────────────────────────────────
   // Wrapped in useCallback so the reference is stable across renders.
@@ -105,8 +142,11 @@ export function Vendors() {
     return () => window.removeEventListener('api-data-changed', handleDataChanged)
   }, [fetchVendors])
 
+  const { confirmConfig, isSaving, requestSaveConfirmation } = useSaveConfirmation()
+
   const handleOpenAdd = () => {
     setForm(emptyForm)
+    setInitialFormSnapshot(emptyForm)
     setFormErrors({})
     setModalMode('add')
     setShowModal(true)
@@ -119,20 +159,22 @@ export function Vendors() {
   }
 
   const handleOpenEdit = (vendor) => {
-    setSelectedVendor(vendor)
-    setForm({
+    const editObj = {
       ...vendor,
       confirmAccountNo: vendor.accountNo || '',
       confirmIfsc: vendor.ifsc || '',
       type: vendor.type || 'largeVendor'
-    })
+    }
+    setSelectedVendor(vendor)
+    setForm(editObj)
+    setInitialFormSnapshot(editObj)
     setFormErrors({})
     setModalMode('edit')
     setShowModal(true)
   }
 
-  const handleSave = async (e) => {
-    e.preventDefault()
+  const handleSave = (e) => {
+    if (e) e.preventDefault()
     // Validate confirm fields
     const errors = {}
     if (form.accountNo && form.accountNo !== form.confirmAccountNo) {
@@ -147,31 +189,56 @@ export function Vendors() {
     }
     setFormErrors({})
 
-    const payload = {
-      name: form.name,
-      type: form.type || 'largeVendor',
-      gstin: form.gstin,
-      phone: form.phone,
-      address: form.address,
-      bankName: form.bankName,
-      accountNo: form.accountNo,
-      ifsc: form.ifsc,
-      category: form.category,
-      openingBalance: Number(form.openingBalance) || 0,
-      status: form.status || 'Active'
-    }
+    requestSaveConfirmation({
+      title: modalMode === 'add' ? 'Confirm Add Vendor' : 'Confirm Vendor Update',
+      message: `You are about to save changes for vendor "${form.name || 'Vendor'}".`,
+      initialValues: initialFormSnapshot,
+      currentValues: form,
+      labelMap: {
+        name: 'Vendor Name',
+        type: 'Vendor Type',
+        phone: 'Phone Number',
+        email: 'Email Address',
+        gstin: 'GSTIN',
+        address: 'Address',
+        bankName: 'Bank Name',
+        accountNo: 'Account Number',
+        ifsc: 'IFSC Code',
+        category: 'Category',
+        openingBalance: 'Opening Balance',
+        status: 'Status'
+      },
+      onSaveApi: async () => {
+        const payload = {
+          name: form.name,
+          type: form.type || 'largeVendor',
+          gstin: form.gstin,
+          phone: form.phone,
+          address: form.address,
+          bankName: form.bankName,
+          accountNo: form.accountNo,
+          ifsc: form.ifsc,
+          category: form.category,
+          openingBalance: Number(form.openingBalance) || 0,
+          status: form.status || 'Active'
+        }
 
-    try {
-      if (modalMode === 'add') {
-        await api.post('/vendors', payload)
-      } else {
-        await api.put(`/vendors/${selectedVendor.id}`, payload)
+        try {
+          if (modalMode === 'add') {
+            await api.post('/vendors', payload)
+          } else {
+            await api.put(`/vendors/${selectedVendor.id}`, payload)
+          }
+          await fetchVendors()
+          setShowModal(false)
+          setForm(emptyForm)
+          toast(modalMode === 'add' ? 'Vendor created successfully' : 'Vendor updated successfully', 'success')
+        } catch (err) {
+          toast(err.message || 'Failed to save vendor', 'error')
+          return false
+        }
       }
-      await fetchVendors()
-      setShowModal(false)
-    } catch (err) {
-      toast(err.message || 'Failed to save vendor', 'error')
-    }
+    })
   }
 
   const handleDelete = async (id) => {
@@ -347,14 +414,13 @@ export function Vendors() {
       {/* Modal */}
       <AnimatePresence>
         {showModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={closeModal}>
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.15 }}
               className="fixed inset-0 bg-black/40 backdrop-blur-sm"
-              onClick={() => setShowModal(false)}
             />
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
@@ -362,12 +428,13 @@ export function Vendors() {
               exit={{ opacity: 0, scale: 0.95 }}
               transition={{ type: 'spring', damping: 25, stiffness: 350 }}
               className="bg-white dark:bg-slate-800 w-[540px] rounded-xl border border-gray-200 dark:border-slate-700 shadow-xl p-6 overflow-y-auto max-h-[90vh] relative z-10"
+              onClick={e => e.stopPropagation()}
             >
               <div className="flex justify-between items-center mb-4 border-b border-gray-100 dark:border-slate-700 pb-3">
                 <h2 className="text-base font-semibold text-gray-900 dark:text-white uppercase tracking-wide">
                   {modalMode === 'add' ? 'Add Vendor' : modalMode === 'edit' ? 'Edit Vendor' : 'Vendor Preview'}
                 </h2>
-                <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"><X size={18} /></button>
+                <button onClick={closeModal} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"><X size={18} /></button>
               </div>
 
               {modalMode === 'preview' ? (
@@ -545,7 +612,7 @@ export function Vendors() {
                   </div>
 
                   <div className="flex justify-end space-x-3 pt-4 border-t border-gray-100 dark:border-slate-700 mt-6">
-                    <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 dark:text-gray-300 dark:border-slate-600 dark:hover:bg-slate-700">Cancel</button>
+                    <button type="button" onClick={closeModal} className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 dark:text-gray-300 dark:border-slate-600 dark:hover:bg-slate-700">Cancel</button>
                     <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-brand-primary rounded-lg hover:bg-brand-primary/90">
                       {modalMode === 'add' ? 'Save Vendor' : 'Update Vendor'}
                     </button>
@@ -556,6 +623,7 @@ export function Vendors() {
           </div>
         )}
       </AnimatePresence>
+      <SaveConfirmationModal {...confirmConfig} isSaving={isSaving} />
     </>
   )
 }

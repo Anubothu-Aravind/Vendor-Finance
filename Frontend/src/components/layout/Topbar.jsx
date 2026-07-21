@@ -257,7 +257,7 @@ export function Topbar({ onMenuClick }) {
               {unreadCount > 0 && (
                 <button 
                   onClick={handleMarkAllAsRead}
-                  className="text-xs font-semibold hover:underline"
+                  className="text-xs font-semibold hover:opacity-80 transition-opacity"
                   style={{ color: 'var(--color-primary)' }}
                 >
                   Mark all as read

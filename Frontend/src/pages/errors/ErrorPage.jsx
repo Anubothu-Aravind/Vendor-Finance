@@ -1,8 +1,42 @@
 import React from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import { DotLottieReact } from '@lottiefiles/dotlottie-react'
 import lonely404Lottie from './assets/Lonely 404.lottie?url'
 
-export function ErrorPage({ code = 'Oops', headline = 'Something went wrong', subtext = 'An unexpected error occurred.' }) {
+export function ErrorPage({ code = 'Oops', headline = 'Something went wrong', subtext = 'An unexpected error occurred.', onRetry }) {
+  const navigate = useNavigate()
+  let queryClient = null
+  try { queryClient = useQueryClient() } catch { queryClient = null }
+
+  const handleRevalidateAndRetry = async () => {
+    try {
+      // 1. Invalidate all TanStack Query caches
+      if (queryClient) {
+        await queryClient.invalidateQueries()
+        queryClient.clear()
+      }
+    } catch (err) {
+      console.error('Failed to invalidate queries during revalidation:', err)
+    }
+
+    // 2. Invoke custom retry handler if provided
+    if (onRetry) {
+      onRetry()
+      return
+    }
+
+    // 3. Route Recovery logic
+    const currentPath = window.location.pathname
+    if (currentPath.startsWith('/error/')) {
+      // Return to Dashboard or previous page if on explicit error route
+      navigate('/', { replace: true })
+    } else {
+      // Revalidate active route
+      navigate(0)
+    }
+  }
+
   return (
     <div style={{
       minHeight: '100vh',
@@ -11,15 +45,15 @@ export function ErrorPage({ code = 'Oops', headline = 'Something went wrong', su
       flexDirection: 'column',
       alignItems: 'center',
       justifyContent: 'center',
-      background: 'var(--color-bg-base)',
-      color: 'var(--color-text-primary)',
+      background: 'var(--color-bg-base, #0b0f19)',
+      color: 'var(--color-text-primary, #f8fafc)',
       fontFamily: 'var(--font-body, Inter, system-ui, sans-serif)',
       boxSizing: 'border-box',
       padding: '24px',
       position: 'relative',
       overflow: 'hidden',
     }}>
-      {/* Faint Background Grid Pattern */}
+      {/* Background Grid Pattern */}
       <div style={{
         position: 'absolute',
         inset: 0,
@@ -29,7 +63,7 @@ export function ErrorPage({ code = 'Oops', headline = 'Something went wrong', su
         zIndex: 0,
       }} />
 
-      {/* Decorative center radial glow */}
+      {/* Center radial glow */}
       <div style={{
         position: 'absolute',
         top: '50%',
@@ -54,7 +88,7 @@ export function ErrorPage({ code = 'Oops', headline = 'Something went wrong', su
         maxWidth: '480px',
         width: '100%',
       }}>
-        {/* Lottie Animation (404 Page Only, max 200px, positioned above the error code) */}
+        {/* Lottie Animation (404 Page Only) */}
         {code === '404' && (
           <div style={{
             width: '200px',
@@ -74,10 +108,10 @@ export function ErrorPage({ code = 'Oops', headline = 'Something went wrong', su
           </div>
         )}
 
-        {/* Large Styled Error Code */}
+        {/* Styled Error Code */}
         <h1 style={{
           margin: 0,
-          fontSize: '120px',
+          fontSize: '100px',
           fontWeight: 900,
           lineHeight: '1',
           letterSpacing: '-0.04em',
@@ -104,66 +138,63 @@ export function ErrorPage({ code = 'Oops', headline = 'Something went wrong', su
           fontSize: '15px',
           color: '#94a3b8',
           lineHeight: '1.6',
-          textBalance: 'balance',
         }}>
           {subtext}
         </p>
 
-        {/* Buttons (Side by Side) */}
+        {/* Action Buttons */}
         <div style={{
           display: 'flex',
-          gap: '12px',
+          gap: '10px',
           width: '100%',
           justifyContent: 'center',
+          flexWrap: 'wrap',
         }}>
           <button
-            onClick={() => window.location.href = '/'}
+            onClick={handleRevalidateAndRetry}
             style={{
-              padding: '11px 20px',
-              borderRadius: '8px',
+              padding: '11px 18px',
+              borderRadius: '10px',
               background: 'var(--gradient-primary, linear-gradient(135deg, #00C896, #00A87E))',
               color: '#ffffff',
-              fontSize: '14px',
+              fontSize: '13px',
               fontWeight: 600,
               border: 'none',
               cursor: 'pointer',
-              transition: 'filter 150ms, transform 100ms',
-              flex: '1',
-              maxWidth: '160px',
               boxShadow: '0 4px 12px rgba(0, 200, 150, 0.25)',
             }}
-            onMouseEnter={e => e.currentTarget.style.opacity = '0.9'}
-            onMouseLeave={e => e.currentTarget.style.opacity = '1'}
-            onMouseDown={e => e.currentTarget.style.transform = 'scale(0.98)'}
-            onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}
           >
-            Go to Dashboard
+            Retry & Revalidate
           </button>
+
+          <button
+            onClick={() => navigate('/')}
+            style={{
+              padding: '11px 18px',
+              borderRadius: '10px',
+              background: 'rgba(255, 255, 255, 0.08)',
+              color: '#ffffff',
+              fontSize: '13px',
+              fontWeight: 600,
+              border: '1px solid rgba(255, 255, 255, 0.12)',
+              cursor: 'pointer',
+            }}
+          >
+            Dashboard
+          </button>
+
           <button
             onClick={() => window.history.back()}
             style={{
-              padding: '11px 20px',
-              borderRadius: '8px',
+              padding: '11px 18px',
+              borderRadius: '10px',
               background: 'transparent',
               color: '#cbd5e1',
-              fontSize: '14px',
+              fontSize: '13px',
               fontWeight: 600,
-              border: '1px solid rgba(255,255,255,0.15)',
+              border: '1px solid rgba(255, 255, 255, 0.12)',
               cursor: 'pointer',
-              transition: 'background 150ms, color 150ms, transform 100ms',
-              flex: '1',
-              maxWidth: '160px',
             }}
-            onMouseEnter={e => {
-              e.currentTarget.style.background = 'rgba(255,255,255,0.05)'
-              e.currentTarget.style.color = '#ffffff'
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.background = 'transparent'
-              e.currentTarget.style.color = '#cbd5e1'
-            }}
-            onMouseDown={e => e.currentTarget.style.transform = 'scale(0.98)'}
-            onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}
           >
             Go Back
           </button>

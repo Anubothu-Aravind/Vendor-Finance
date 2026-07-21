@@ -127,10 +127,6 @@ export function EmptyState({
         background: 'var(--color-bg-surface)',
       }}
     >
-      <div className="p-3 rounded-full mb-4 flex items-center justify-center"
-        style={{ background: 'var(--color-bg-elevated)' }}>
-        {renderSVG(icon)}
-      </div>
       <h3 className="text-sm font-semibold mb-1" style={{ color: 'var(--color-text-secondary)' }}>{title}</h3>
       <p className="text-xs max-w-xs mb-4" style={{ color: 'var(--color-text-muted)' }}>{description}</p>
       {action && action.label && action.onClick && (

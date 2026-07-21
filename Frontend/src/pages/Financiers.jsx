@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useReducer, useCallback, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Plus, Search, Trash2, Edit2, Eye, X, Building2 } from 'lucide-react'
 import DropdownSelect from '../components/ui/DropdownSelect'
@@ -8,6 +8,10 @@ import Badge from '../components/ui/Badge'
 import api from '../utils/api'
 import { useToast } from '../hooks/useToast'
 import { useConfirm } from '../hooks/useConfirm'
+import { useDirtyForm } from '../hooks/useDirtyForm'
+import { useDirtyStateContext } from '../context/DirtyStateContext'
+import { useSaveConfirmation } from '../hooks/useSaveConfirmation'
+import { SaveConfirmationModal } from '../components/ui/SaveConfirmationModal'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Skeleton, SkeletonTableRow } from '../components/ui/Skeleton'
 
@@ -34,6 +38,36 @@ export function Financiers() {
     defaultInterestRate: 12
   }
   const [form, setForm] = useState(emptyForm)
+  const [initialFormSnapshot, setInitialFormSnapshot] = useState(emptyForm)
+  const { confirmNavigation } = useDirtyStateContext()
+  const { confirmConfig, isSaving, requestSaveConfirmation } = useSaveConfirmation()
+
+  const isFormDirty = useMemo(() => {
+    if (!showModal || modalMode === 'preview') return false
+    return (
+      (form.name || '') !== (initialFormSnapshot.name || '') ||
+      (form.phone || '') !== (initialFormSnapshot.phone || '') ||
+      (form.address || '') !== (initialFormSnapshot.address || '') ||
+      (form.status || '') !== (initialFormSnapshot.status || '') ||
+      (form.notes || '') !== (initialFormSnapshot.notes || '') ||
+      (form.defaultInterestRate || '') !== (initialFormSnapshot.defaultInterestRate || '')
+    )
+  }, [showModal, modalMode, form, initialFormSnapshot])
+
+  const closeModal = useCallback(() => {
+    confirmNavigation(() => {
+      setShowModal(false)
+      setForm(emptyForm)
+    })
+  }, [confirmNavigation])
+
+  useDirtyForm({
+    id: 'financier-form',
+    title: modalMode === 'add' ? 'Add Financier Form' : 'Edit Financier Form',
+    isDirty: isFormDirty,
+    onSave: () => handleSave(),
+    onDiscard: () => setForm(emptyForm)
+  })
 
   const fetchFinanciers = async (signal) => {
     try {
@@ -71,6 +105,7 @@ export function Financiers() {
 
   const handleOpenAdd = () => {
     setForm(emptyForm)
+    setInitialFormSnapshot(emptyForm)
     setModalMode('add')
     setShowModal(true)
   }
@@ -82,34 +117,55 @@ export function Financiers() {
   }
 
   const handleOpenEdit = (fin) => {
+    const editObj = { ...fin }
     setSelectedFin(fin)
-    setForm({ ...fin })
+    setForm(editObj)
+    setInitialFormSnapshot(editObj)
     setModalMode('edit')
     setShowModal(true)
   }
 
-  const handleSave = async (e) => {
-    e.preventDefault()
-    const payload = {
-      name: form.name,
-      phone: form.phone,
-      address: form.address,
-      status: form.status || 'Active',
-      notes: form.notes,
-      defaultInterestRate: Number(form.defaultInterestRate) || 12
-    }
+  const handleSave = (e) => {
+    if (e) e.preventDefault()
+    requestSaveConfirmation({
+      title: modalMode === 'add' ? 'Confirm Add Financier' : 'Confirm Financier Update',
+      message: `You are about to save changes for financier "${form.name || 'Financier'}".`,
+      initialValues: initialFormSnapshot,
+      currentValues: form,
+      labelMap: {
+        name: 'Financier Name',
+        phone: 'Phone Number',
+        address: 'Address',
+        status: 'Status',
+        notes: 'Notes / Remarks',
+        defaultInterestRate: 'Default Interest Rate (%)'
+      },
+      onSaveApi: async () => {
+        const payload = {
+          name: form.name,
+          phone: form.phone,
+          address: form.address,
+          status: form.status || 'Active',
+          notes: form.notes,
+          defaultInterestRate: Number(form.defaultInterestRate) || 12
+        }
 
-    try {
-      if (modalMode === 'add') {
-        await api.post('/financiers', payload)
-      } else {
-        await api.put(`/financiers/${selectedFin.id}`, payload)
+        try {
+          if (modalMode === 'add') {
+            await api.post('/financiers', payload)
+          } else {
+            await api.put(`/financiers/${selectedFin.id}`, payload)
+          }
+          await fetchFinanciers()
+          setShowModal(false)
+          setForm(emptyForm)
+          toast(modalMode === 'add' ? 'Financier created successfully' : 'Financier updated successfully', 'success')
+        } catch (err) {
+          toast(err.message || 'Failed to save financier', 'error')
+          return false
+        }
       }
-      await fetchFinanciers()
-      setShowModal(false)
-    } catch (err) {
-      toast(err.message || 'Failed to save financier', 'error')
-    }
+    })
   }
 
   const handleDelete = async (id) => {
@@ -242,7 +298,7 @@ export function Financiers() {
                         <Building2 size={16} />
                       </div>
                       <div>
-                        <Link to={`/financiers/${f.id}`} onClick={(e) => e.stopPropagation()} className="text-sm font-semibold text-brand-primary no-underline block" style={{textDecoration: 'none'}} onMouseEnter={e => e.currentTarget.style.textDecoration='underline'} onMouseLeave={e => e.currentTarget.style.textDecoration='none'}>{toTitleCase(f.name)}</Link>
+                        <Link to={`/financiers/${f.id}`} onClick={(e) => e.stopPropagation()} className="text-sm font-semibold text-brand-primary no-underline block hover:opacity-80 transition-opacity" style={{textDecoration: 'none'}}>{toTitleCase(f.name)}</Link>
                         {f.notes && <p className="text-xs text-gray-400 truncate max-w-[180px]">{f.notes}</p>}
                       </div>
                     </div>
@@ -279,13 +335,13 @@ export function Financiers() {
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="bg-white w-[480px] rounded-xl border border-gray-200 shadow-xl p-6">
-            <div className="flex justify-between items-center mb-4 border-b border-gray-100 pb-3">
-              <h2 className="text-base font-semibold text-gray-900 uppercase tracking-wide">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={closeModal}>
+          <div className="bg-white dark:bg-slate-800 w-[480px] rounded-xl border border-gray-200 dark:border-slate-700 shadow-xl p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4 border-b border-gray-100 dark:border-slate-700 pb-3">
+              <h2 className="text-base font-semibold text-gray-900 dark:text-white uppercase tracking-wide">
                 {modalMode === 'add' ? 'Add Finance' : modalMode === 'edit' ? 'Edit Finance' : 'Finance Details'}
               </h2>
-              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
+              <button onClick={closeModal} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"><X size={18} /></button>
             </div>
 
             {modalMode === 'preview' ? (
@@ -352,8 +408,8 @@ export function Financiers() {
                   <textarea rows={3} value={form.notes} onChange={e => setForm({...form, notes: e.target.value})}
                     className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none" />
                 </div>
-                <div className="flex justify-end space-x-3 pt-4 border-t border-gray-100 mt-6">
-                  <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">Cancel</button>
+                <div className="flex justify-end space-x-3 pt-4 border-t border-gray-100 dark:border-slate-700 mt-6">
+                  <button type="button" onClick={closeModal} className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 dark:text-gray-300 dark:border-slate-600 dark:hover:bg-slate-700">Cancel</button>
                   <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-brand-primary rounded-lg hover:bg-brand-primary/90">
                     {modalMode === 'add' ? 'Save Financier' : 'Update Financier'}
                   </button>
@@ -363,6 +419,7 @@ export function Financiers() {
           </div>
         </div>
       )}
+      <SaveConfirmationModal {...confirmConfig} isSaving={isSaving} />
     </div>
   )
 }

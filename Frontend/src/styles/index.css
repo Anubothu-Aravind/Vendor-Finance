@@ -42,7 +42,9 @@
 
   /* Sidebar */
   --color-sidebar-bg:          #050811;
-  --color-sidebar-active:      rgba(0, 200, 150, 0.08);
+  --color-sidebar-gradient:    linear-gradient(160deg, #0a1628 0%, #071020 40%, #050811 100%);
+  --color-sidebar-active:      rgba(0, 200, 150, 0.14);
+  --color-sidebar-hover:       rgba(255, 255, 255, 0.05);
   --color-sidebar-text:        #8A9BB0;
   --color-sidebar-active-text: #00C896;
 
@@ -78,7 +80,9 @@ html.light {
   --color-text-inverse:   #FFFFFF;
 
   --color-sidebar-bg:          #090D16;
-  --color-sidebar-active:      rgba(0, 200, 150, 0.12);
+  --color-sidebar-gradient:    linear-gradient(160deg, #0d1e38 0%, #091525 40%, #090D16 100%);
+  --color-sidebar-active:      rgba(0, 200, 150, 0.14);
+  --color-sidebar-hover:       rgba(255, 255, 255, 0.06);
   --color-sidebar-text:        #8A9BB0;
   --color-sidebar-active-text: #00C896;
 
@@ -171,25 +175,46 @@ html.light body {
    ═══════════════════════════════════════════════════════════════════ */
 
 /* Primary button gradient background */
-.btn-primary {
+.btn-primary,
+.bg-brand-primary {
   background: var(--gradient-primary) !important;
-  border: none;
-  color: #fff !important;
+  border: none !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+  transition: all 150ms ease;
+}
+
+.btn-primary:hover,
+.bg-brand-primary:hover {
+  opacity: 0.95 !important;
+  filter: brightness(1.08) !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
 }
 
 /* Active sidebar item — gradient left border */
 .sidebar-active-indicator {
   position: relative;
+  background: var(--color-primary-muted, rgba(0, 200, 150, 0.14)) !important;
+  color: var(--color-primary, #00C896) !important;
 }
 .sidebar-active-indicator::before {
   content: '';
   position: absolute;
   left: 0;
-  top: 8px;
-  bottom: 8px;
-  width: 3px;
+  top: 6px;
+  bottom: 6px;
+  width: 3.5px;
   background: var(--gradient-primary);
-  border-radius: 0 3px 3px 0;
+  border-radius: 0 4px 4px 0;
+  box-shadow: 0 0 10px var(--color-primary);
+}
+
+/* Sidebar gradient background layer */
+.sidebar-bg {
+  background:
+    radial-gradient(ellipse at 20% 0%, var(--color-primary-muted, rgba(0, 200, 150, 0.15)) 0%, transparent 60%),
+    radial-gradient(ellipse at 80% 100%, rgba(99, 102, 241, 0.08) 0%, transparent 50%),
+    var(--color-sidebar-gradient, #050811);
 }
 
 /* KPI stat values — gradient text */
@@ -213,10 +238,10 @@ html.light body {
   content: '';
   display: block;
   height: 3px;
-  width: 48px;
+  width: 36px;
   background: var(--gradient-primary);
   border-radius: 2px;
-  margin-top: 6px;
+  margin-top: 4px;
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -226,10 +251,17 @@ html.light body {
 @layer utilities {
   .tabular-nums {
     font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
   }
 
   .font-display {
     font-family: var(--font-display);
+  }
+
+  .table-responsive-clean th,
+  .table-responsive-clean td {
+    white-space: nowrap;
   }
 }
 

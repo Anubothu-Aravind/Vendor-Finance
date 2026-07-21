@@ -11,6 +11,7 @@ router.route('/')
   .post(requireRole(['Admin']), validateLoan, loanController.createLoan)
   .get(loanController.getLoans)
 
+router.get('/repayments', loanController.getAllRepayments)
 router.get('/repayments/all', loanController.getAllRepayments)
 
 router.route('/:id')

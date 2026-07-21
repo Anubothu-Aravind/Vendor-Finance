@@ -23,50 +23,51 @@ export function AlertsWidget() {
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
+      
       {/* Maturing Loans Alert Card */}
       {loanAlerts.length > 0 && (
         <div 
-          className="rounded-xl border p-5 flex flex-col justify-between transition-all border-t-2"
+          className="rounded-xl border p-5 flex flex-col justify-between transition-all duration-350 hover:-translate-y-0.5 hover:shadow-md cursor-pointer relative overflow-hidden"
           style={{
-            background: 'var(--color-bg-surface)',
+            background: 'linear-gradient(135deg, var(--color-bg-surface), rgba(245, 166, 35, 0.03))',
             borderColor: 'var(--color-border)',
-            borderTopColor: 'var(--color-warning)',
-            boxShadow: '0 4px 20px rgba(0,0,0,0.05)'
+            borderLeft: '4px solid var(--color-warning)',
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.borderColor = 'var(--color-warning)'
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.borderColor = 'var(--color-border)'
           }}
         >
           <div>
             <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center space-x-2.5">
-                <div 
-                  className="p-2 rounded-lg flex items-center justify-center"
-                  style={{ background: 'rgba(245, 166, 35, 0.12)', color: 'var(--color-warning)' }}
-                >
-                  <AlertTriangle size={18} />
-                </div>
-                <h3 className="text-sm font-bold tracking-wide uppercase" style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>
+              <div>
+                <h3 className="text-xs font-bold tracking-wide text-[var(--color-text-secondary)] uppercase">
                   Maturing Loans
                 </h3>
+                <p className="text-[10px] text-[var(--color-text-muted)] mt-0.5">Credit note drawdowns due shortly</p>
               </div>
               <span 
-                className="px-2.5 py-0.5 rounded-full text-xs font-bold font-mono"
+                className="px-2.5 py-0.5 rounded-full text-[10px] font-bold font-mono"
                 style={{ background: 'rgba(245, 166, 35, 0.2)', color: 'var(--color-warning)' }}
               >
-                {loanAlerts.length}
+                {loanAlerts.length} Due
               </span>
             </div>
 
-            <div className="divide-y divide-[var(--color-border)] max-h-48 overflow-y-auto pr-1">
+            <div className="divide-y divide-[var(--color-border)] max-h-48 overflow-y-auto overflow-x-hidden pr-1">
               {loanAlerts.map(alert => (
-                <div key={alert.id} className="py-3 flex items-center justify-between text-xs">
+                <div key={alert.id} className="py-3 flex items-center justify-between text-xs transition-colors hover:bg-[var(--color-bg-elevated)]/30 rounded-lg px-2">
                   <div className="min-w-0 flex-1">
-                    <p className="font-semibold truncate" style={{ color: 'var(--color-text-primary)' }}>
+                    <p className="font-bold truncate text-[var(--color-text-primary)]" style={{ fontFamily: 'var(--font-display)' }}>
                       {alert.metadata?.partyName || 'Unknown Financier'}
                     </p>
-                    <p className="mt-0.5" style={{ color: 'var(--color-text-secondary)' }}>
+                    <p className="text-[10px] text-[var(--color-text-muted)] mt-0.5">
                       Matures: {formatDate(alert.metadata?.date)}
                     </p>
                   </div>
-                  <div className="text-right ml-4 shrink-0 font-semibold font-mono" style={{ color: 'var(--color-warning)' }}>
+                  <div className="text-right ml-4 shrink-0 font-bold tabular-nums text-[var(--color-warning)]" style={{ fontFamily: 'var(--font-display)' }}>
                     {formatCurrency(alert.metadata?.amount)}
                   </div>
                 </div>
@@ -77,7 +78,7 @@ export function AlertsWidget() {
           <div className="mt-4 pt-3 border-t border-[var(--color-border)]">
             <Link 
               to="/loans" 
-              className="flex items-center justify-end text-xs font-semibold hover:underline"
+              className="flex items-center justify-end text-xs font-semibold hover:opacity-80 transition-opacity"
               style={{ color: 'var(--color-warning)' }}
             >
               <span>View Loans Manager</span>
@@ -90,47 +91,47 @@ export function AlertsWidget() {
       {/* Bounced Cheques Alert Card */}
       {chequeAlerts.length > 0 && (
         <div 
-          className="rounded-xl border p-5 flex flex-col justify-between transition-all border-t-2"
+          className="rounded-xl border p-5 flex flex-col justify-between transition-all duration-350 hover:-translate-y-0.5 hover:shadow-md cursor-pointer relative overflow-hidden"
           style={{
-            background: 'var(--color-bg-surface)',
+            background: 'linear-gradient(135deg, var(--color-bg-surface), rgba(232, 69, 69, 0.03))',
             borderColor: 'var(--color-border)',
-            borderTopColor: 'var(--color-danger)',
-            boxShadow: '0 4px 20px rgba(0,0,0,0.05)'
+            borderLeft: '4px solid var(--color-danger)',
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.borderColor = 'var(--color-danger)'
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.borderColor = 'var(--color-border)'
           }}
         >
           <div>
             <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center space-x-2.5">
-                <div 
-                  className="p-2 rounded-lg flex items-center justify-center"
-                  style={{ background: 'rgba(232, 69, 69, 0.12)', color: 'var(--color-danger)' }}
-                >
-                  <XCircle size={18} />
-                </div>
-                <h3 className="text-sm font-bold tracking-wide uppercase" style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>
+              <div>
+                <h3 className="text-xs font-bold tracking-wide text-[var(--color-text-secondary)] uppercase">
                   Bounced Cheques
                 </h3>
+                <p className="text-[10px] text-[var(--color-text-muted)] mt-0.5">Failed cheque payouts requiring actions</p>
               </div>
               <span 
-                className="px-2.5 py-0.5 rounded-full text-xs font-bold font-mono"
+                className="px-2.5 py-0.5 rounded-full text-[10px] font-bold font-mono"
                 style={{ background: 'rgba(232, 69, 69, 0.2)', color: 'var(--color-danger)' }}
               >
-                {chequeAlerts.length}
+                {chequeAlerts.length} Failed
               </span>
             </div>
 
-            <div className="divide-y divide-[var(--color-border)] max-h-48 overflow-y-auto pr-1">
+            <div className="divide-y divide-[var(--color-border)] max-h-48 overflow-y-auto overflow-x-hidden pr-1">
               {chequeAlerts.map(alert => (
-                <div key={alert.id} className="py-3 flex items-center justify-between text-xs">
+                <div key={alert.id} className="py-3 flex items-center justify-between text-xs transition-colors hover:bg-[var(--color-bg-elevated)]/30 rounded-lg px-2">
                   <div className="min-w-0 flex-1">
-                    <p className="font-semibold truncate" style={{ color: 'var(--color-text-primary)' }}>
+                    <p className="font-bold truncate text-[var(--color-text-primary)]" style={{ fontFamily: 'var(--font-display)' }}>
                       {alert.metadata?.partyName || 'Unknown Party'}
                     </p>
-                    <p className="mt-0.5" style={{ color: 'var(--color-text-secondary)' }}>
+                    <p className="text-[10px] text-[var(--color-text-muted)] mt-0.5">
                       Bounce Date: {formatDate(alert.metadata?.date)}
                     </p>
                   </div>
-                  <div className="text-right ml-4 shrink-0 font-semibold font-mono" style={{ color: 'var(--color-danger)' }}>
+                  <div className="text-right ml-4 shrink-0 font-bold tabular-nums text-[var(--color-danger)]" style={{ fontFamily: 'var(--font-display)' }}>
                     {formatCurrency(alert.metadata?.amount)}
                   </div>
                 </div>
@@ -141,7 +142,7 @@ export function AlertsWidget() {
           <div className="mt-4 pt-3 border-t border-[var(--color-border)]">
             <Link 
               to="/cheques" 
-              className="flex items-center justify-end text-xs font-semibold hover:underline"
+              className="flex items-center justify-end text-xs font-semibold hover:opacity-80 transition-opacity"
               style={{ color: 'var(--color-danger)' }}
             >
               <span>Go to Cheques Registry</span>
@@ -150,6 +151,7 @@ export function AlertsWidget() {
           </div>
         </div>
       )}
+
     </div>
   )
 }

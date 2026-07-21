@@ -9,6 +9,10 @@ import Badge from '../components/ui/Badge'
 import api from '../utils/api'
 import { useToast } from '../hooks/useToast'
 import { useConfirm } from '../hooks/useConfirm'
+import { useDirtyForm } from '../hooks/useDirtyForm'
+import { useDirtyStateContext } from '../context/DirtyStateContext'
+import { useSaveConfirmation } from '../hooks/useSaveConfirmation'
+import { SaveConfirmationModal } from '../components/ui/SaveConfirmationModal'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Skeleton, SkeletonTableRow } from '../components/ui/Skeleton'
 
@@ -58,6 +62,35 @@ export function VendorPayments() {
     remarks: ''
   }
   const [form, setForm] = useState(emptyForm)
+  const [initialFormSnapshot, setInitialFormSnapshot] = useState(emptyForm)
+  const { confirmNavigation } = useDirtyStateContext()
+  const { confirmConfig, isSaving, requestSaveConfirmation } = useSaveConfirmation()
+
+  const isFormDirty = useMemo(() => {
+    if (!showModal || modalMode === 'preview') return false
+    return (
+      (form.vendor || '') !== (initialFormSnapshot.vendor || '') ||
+      (form.date || '') !== (initialFormSnapshot.date || '') ||
+      (form.amount || '') !== (initialFormSnapshot.amount || '') ||
+      (form.mode || '') !== (initialFormSnapshot.mode || '') ||
+      (form.remarks || '') !== (initialFormSnapshot.remarks || '')
+    )
+  }, [showModal, modalMode, form, initialFormSnapshot])
+
+  const closeModal = useCallback(() => {
+    confirmNavigation(() => {
+      setShowModal(false)
+      setForm(emptyForm)
+    })
+  }, [confirmNavigation])
+
+  useDirtyForm({
+    id: 'vendor-payment-form',
+    title: modalMode === 'add' ? 'Record Vendor Payment Form' : 'Edit Vendor Payment Form',
+    isDirty: isFormDirty,
+    onSave: () => handleSave(),
+    onDiscard: () => setForm(emptyForm)
+  })
 
   // ── Fetch payments, vendors, bills, profile ───────────────────────────────
   // Wrapped in useCallback so the reference is stable across renders.
@@ -139,6 +172,7 @@ export function VendorPayments() {
 
   const handleOpenAdd = () => {
     setForm(emptyForm)
+    setInitialFormSnapshot(emptyForm)
     setModalMode('add')
     setShowModal(true)
   }
@@ -150,14 +184,16 @@ export function VendorPayments() {
   }
 
   const handleOpenEdit = (pay) => {
+    const editObj = { ...pay }
     setSelectedPay(pay)
-    setForm({ ...pay })
+    setForm(editObj)
+    setInitialFormSnapshot(editObj)
     setModalMode('edit')
     setShowModal(true)
   }
 
-  const handleSave = async (e) => {
-    e.preventDefault()
+  const handleSave = (e) => {
+    if (e) e.preventDefault()
     const amt = Number(form.amount) || 0
     
     const selectedVendorObj = vendors.find(v => v.name === form.vendor)
@@ -166,31 +202,49 @@ export function VendorPayments() {
       return
     }
 
-    const modeMapping = {
-      'Cash': 'CASH',
-      'Cheque': 'CHEQUE',
-      'NEFT': 'BANK_TRANSFER',
-      'RTGS': 'BANK_TRANSFER',
-      'UPI': 'BANK_TRANSFER',
-      'Bank Transfer': 'BANK_TRANSFER'
-    }
+    requestSaveConfirmation({
+      title: 'Confirm Payment Record',
+      message: `You are about to record a payment of ₹${amt} to "${form.vendor}".`,
+      initialValues: initialFormSnapshot,
+      currentValues: form,
+      labelMap: {
+        vendor: 'Vendor',
+        date: 'Payment Date',
+        amount: 'Payment Amount',
+        mode: 'Payment Mode',
+        remarks: 'Remarks'
+      },
+      onSaveApi: async () => {
+        const modeMapping = {
+          'Cash': 'CASH',
+          'Cheque': 'CHEQUE',
+          'NEFT': 'BANK_TRANSFER',
+          'RTGS': 'BANK_TRANSFER',
+          'UPI': 'BANK_TRANSFER',
+          'Bank Transfer': 'BANK_TRANSFER'
+        }
 
-    const payload = {
-      vendorId: selectedVendorObj._id,
-      amount: amt,
-      paymentDate: toInputDate(form.date),
-      paymentMode: modeMapping[form.mode] || 'BANK_TRANSFER',
-      referenceNumber: 'TXN-' + String(Math.floor(100 + Math.random() * 900)),
-      chequeNumber: form.mode === 'Cheque' ? 'CHQ-' + String(Math.floor(10000 + Math.random() * 90000)) : undefined
-    }
+        const payload = {
+          vendorId: selectedVendorObj._id,
+          amount: amt,
+          paymentDate: toInputDate(form.date),
+          paymentMode: modeMapping[form.mode] || 'BANK_TRANSFER',
+          referenceNumber: 'TXN-' + String(Math.floor(100 + Math.random() * 900)),
+          chequeNumber: form.mode === 'Cheque' ? 'CHQ-' + String(Math.floor(10000 + Math.random() * 90000)) : undefined
+        }
 
-    try {
-      await api.post('/payments', payload)
-      await fetchPaymentsData()
-      setShowModal(false)
-    } catch (err) {
-      toast(err.message || 'Failed to save payment', 'error')
-    }
+        try {
+          await api.post('/payments', payload)
+          await fetchPaymentsData()
+          setShowModal(false)
+          setForm(emptyForm)
+          toast('Vendor payment recorded successfully', 'success')
+        } catch (err) {
+          toast(err.message || 'Failed to save payment', 'error')
+          return false
+        }
+      }
+    })
   }
 
   const handleDelete = async (id) => {
@@ -368,13 +422,13 @@ export function VendorPayments() {
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm overflow-y-auto">
-          <div className="bg-white w-[540px] rounded-xl border border-gray-200 shadow-xl p-6 my-8">
-            <div className="flex justify-between items-center mb-4 border-b border-gray-100 pb-3">
-              <h2 className="text-base font-semibold text-gray-900 uppercase tracking-wide">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm overflow-y-auto" onClick={closeModal}>
+          <div className="bg-white dark:bg-slate-800 w-[540px] rounded-xl border border-gray-200 dark:border-slate-700 shadow-xl p-6 my-8" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4 border-b border-gray-100 dark:border-slate-700 pb-3">
+              <h2 className="text-base font-semibold text-gray-900 dark:text-white uppercase tracking-wide">
                 {modalMode === 'add' ? 'Record Vendor Payment' : modalMode === 'edit' ? 'Edit Payment Details' : 'Payment & FIFO Allocation Preview'}
               </h2>
-              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
+              <button onClick={closeModal} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"><X size={18} /></button>
             </div>
 
             {modalMode === 'preview' ? (
@@ -527,8 +581,8 @@ export function VendorPayments() {
                     className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none" />
                 </div>
 
-                <div className="flex justify-end space-x-3 pt-4 border-t border-gray-100 mt-6">
-                  <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">Cancel</button>
+                <div className="flex justify-end space-x-3 pt-4 border-t border-gray-100 dark:border-slate-700 mt-6">
+                  <button type="button" onClick={closeModal} className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 dark:text-gray-300 dark:border-slate-600 dark:hover:bg-slate-700">Cancel</button>
                   <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-brand-primary rounded-lg hover:bg-brand-primary/90">
                     {modalMode === 'add' ? 'Confirm & Save' : 'Update Payment'}
                   </button>
@@ -538,6 +592,7 @@ export function VendorPayments() {
           </div>
         </div>
       )}
+      <SaveConfirmationModal {...confirmConfig} isSaving={isSaving} />
     </>
   )
 }

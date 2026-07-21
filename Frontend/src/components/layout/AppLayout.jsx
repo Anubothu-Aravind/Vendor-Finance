@@ -6,6 +6,7 @@ import Topbar from './Topbar'
 import NavigationSetter from '../NavigationSetter'
 import { usePreferences } from '../../hooks/usePreferences'
 import useSSE from '../../hooks/useSSE'
+import { NavigationGuardProvider } from '../NavigationGuardProvider'
 
 export function AppLayout() {
   useSSE()
@@ -14,7 +15,8 @@ export function AppLayout() {
   const { sidebarCollapsed } = usePreferences()
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-brand-canvas select-none">
+    <NavigationGuardProvider>
+      <div className="flex h-screen w-screen overflow-hidden bg-brand-canvas select-none">
       {/* Registers navigate function into api.js error navigation singleton */}
       <NavigationSetter />
       {/* Mobile backdrop — only shown when sidebar is open on mobile */}
@@ -58,6 +60,7 @@ export function AppLayout() {
         </main>
       </div>
     </div>
+    </NavigationGuardProvider>
   )
 }
 

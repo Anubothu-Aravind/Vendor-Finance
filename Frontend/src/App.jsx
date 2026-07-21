@@ -18,6 +18,7 @@ const queryClient = new QueryClient({
 })
 
 import { ConfirmationDialogProvider } from './components/ui/ConfirmationDialog'
+import { DirtyStateProvider } from './context/DirtyStateContext'
 
 function App() {
   return (
@@ -27,7 +28,9 @@ function App() {
           <ToastProvider>
             <PreferencesProvider>
               <ConfirmationDialogProvider>
-                <RouterProvider router={router} />
+                <DirtyStateProvider>
+                  <RouterProvider router={router} />
+                </DirtyStateProvider>
               </ConfirmationDialogProvider>
             </PreferencesProvider>
           </ToastProvider>

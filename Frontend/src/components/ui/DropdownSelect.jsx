@@ -128,7 +128,7 @@ export function DropdownSelect({ value, onChange, options = [], placeholder = "S
       {addPath && !hasOptions && (
         <Link 
           to={addPath}
-          className="text-xs font-semibold hover:underline shrink-0 px-1 transition-all"
+          className="text-xs font-semibold hover:opacity-80 shrink-0 px-1 transition-all"
           style={{ color: 'var(--color-primary)', whiteSpace: 'nowrap' }}
         >
           + Add one

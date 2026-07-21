@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useReducer, useCallback, useMemo } from 'react'
 import { Plus, Search, Trash2, Edit2, Eye, X, CheckCircle, XCircle, AlertCircle } from 'lucide-react'
 import { toInputDate, fromInputDate, getTodayFormatted } from '../utils/date'
 import DropdownSelect from '../components/ui/DropdownSelect'
@@ -12,6 +12,10 @@ import { Skeleton, SkeletonTableRow } from '../components/ui/Skeleton'
 import api from '../utils/api'
 import { useToast } from '../hooks/useToast'
 import { useConfirm } from '../hooks/useConfirm'
+import { useDirtyForm } from '../hooks/useDirtyForm'
+import { useDirtyStateContext } from '../context/DirtyStateContext'
+import { useSaveConfirmation } from '../hooks/useSaveConfirmation'
+import { SaveConfirmationModal } from '../components/ui/SaveConfirmationModal'
 
 const fmt = (v) => new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(v)
 
@@ -63,6 +67,38 @@ export function ChequeRegistry() {
     remarks: ''
   }
   const [form, setForm] = useState(emptyForm)
+  const [initialFormSnapshot, setInitialFormSnapshot] = useState(emptyForm)
+  const { confirmNavigation } = useDirtyStateContext()
+  const { confirmConfig, isSaving, requestSaveConfirmation } = useSaveConfirmation()
+
+  const isFormDirty = useMemo(() => {
+    if (!showModal || modalMode === 'preview') return false
+    return (
+      (form.chequeNo || '') !== (initialFormSnapshot.chequeNo || '') ||
+      (form.date || '') !== (initialFormSnapshot.date || '') ||
+      (form.amount || '') !== (initialFormSnapshot.amount || '') ||
+      (form.bank || '') !== (initialFormSnapshot.bank || '') ||
+      (form.partyType || '') !== (initialFormSnapshot.partyType || '') ||
+      (form.party || '') !== (initialFormSnapshot.party || '') ||
+      (form.status || '') !== (initialFormSnapshot.status || '') ||
+      (form.remarks || '') !== (initialFormSnapshot.remarks || '')
+    )
+  }, [showModal, modalMode, form, initialFormSnapshot])
+
+  const closeModal = useCallback(() => {
+    confirmNavigation(() => {
+      setShowModal(false)
+      setForm(emptyForm)
+    })
+  }, [confirmNavigation])
+
+  useDirtyForm({
+    id: 'cheque-registry-form',
+    title: modalMode === 'add' ? 'Add Cheque Form' : 'Edit Cheque Form',
+    isDirty: isFormDirty,
+    onSave: () => handleSave(),
+    onDiscard: () => setForm(emptyForm)
+  })
 
   const fetchData = async (signal) => {
     try {
@@ -124,6 +160,7 @@ export function ChequeRegistry() {
 
   const handleOpenAdd = () => {
     setForm(emptyForm)
+    setInitialFormSnapshot(emptyForm)
     setModalMode('add')
     setShowModal(true)
   }
@@ -135,14 +172,16 @@ export function ChequeRegistry() {
   }
 
   const handleOpenEdit = (c) => {
+    const editObj = { ...c }
     setSelectedCheque(c)
-    setForm({ ...c })
+    setForm(editObj)
+    setInitialFormSnapshot(editObj)
     setModalMode('edit')
     setShowModal(true)
   }
 
-  const handleSave = async (e) => {
-    e.preventDefault()
+  const handleSave = (e) => {
+    if (e) e.preventDefault()
     const amt = Number(form.amount) || 0
 
     if (modalMode === 'add') {
@@ -152,32 +191,62 @@ export function ChequeRegistry() {
       }
     }
 
-    const partyOptions = form.partyType === 'Vendor' ? vendors : financiers
-    const partyRecord = partyOptions.find(p => p.name === form.party || p._id === form.partyId)
+    requestSaveConfirmation({
+      title: modalMode === 'add' ? 'Confirm Add Cheque' : 'Confirm Update Cheque Status',
+      message: `You are about to save changes for Cheque #${form.chequeNo || 'New'}.`,
+      initialValues: initialFormSnapshot,
+      currentValues: form,
+      labelMap: {
+        chequeNo: 'Cheque Number',
+        date: 'Cheque Date',
+        amount: 'Cheque Amount',
+        bank: 'Bank Name',
+        partyType: 'Party Type',
+        party: 'Payee / Party',
+        status: 'Cheque Status',
+        remarks: 'Remarks'
+      },
+      onSaveApi: async () => {
+        const partyOptions = form.partyType === 'Vendor' ? vendors : financiers
+        const partyRecord = partyOptions.find(p => p.name === form.party || p._id === form.partyId)
 
-    const payload = {
-      chequeNumber: form.chequeNo,
-      type: BE_TYPE_MAP[form.partyType] || 'OTHER',
-      partyName: form.party,
-      amount: amt,
-      chequeDate: toInputDate(form.date),
-      vendorId: form.partyType === 'Vendor' ? (partyRecord?._id || null) : null,
-      financierId: form.partyType === 'Financier' ? (partyRecord?._id || null) : null,
-    }
+        const payload = {
+          chequeNumber: form.chequeNo,
+          chequeDate: toInputDate(form.date),
+          amount: amt,
+          bankName: form.bank,
+          payeeName: form.party,
+          partyType: form.partyType === 'Vendor' ? 'VENDOR' : 'FINANCIER',
+          partyId: partyRecord?._id || form.partyId,
+          type: 'ISSUED',
+          status: 'PENDING',
+          notes: form.remarks
+        }
 
-    try {
-      if (modalMode === 'add') {
-        await api.post('/cheques', payload)
-      } else {
-        // Update status only via PATCH /cheques/:id/status
-        const beStatus = FE_STATUS_MAP[form.status] || 'PENDING'
-        await api.patch(`/cheques/${selectedCheque.id}/status`, { status: beStatus })
+        const FE_STATUS_MAP = {
+          'Cleared': 'CLEARED',
+          'Pending': 'PENDING',
+          'Bounced': 'BOUNCED',
+          'Cancelled': 'CANCELLED'
+        }
+
+        try {
+          if (modalMode === 'add') {
+            await api.post('/cheques', payload)
+          } else {
+            const beStatus = FE_STATUS_MAP[form.status] || 'PENDING'
+            await api.patch(`/cheques/${selectedCheque.id}/status`, { status: beStatus })
+          }
+          await fetchData()
+          setShowModal(false)
+          setForm(emptyForm)
+          toast(modalMode === 'add' ? 'Cheque registered successfully' : 'Cheque status updated successfully', 'success')
+        } catch (err) {
+          toast(err.message || 'Failed to save cheque', 'error')
+          return false
+        }
       }
-      await fetchData()
-      setShowModal(false)
-    } catch (err) {
-      toast(err.message || 'Failed to save cheque', 'error')
-    }
+    })
   }
 
   const handleDelete = async (id) => {
@@ -375,13 +444,13 @@ export function ChequeRegistry() {
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="w-[480px] rounded-xl border shadow-xl p-6" style={{ background: 'var(--color-bg-surface)', borderColor: 'var(--color-border)' }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={closeModal}>
+          <div className="w-[480px] rounded-xl border shadow-xl p-6" style={{ background: 'var(--color-bg-surface)', borderColor: 'var(--color-border)' }} onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-4 border-b pb-3" style={{ borderColor: 'var(--color-border)' }}>
               <h2 className="text-base font-semibold uppercase tracking-wide" style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>
                 {modalMode === 'add' ? 'Add Cheque' : modalMode === 'edit' ? 'Update Cheque Status' : 'Cheque Details Preview'}
               </h2>
-              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
+              <button onClick={closeModal} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
             </div>
 
             {modalMode === 'preview' ? (
@@ -451,7 +520,7 @@ export function ChequeRegistry() {
                   />
                 </div>
                 <div className="flex justify-end space-x-3 pt-4 border-t mt-6" style={{ borderColor: 'var(--color-border)' }}>
-                  <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-sm border rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700" style={{ color: 'var(--color-text-secondary)', borderColor: 'var(--color-border)' }}>Cancel</button>
+                  <button type="button" onClick={closeModal} className="px-4 py-2 text-sm border rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700" style={{ color: 'var(--color-text-secondary)', borderColor: 'var(--color-border)' }}>Cancel</button>
                   <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-brand-primary rounded-lg hover:bg-brand-primary/90">Update Status</button>
                 </div>
               </form>
@@ -516,7 +585,7 @@ export function ChequeRegistry() {
                 </div>
 
                 <div className="flex justify-end space-x-3 pt-4 border-t mt-6" style={{ borderColor: 'var(--color-border)' }}>
-                  <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-sm border rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700" style={{ color: 'var(--color-text-secondary)', borderColor: 'var(--color-border)' }}>Cancel</button>
+                  <button type="button" onClick={closeModal} className="px-4 py-2 text-sm border rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700" style={{ color: 'var(--color-text-secondary)', borderColor: 'var(--color-border)' }}>Cancel</button>
                   <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-brand-primary rounded-lg hover:bg-brand-primary/90">
                     Save Cheque
                   </button>
@@ -526,6 +595,7 @@ export function ChequeRegistry() {
           </div>
         </div>
       )}
+      <SaveConfirmationModal {...confirmConfig} isSaving={isSaving} />
     </div>
   )
 }

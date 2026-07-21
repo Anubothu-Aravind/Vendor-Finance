@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useReducer, useCallback, useMemo } from 'react'
 import { Plus, X, Edit2, Eye, Trash2 } from 'lucide-react'
 import { toInputDate, fromInputDate, getTodayFormatted } from '../utils/date'
 import DropdownSelect from '../components/ui/DropdownSelect'
@@ -9,6 +9,10 @@ import Badge from '../components/ui/Badge'
 import api from '../utils/api'
 import { useToast } from '../hooks/useToast'
 import { useConfirm } from '../hooks/useConfirm'
+import { useDirtyForm } from '../hooks/useDirtyForm'
+import { useDirtyStateContext } from '../context/DirtyStateContext'
+import { useSaveConfirmation } from '../hooks/useSaveConfirmation'
+import { SaveConfirmationModal } from '../components/ui/SaveConfirmationModal'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Skeleton, SkeletonCard } from '../components/ui/Skeleton'
 
@@ -41,6 +45,37 @@ export function Loans() {
     remarks: '',
   }
   const [form, setForm] = useState(emptyForm)
+  const [initialFormSnapshot, setInitialFormSnapshot] = useState(emptyForm)
+  const { confirmNavigation } = useDirtyStateContext()
+  const { confirmConfig, isSaving, requestSaveConfirmation } = useSaveConfirmation()
+
+  const isFormDirty = useMemo(() => {
+    if (!showModal || modalMode === 'preview') return false
+    return (
+      (form.financier || '') !== (initialFormSnapshot.financier || '') ||
+      (form.noteNo || '') !== (initialFormSnapshot.noteNo || '') ||
+      (form.loanDate || '') !== (initialFormSnapshot.loanDate || '') ||
+      (form.maturityDate || '') !== (initialFormSnapshot.maturityDate || '') ||
+      (form.amount || '') !== (initialFormSnapshot.amount || '') ||
+      (form.rate || '') !== (initialFormSnapshot.rate || '') ||
+      (form.remarks || '') !== (initialFormSnapshot.remarks || '')
+    )
+  }, [showModal, modalMode, form, initialFormSnapshot])
+
+  const closeModal = useCallback(() => {
+    confirmNavigation(() => {
+      setShowModal(false)
+      setForm(emptyForm)
+    })
+  }, [confirmNavigation])
+
+  useDirtyForm({
+    id: 'loan-form',
+    title: modalMode === 'add' ? 'Add Loan Form' : 'Edit Loan Form',
+    isDirty: isFormDirty,
+    onSave: () => handleSave(),
+    onDiscard: () => setForm(emptyForm)
+  })
 
   const fetchLoansAndFinanciers = async (signal) => {
     try {
@@ -104,6 +139,7 @@ export function Loans() {
 
   const handleOpenAdd = () => {
     setForm(emptyForm)
+    setInitialFormSnapshot(emptyForm)
     setModalMode('add')
     setShowModal(true)
   }
@@ -115,14 +151,16 @@ export function Loans() {
   }
 
   const handleOpenEdit = (loan) => {
+    const editObj = { ...loan }
     setSelectedLoan(loan)
-    setForm({ ...loan })
+    setForm(editObj)
+    setInitialFormSnapshot(editObj)
     setModalMode('edit')
     setShowModal(true)
   }
 
-  const handleSave = async (e) => {
-    e.preventDefault()
+  const handleSave = (e) => {
+    if (e) e.preventDefault()
     const amt = Number(form.amount) || 0
     const selectedFinancierObj = financiers.find(f => f.name === form.financier)
     if (!selectedFinancierObj) {
@@ -143,34 +181,48 @@ export function Loans() {
       return
     }
 
-    const payload = {
-      loanReference: form.noteNo,
-      financierId: selectedFinancierObj._id,
-      drawdownDate: toInputDate(form.loanDate),
-      maturityDate: toInputDate(form.maturityDate),
-      principalAmount: amt,
-      interestRate: Number(form.rate) || selectedFinancierObj.defaultInterestRate || 12,
-      notes: form.remarks,
-      status: 'ACTIVE'
-    }
-
-    try {
-      if (modalMode === 'add') {
-        await api.post('/loans', payload)
-      } else {
-        await api.put(`/loans/${selectedLoan.id}`, {
-          noteNumber: form.noteNo,
-          amount: amt,
-          date: toInputDate(form.loanDate),
+    requestSaveConfirmation({
+      title: modalMode === 'add' ? 'Confirm Add Loan' : 'Confirm Loan Update',
+      message: `You are about to save changes for Loan #${form.noteNo || 'New'}.`,
+      initialValues: initialFormSnapshot,
+      currentValues: form,
+      labelMap: {
+        financier: 'Financier',
+        noteNo: 'Loan Note Number',
+        loanDate: 'Drawdown Date',
+        maturityDate: 'Maturity Date',
+        amount: 'Loan Principal Amount',
+        rate: 'Interest Rate (%)',
+        remarks: 'Remarks'
+      },
+      onSaveApi: async () => {
+        const payload = {
+          loanReference: form.noteNo,
+          financierId: selectedFinancierObj._id,
+          drawdownDate: toInputDate(form.loanDate),
           maturityDate: toInputDate(form.maturityDate),
-          notes: form.remarks
-        })
+          principalAmount: amt,
+          interestRate: Number(form.rate) || selectedFinancierObj.defaultInterestRate || 12,
+          notes: form.remarks,
+          status: 'ACTIVE'
+        }
+
+        try {
+          if (modalMode === 'add') {
+            await api.post('/loans', payload)
+          } else {
+            await api.put(`/loans/${selectedLoan.id}`, payload)
+          }
+          await fetchLoansAndFinanciers()
+          setShowModal(false)
+          setForm(emptyForm)
+          toast(modalMode === 'add' ? 'Loan added successfully' : 'Loan updated successfully', 'success')
+        } catch (err) {
+          toast(err.message || 'Failed to save loan', 'error')
+          return false
+        }
       }
-      await fetchLoansAndFinanciers()
-      setShowModal(false)
-    } catch (err) {
-      toast(err.message || 'Failed to save loan', 'error')
-    }
+    })
   }
 
   const handleDelete = async (id) => {
@@ -295,13 +347,13 @@ export function Loans() {
 
       {/* Add Loan Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="bg-white w-[500px] rounded-xl border border-gray-200 shadow-xl p-6">
-            <div className="flex justify-between items-center mb-4 border-b border-gray-100 pb-3">
-              <h2 className="text-base font-semibold text-gray-900 uppercase tracking-wide">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={closeModal}>
+          <div className="bg-white dark:bg-slate-800 w-[500px] rounded-xl border border-gray-200 dark:border-slate-700 shadow-xl p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4 border-b border-gray-100 dark:border-slate-700 pb-3">
+              <h2 className="text-base font-semibold text-gray-900 dark:text-white uppercase tracking-wide">
                 {modalMode === 'add' ? 'Add Loan' : modalMode === 'edit' ? 'Edit Loan Details' : 'Loan Preview'}
               </h2>
-              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
+              <button onClick={closeModal} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"><X size={18} /></button>
             </div>
 
             {modalMode === 'preview' ? (
@@ -398,8 +450,8 @@ export function Loans() {
                     className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none" />
                 </div>
 
-                <div className="flex justify-end space-x-3 pt-4 border-t border-gray-100 mt-6">
-                  <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">Cancel</button>
+                <div className="flex justify-end space-x-3 pt-4 border-t border-gray-100 dark:border-slate-700 mt-6">
+                  <button type="button" onClick={closeModal} className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 dark:text-gray-300 dark:border-slate-600 dark:hover:bg-slate-700">Cancel</button>
                   <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-brand-primary rounded-lg hover:bg-brand-primary/90">
                     {modalMode === 'add' ? 'Save Loan' : 'Update Loan'}
                   </button>
@@ -409,6 +461,7 @@ export function Loans() {
           </div>
         </div>
       )}
+      <SaveConfirmationModal {...confirmConfig} isSaving={isSaving} />
     </>
   )
 }
