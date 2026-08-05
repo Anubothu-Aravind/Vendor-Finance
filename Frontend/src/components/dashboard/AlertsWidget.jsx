@@ -1,6 +1,6 @@
 import React from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ChevronRight, RefreshCw, AlertTriangle } from 'lucide-react'
+import { ChevronRight, RefreshCw } from 'lucide-react'
 import { useDashboardAlerts } from '../../hooks/useDashboardAlerts'
 import { usePreferences } from '../../hooks/usePreferences'
 
@@ -33,11 +33,10 @@ export function AlertsWidget() {
       {/* Maturing Loans Alert Card */}
       {loanAlerts.length > 0 && (
         <div
-          className="rounded-xl border p-4 flex flex-col justify-between transition-all duration-200 hover:shadow-sm"
+          className="rounded-xl border p-4 flex flex-col justify-between transition-all duration-200"
           style={{
             background: 'var(--color-bg-surface)',
             borderColor: 'var(--color-border)',
-            borderLeft: '4px solid var(--color-warning)',
           }}
         >
           <div>
@@ -48,10 +47,7 @@ export function AlertsWidget() {
                 </h3>
                 <p className="text-[11px] mt-0.5" style={{ color: 'var(--color-text-muted)' }}>Credit note drawdowns due shortly</p>
               </div>
-              <span
-                className="px-2 py-0.5 rounded-full text-[10px] font-bold font-mono"
-                style={{ background: 'rgba(245, 166, 35, 0.15)', color: 'var(--color-warning)' }}
-              >
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold font-mono bg-amber-500/10 text-amber-600 dark:text-amber-400">
                 {loanAlerts.length} Due
               </span>
             </div>
@@ -68,12 +64,12 @@ export function AlertsWidget() {
                     </p>
                   </div>
                   <div className="text-right ml-3 shrink-0">
-                    <p className="font-bold tabular-nums text-amber-500" style={{ fontFamily: 'var(--font-display)' }}>
+                    <p className="font-bold tabular-nums text-amber-600 dark:text-amber-400" style={{ fontFamily: 'var(--font-display)' }}>
                       {formatCurrency(alert.metadata?.amount)}
                     </p>
                     <Link
                       to="/loans"
-                      className="text-[10px] font-semibold text-amber-500 hover:underline flex items-center justify-end gap-0.5 mt-0.5"
+                      className="text-[10px] font-medium text-amber-600 dark:text-amber-400 hover:opacity-80 flex items-center justify-end gap-0.5 mt-0.5 no-underline"
                     >
                       Details <ChevronRight size={10} />
                     </Link>
@@ -86,8 +82,7 @@ export function AlertsWidget() {
           <div className="pt-2.5 mt-2 border-t border-[var(--color-border)] flex justify-end">
             <Link
               to="/loans"
-              className="inline-flex items-center text-xs font-semibold hover:opacity-80 transition-opacity"
-              style={{ color: 'var(--color-warning)' }}
+              className="inline-flex items-center text-xs font-semibold text-amber-600 dark:text-amber-400 hover:opacity-80 transition-opacity no-underline"
             >
               <span>View Loans Manager</span>
               <ChevronRight size={14} className="ml-0.5" />
@@ -96,14 +91,13 @@ export function AlertsWidget() {
         </div>
       )}
 
-      {/* Bounced Cheques Alert Card — Compact List for Multiple Cheques */}
+      {/* Bounced Cheques Alert Card */}
       {chequeAlerts.length > 0 && (
         <div
-          className="rounded-xl border p-4 flex flex-col justify-between transition-all duration-200 hover:shadow-sm"
+          className="rounded-xl border p-4 flex flex-col justify-between transition-all duration-200"
           style={{
             background: 'var(--color-bg-surface)',
             borderColor: 'var(--color-border)',
-            borderLeft: '4px solid var(--color-danger)',
           }}
         >
           <div>
@@ -114,10 +108,7 @@ export function AlertsWidget() {
                 </h3>
                 <p className="text-[11px] mt-0.5" style={{ color: 'var(--color-text-muted)' }}>Failed cheque payouts requiring action</p>
               </div>
-              <span
-                className="px-2 py-0.5 rounded-full text-[10px] font-bold font-mono"
-                style={{ background: 'rgba(232, 69, 69, 0.15)', color: 'var(--color-danger)' }}
-              >
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold font-mono bg-rose-500/10 text-rose-600 dark:text-rose-400">
                 {chequeAlerts.length} Failed
               </span>
             </div>
@@ -132,16 +123,16 @@ export function AlertsWidget() {
                         {toTitleCase(m.partyName || 'Unknown Party')}
                       </p>
                       <p className="text-[10px] text-[var(--color-text-muted)] mt-0.5 truncate">
-                        Chq #{m.chequeNumber || '—'} · {formatDate(m.bounceDate || m.chequeDate)} · <span className="text-red-400 font-medium">{m.bounceReason || 'Bounced'}</span>
+                        Chq #{m.chequeNumber || '—'} · {formatDate(m.bounceDate || m.chequeDate)} · <span className="text-rose-500 font-medium">{m.bounceReason || 'Bounced'}</span>
                       </p>
                     </div>
                     <div className="text-right ml-3 shrink-0">
-                      <p className="font-bold tabular-nums text-red-500" style={{ fontFamily: 'var(--font-display)' }}>
+                      <p className="font-bold tabular-nums text-rose-600 dark:text-rose-400" style={{ fontFamily: 'var(--font-display)' }}>
                         {formatCurrency(m.amount)}
                       </p>
                       <button
                         onClick={(e) => handleRetryPayment(e, alert)}
-                        className="text-[10px] font-semibold text-red-500 hover:underline flex items-center justify-end gap-0.5 mt-0.5"
+                        className="text-[10px] font-medium text-rose-600 dark:text-rose-400 hover:opacity-80 flex items-center justify-end gap-0.5 mt-0.5 no-underline"
                       >
                         <RefreshCw size={9} /> Resolve <ChevronRight size={10} />
                       </button>
@@ -155,8 +146,7 @@ export function AlertsWidget() {
           <div className="pt-2.5 mt-2 border-t border-[var(--color-border)] flex justify-end">
             <Link
               to="/cheques"
-              className="inline-flex items-center text-xs font-semibold hover:opacity-80 transition-opacity"
-              style={{ color: 'var(--color-danger)' }}
+              className="inline-flex items-center text-xs font-semibold text-rose-600 dark:text-rose-400 hover:opacity-80 transition-opacity no-underline"
             >
               <span>Go to Cheques Registry</span>
               <ChevronRight size={14} className="ml-0.5" />

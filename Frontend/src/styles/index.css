@@ -11,12 +11,12 @@
 
 :root {
   /* Brand */
-  --color-primary:        #00C896;
-  --color-primary-hover:  #00A87E;
-  --color-primary-muted:  rgba(0, 200, 150, 0.12);
+  --color-primary:        #059669;
+  --color-primary-hover:  #047857;
+  --color-primary-muted:  rgba(5, 150, 105, 0.12);
 
   /* Gradient — overridden at runtime by usePreferences */
-  --gradient-primary: linear-gradient(135deg, #00C896, #00A87E);
+  --gradient-primary: linear-gradient(135deg, #059669, #10B981);
 
   /* Backgrounds — deep layered dark */
   --color-bg-base:        #0B0F1A;
@@ -35,18 +35,18 @@
   --color-text-inverse:   #0B0F1A;
 
   /* Semantic */
-  --color-success:        #00C896;
-  --color-warning:        #F5A623;
-  --color-danger:         #E84545;
-  --color-info:           #4A9EFF;
+  --color-success:        #059669;
+  --color-warning:        #D97706;
+  --color-danger:         #E11D48;
+  --color-info:           #2563EB;
 
   /* Sidebar */
   --color-sidebar-bg:          #050811;
   --color-sidebar-gradient:    linear-gradient(160deg, #0a1628 0%, #071020 40%, #050811 100%);
-  --color-sidebar-active:      rgba(0, 200, 150, 0.14);
+  --color-sidebar-active:      rgba(5, 150, 105, 0.14);
   --color-sidebar-hover:       rgba(255, 255, 255, 0.05);
   --color-sidebar-text:        #8A9BB0;
-  --color-sidebar-active-text: #00C896;
+  --color-sidebar-active-text: #10B981;
 
   /* Table */
   --color-table-header:   #111827;
@@ -236,20 +236,11 @@ html.light body {
   color: transparent;
 }
 
-/* Page title underline accent */
+/* Page title styling without underlines */
 .page-title {
   font-family: var(--font-display);
   position: relative;
   display: inline-block;
-}
-.page-title::after {
-  content: '';
-  display: block;
-  height: 3px;
-  width: 36px;
-  background: var(--gradient-primary);
-  border-radius: 2px;
-  margin-top: 4px;
 }
 
 /* ═══════════════════════════════════════════════════════════════════
