@@ -13,6 +13,8 @@ import { useSaveConfirmation } from '../hooks/useSaveConfirmation'
 import { SaveConfirmationModal } from '../components/ui/SaveConfirmationModal'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Skeleton, SkeletonTableRow } from '../components/ui/Skeleton'
+import { usePagination } from '../hooks/usePagination'
+import Pagination from '../components/ui/Pagination'
 
 const initials = (name) => name.split(' ').slice(0,2).map(w => w[0]).join('').toUpperCase()
 const colors = ['bg-red-100 text-red-700', 'bg-blue-100 text-blue-700', 'bg-green-100 text-green-700',
@@ -254,11 +256,21 @@ export function Vendors() {
     }
   }
 
+  const tableContainerRef = React.useRef(null)
+
   const filtered = vendors.filter(v =>
     (v.name || '').toLowerCase().includes(search.toLowerCase()) ||
     (v.category || '').toLowerCase().includes(search.toLowerCase()) ||
     (v.gstin || '').toLowerCase().includes(search.toLowerCase())
   )
+
+  const pagination = usePagination({
+    items: filtered,
+    moduleKey: 'vendors',
+    initialPageSize: 20,
+    filterDependencies: [search],
+    containerRef: tableContainerRef
+  })
 
   return (
     <>
@@ -297,7 +309,17 @@ export function Vendors() {
           <div className="relative w-64">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input type="text" placeholder="Search vendors..." value={search} onChange={e => setSearch(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary" />
+              className="w-full pl-9 pr-8 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary" />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors p-0.5"
+                title="Clear search"
+              >
+                <X size={14} />
+              </button>
+            )}
           </div>
         </div>
 
@@ -344,69 +366,72 @@ export function Vendors() {
             )}
           </div>
         ) : (
-          <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider border-b border-gray-100">
-                <th className="text-left px-5 py-3">VENDOR NAME</th>
-                <th className="text-left px-5 py-3">TYPE</th>
-                <th className="text-left px-5 py-3">PHONE</th>
-                <th className="text-left px-5 py-3">CATEGORY</th>
-                <th className="text-right px-5 py-3">OUTSTANDING</th>
-                <th className="text-left px-5 py-3">STATUS</th>
-                <th className="px-5 py-3"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {filtered.map((v, i) => (
-                <motion.tr 
-                  key={v._id || v.id} 
-                  onClick={() => handleOpenPreview(v)} 
-                  initial={{ opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: Math.min(i * 0.03, 0.3), duration: 0.2 }}
-                  className="hover:bg-gray-50 dark:hover:bg-slate-700/20 transition-colors cursor-pointer"
-                >
-                  <td className="px-5 py-3.5">
-                    <div className="flex items-center space-x-3">
-                      <div className={`h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${colors[i % colors.length]}`}>
-                        {initials(v.name)}
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">{toTitleCase(v.name)}</p>
-                        <p className="text-xs text-gray-400">GST: {v.gstin || '—'}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-5 py-3.5 text-xs">
-                    <Badge variant="neutral">{toTitleCase(v.type)}</Badge>
-                  </td>
-                  <td className="px-5 py-3.5 text-sm text-gray-600">{v.phone || '—'}</td>
-                  <td className="px-5 py-3.5 text-sm text-gray-600">{toTitleCase(v.category)}</td>
-                  <td className="px-5 py-3.5 text-right font-semibold text-gray-900 tabular-nums">₹{fmt(v.outstanding)}</td>
-                  <td className="px-5 py-3.5">
-                    <Badge variant={String(v.status).toLowerCase() === 'active' ? 'success' : 'danger'}>
-                      {toTitleCase(v.status)}
-                    </Badge>
-                  </td>
-                  <td className="px-5 py-3.5">
-                    <div className="flex items-center justify-end space-x-1.5">
-                      <button onClick={(e) => { e.stopPropagation(); handleOpenPreview(v); }} title="Preview" className="text-gray-400 hover:text-brand-primary transition-colors p-1">
-                        <Eye size={14} />
-                      </button>
-                      <button onClick={(e) => { e.stopPropagation(); handleOpenEdit(v); }} title="Edit" className="text-gray-400 hover:text-brand-primary transition-colors p-1">
-                        <Edit2 size={14} />
-                      </button>
-                      <button onClick={(e) => { e.stopPropagation(); handleDelete(v.id); }} title="Delete" className="text-gray-400 hover:text-red-500 transition-colors p-1">
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </td>
-                </motion.tr>
-              ))}
-            </tbody>
-          </table>
-          </div>
+          <>
+            <div ref={tableContainerRef} className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider border-b border-gray-100">
+                    <th className="text-left px-5 py-3">VENDOR NAME</th>
+                    <th className="text-left px-5 py-3">TYPE</th>
+                    <th className="text-left px-5 py-3">PHONE</th>
+                    <th className="text-left px-5 py-3">CATEGORY</th>
+                    <th className="text-right px-5 py-3">OUTSTANDING</th>
+                    <th className="text-left px-5 py-3">STATUS</th>
+                    <th className="px-5 py-3"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {pagination.paginatedItems.map((v, i) => (
+                    <motion.tr 
+                      key={v._id || v.id} 
+                      onClick={() => handleOpenPreview(v)} 
+                      initial={{ opacity: 0, y: 4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: Math.min(i * 0.03, 0.3), duration: 0.2 }}
+                      className="hover:bg-gray-50 dark:hover:bg-slate-700/20 transition-colors cursor-pointer"
+                    >
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center space-x-3">
+                          <div className={`h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${colors[i % colors.length]}`}>
+                            {initials(v.name)}
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">{toTitleCase(v.name)}</p>
+                            <p className="text-xs text-gray-400">GST: {v.gstin || '—'}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-5 py-3.5 text-xs">
+                        <Badge variant="neutral">{toTitleCase(v.type)}</Badge>
+                      </td>
+                      <td className="px-5 py-3.5 text-sm text-gray-600">{v.phone || '—'}</td>
+                      <td className="px-5 py-3.5 text-sm text-gray-600">{toTitleCase(v.category)}</td>
+                      <td className="px-5 py-3.5 text-right font-semibold text-gray-900 tabular-nums">₹{fmt(v.outstanding)}</td>
+                      <td className="px-5 py-3.5">
+                        <Badge variant={String(v.status).toLowerCase() === 'active' ? 'success' : 'danger'}>
+                          {toTitleCase(v.status)}
+                        </Badge>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center justify-end space-x-2">
+                          <button onClick={(e) => { e.stopPropagation(); handleOpenPreview(v); }} className="text-xs text-gray-500 hover:text-brand-primary font-medium px-1.5 py-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors">
+                            View
+                          </button>
+                          <button onClick={(e) => { e.stopPropagation(); handleOpenEdit(v); }} className="text-xs text-gray-500 hover:text-brand-primary font-medium px-1.5 py-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors">
+                            Edit
+                          </button>
+                          <button onClick={(e) => { e.stopPropagation(); handleDelete(v.id); }} className="text-xs text-red-500 hover:text-red-700 font-medium px-1.5 py-0.5 rounded hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors">
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </motion.tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <Pagination {...pagination} isLoading={loading} />
+          </>
         )}
       </div>
       </div>
@@ -532,12 +557,12 @@ export function Vendors() {
                   <div className="grid grid-cols-3 gap-4">
                     <div>
                       <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Phone</label>
-                      <input type="text" value={form.phone} onChange={e => setForm({...form, phone: e.target.value})}
+                      <input type="text" autoComplete="off" data-lpignore="true" data-form-type="other" value={form.phone} onChange={e => setForm({...form, phone: e.target.value})}
                         className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg focus:outline-none font-mono" />
                     </div>
                     <div>
                       <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Email</label>
-                      <input type="email" value={form.email} onChange={e => setForm({...form, email: e.target.value})}
+                      <input type="email" autoComplete="off" data-lpignore="true" data-form-type="other" value={form.email} onChange={e => setForm({...form, email: e.target.value})}
                         className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg focus:outline-none" />
                     </div>
                     <div>

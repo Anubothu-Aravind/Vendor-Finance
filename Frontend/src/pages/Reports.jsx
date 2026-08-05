@@ -11,6 +11,7 @@ import {
 } from 'recharts'
 import DropdownSelect from '../components/ui/DropdownSelect'
 import CustomDatePicker from '../components/ui/CustomDatePicker'
+import PrintPreviewModal from '../components/PrintPreviewModal'
 
 const fmt = (v) => new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(v)
 const initials = (n) => (n || '').split(' ').slice(0, 2).map(w => w[0] || '').join('').toUpperCase() || '?'
@@ -41,6 +42,7 @@ export function Reports() {
   const [activeTab, setActiveTab] = useState('Outstanding Aging')
   const [fromDate, setFromDate] = useState('')  // DD-MM-YYYY (CustomDatePicker format)
   const [toDate, setToDate] = useState('')      // DD-MM-YYYY (CustomDatePicker format)
+  const [printDoc, setPrintDoc] = useState(null)
 
   // Interactive graph selection states
   const [selectedAgingBucket, setSelectedAgingBucket] = useState(null)
@@ -562,7 +564,7 @@ export function Reports() {
                       </thead>
                       <tbody className="divide-y divide-gray-50 dark:divide-slate-700/40">
                         {vendorPaymentsBreakdown.map((p) => (
-                          <tr key={p._id} className="hover:bg-slate-50 dark:hover:bg-slate-800/20">
+                          <tr key={p._id} onClick={() => setPrintDoc({ type: 'payment', id: p._id })} className="hover:bg-slate-50 dark:hover:bg-slate-800/20 cursor-pointer">
                             <td className="py-2 text-gray-400">{p.paymentDate ? p.paymentDate.split('T')[0] : '—'}</td>
                             <td className="py-2 font-mono text-gray-400">{p.voucherNo || p.referenceNo || p._id.slice(-6)}</td>
                             <td className="py-2 text-right font-bold text-green-500 tabular-nums">₹{fmt(p.amount)}</td>
@@ -700,7 +702,7 @@ export function Reports() {
                             </thead>
                             <tbody className="divide-y divide-gray-50 dark:divide-slate-700/40">
                               {financierLoansBreakdown.map((l) => (
-                                <tr key={l._id} className="hover:bg-slate-50 dark:hover:bg-slate-800/20">
+                                <tr key={l._id} onClick={() => setPrintDoc({ type: 'loan', id: l._id })} className="hover:bg-slate-50 dark:hover:bg-slate-800/20 cursor-pointer">
                                   <td className="py-2 px-2 font-mono text-gray-500 dark:text-gray-300">{l.loanNo || l._id.slice(-6)}</td>
                                   <td className="py-2 px-2 text-right tabular-nums font-semibold" style={{ color: 'var(--color-text-primary)' }}>₹{fmt(l.principalAmount)}</td>
                                   <td className="py-2 px-2 text-right tabular-nums text-blue-500 font-semibold">₹{fmt(l.paidPrincipal)}</td>
@@ -735,7 +737,7 @@ export function Reports() {
                               </thead>
                               <tbody className="divide-y divide-gray-50 dark:divide-slate-700/40">
                                 {financierRepaymentsBreakdown.map((r) => (
-                                  <tr key={r._id} className="hover:bg-slate-50 dark:hover:bg-slate-800/20">
+                                  <tr key={r._id} onClick={() => setPrintDoc({ type: 'repayment', id: r._id })} className="hover:bg-slate-50 dark:hover:bg-slate-800/20 cursor-pointer">
                                     <td className="py-1.5 px-2 text-gray-400">{r.repaymentDate ? r.repaymentDate.split('T')[0] : '—'}</td>
                                     <td className="py-1.5 px-2 font-mono text-gray-400">{r.referenceNumber || r.repaymentNo || r._id.slice(-6)}</td>
                                     <td className="py-1.5 px-2 text-right font-bold text-green-500 tabular-nums">₹{fmt(r.amount)}</td>
@@ -975,6 +977,13 @@ export function Reports() {
             </div>
           )}
         </div>
+      )}
+      {printDoc && (
+        <PrintPreviewModal
+          type={printDoc.type}
+          id={printDoc.id}
+          onClose={() => setPrintDoc(null)}
+        />
       )}
     </div>
   )

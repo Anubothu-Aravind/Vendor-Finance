@@ -21,6 +21,7 @@ const Reports = lazy(() => import('../pages/Reports'))
 const Settings = lazy(() => import('../pages/Settings').then(module => ({ default: module.Settings })))
 const Login = lazy(() => import('../pages/Login'))
 const Setup = lazy(() => import('../pages/Setup'))
+const PrintDocument = lazy(() => import('../pages/PrintDocument'))
 
 // Lazy loaded error pages
 const Error400 = lazy(() => import('../pages/errors/Error400'))
@@ -52,6 +53,14 @@ const router = createBrowserRouter([
         {lazyLoad(Login)}
       </PublicRoute>
     ),
+  },
+  {
+    path: '/print/:type/:id',
+    element: (
+      <ProtectedRoute>
+        {lazyLoad(PrintDocument)}
+      </ProtectedRoute>
+    )
   },
   {
     path: '/setup',

@@ -5,15 +5,19 @@ export function CustomDatePicker({ value, onChange, placeholder = "Pick a date",
   const [isOpen, setIsOpen] = useState(false)
   const containerRef = useRef(null)
 
-  // Parse incoming date string DD-MM-YYYY to a JS Date
+  // Parse incoming date string (DD-MM-YYYY, DD/MON/YYYY, etc.) to a JS Date
   const parseValue = (val) => {
     if (!val) return new Date()
-    const parts = val.split('-')
+    const monthsMap = { JAN:0, FEB:1, MAR:2, APR:3, MAY:4, JUN:5, JUL:6, AUG:7, SEP:8, OCT:9, NOV:10, DEC:11 }
+    const parts = String(val).trim().split(/[-/\s]/)
     if (parts.length === 3) {
-      const d = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]))
+      const monthUpper = parts[1].toUpperCase()
+      const m = monthsMap[monthUpper] !== undefined ? monthsMap[monthUpper] : Number(parts[1]) - 1
+      const d = new Date(Number(parts[2]), m, Number(parts[0]))
       if (!isNaN(d.getTime())) return d
     }
-    return new Date()
+    const fallback = new Date(val)
+    return !isNaN(fallback.getTime()) ? fallback : new Date()
   }
 
   const initialDate = parseValue(value)
@@ -48,6 +52,8 @@ export function CustomDatePicker({ value, onChange, placeholder = "Pick a date",
     "July", "August", "September", "October", "November", "December"
   ]
 
+  const monthNamesShort = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
+
   const daysOfWeek = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"]
 
   const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate()
@@ -73,9 +79,9 @@ export function CustomDatePicker({ value, onChange, placeholder = "Pick a date",
 
   const handleSelectDay = (day) => {
     const dd = String(day).padStart(2, '0')
-    const mm = String(currentMonth + 1).padStart(2, '0')
+    const mon = monthNamesShort[currentMonth]
     const yyyy = currentYear
-    onChange(`${dd}-${mm}-${yyyy}`)
+    onChange(`${dd}/${mon}/${yyyy}`)
     setIsOpen(false)
   }
 

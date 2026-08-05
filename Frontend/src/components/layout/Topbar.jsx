@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Bell, Menu, AlertTriangle, XCircle, CheckCircle2, Info, X } from 'lucide-react'
 import { useAuth } from '../../hooks/AuthContext'
 import api from '../../utils/api'
 
@@ -134,18 +133,9 @@ export function Topbar({ onMenuClick }) {
     }
   }
 
-  const getNotificationIcon = (type) => {
-    switch (type) {
-      case 'alert':
-        return <XCircle size={16} className="text-red-500 shrink-0 mt-0.5" />
-      case 'warning':
-        return <AlertTriangle size={16} className="text-yellow-500 shrink-0 mt-0.5" />
-      case 'success':
-        return <CheckCircle2 size={16} className="text-emerald-500 shrink-0 mt-0.5" />
-      case 'info':
-      default:
-        return <Info size={16} className="text-blue-500 shrink-0 mt-0.5" />
-    }
+  const getNotificationDot = (type) => {
+    const colors = { alert: '#E84545', warning: '#F5A623', success: '#00C896', info: '#4A9EFF' }
+    return <span className="h-2 w-2 rounded-full shrink-0 mt-1.5" style={{ background: colors[type] || colors.info }} />
   }
 
   const now = new Date()
@@ -169,25 +159,26 @@ export function Topbar({ onMenuClick }) {
         <span className="absolute left-0 top-0 bottom-0 w-0.5" style={{ background: 'var(--color-primary)' }}></span>
       )}
 
-      {getNotificationIcon(n.type)}
+      {getNotificationDot(n.type)}
       
-      <div className="flex-1 min-w-0 pr-4">
-        <p className="text-xs font-semibold text-gray-900 dark:text-white" style={{ fontFamily: 'var(--font-display)' }}>
+      <div className="flex-1 min-w-0 pr-6">
+        <p className="text-xs font-semibold" style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>
           {n.title}
         </p>
-        <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 leading-normal">
+        <p className="text-[11px] mt-0.5 leading-normal" style={{ color: 'var(--color-text-muted)' }}>
           {n.message}
         </p>
-        <p className="text-[10px] text-gray-400 mt-1 font-mono">
+        <p className="text-[10px] mt-1 font-mono" style={{ color: 'var(--color-text-muted)' }}>
           {formatRelativeTime(n.createdAt)}
         </p>
       </div>
 
       <button
         onClick={(e) => handleDeleteNotification(e, n._id)}
-        className="absolute right-2 top-3 p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 opacity-60 md:opacity-0 md:group-hover:opacity-100 transition-opacity"
+        className="absolute right-2 top-3 px-1.5 py-0.5 rounded text-[9px] font-bold opacity-0 group-hover:opacity-100 transition-opacity"
+        style={{ color: 'var(--color-text-muted)', background: 'var(--color-bg-hover)' }}
       >
-        <X size={12} />
+        ✕
       </button>
     </div>
   )
@@ -205,36 +196,37 @@ export function Topbar({ onMenuClick }) {
       <div className="flex items-center space-x-3">
         <button
           onClick={onMenuClick}
-          className="md:hidden p-1.5 rounded-lg transition-all"
-          style={{ color: 'var(--color-text-secondary)' }}
+          className="md:hidden px-2 py-1 rounded-lg text-xs font-bold transition-all"
+          style={{ color: 'var(--color-text-secondary)', background: 'var(--color-bg-hover)' }}
           aria-label="Open menu"
         >
-          <Menu size={20} />
+          ☰
         </button>
 
         <div className="flex items-center space-x-2 text-sm">
-          <span className="hidden sm:inline font-medium" style={{ color: 'var(--color-text-muted)' }}>VASTRAMS</span>
-          <span className="hidden sm:inline" style={{ color: 'var(--color-text-muted)' }}>›</span>
-          <span className="page-title" style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)', fontWeight: 600 }}>{title}</span>
+          <span className="hidden sm:inline text-xs font-semibold tracking-widest" style={{ color: 'var(--color-text-muted)', letterSpacing: '0.1em' }}>VASTRAMS</span>
+          <span className="hidden sm:inline text-xs" style={{ color: 'var(--color-text-muted)' }}>›</span>
+          <span className="page-title" style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '14px' }}>{title}</span>
         </div>
       </div>
 
       {/* Right Controls */}
       <div className="flex items-center space-x-3 relative" ref={dropdownRef}>
-        {/* Bell icon */}
+        {/* Notifications button — text based */}
         <button 
           onClick={() => {
             setShowDropdown(!showDropdown)
             if (!showDropdown) fetchNotifications()
           }}
-          className="relative p-2 rounded-lg transition-all"
-          style={{ color: showDropdown ? 'var(--color-text-primary)' : 'var(--color-text-muted)' }}
-          onMouseEnter={e => { if (!showDropdown) e.currentTarget.style.color = 'var(--color-text-secondary)' }}
-          onMouseLeave={e => { if (!showDropdown) e.currentTarget.style.color = 'var(--color-text-muted)' }}
+          className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all"
+          style={{ 
+            color: showDropdown ? 'var(--color-primary)' : 'var(--color-text-muted)',
+            background: showDropdown ? 'rgba(0,200,150,0.1)' : 'var(--color-bg-hover)'
+          }}
         >
-          <Bell size={18} />
+          Alerts
           {unreadCount > 0 && (
-            <span className="absolute top-1 right-1 bg-red-500 text-white rounded-full text-[9px] px-1 font-bold h-4 min-w-4 flex items-center justify-center scale-90 border border-white dark:border-slate-900">
+            <span className="h-4 min-w-4 px-1 rounded-full text-[9px] font-bold flex items-center justify-center" style={{ background: '#E84545', color: '#fff' }}>
               {unreadCount}
             </span>
           )}

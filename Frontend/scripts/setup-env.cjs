@@ -109,10 +109,17 @@ function printSummaryTable(data) {
 
 async function run() {
   const existingEnv = parseEnv(envPath);
+  
+  // Merge provider-injected process.env settings if available
+  const requiredKeys = ['VITE_API_URL', 'VITE_APP_NAME'];
+  requiredKeys.forEach(key => {
+    if (process.env[key] !== undefined && process.env[key] !== null && process.env[key].trim() !== '') {
+      existingEnv[key] = process.env[key];
+    }
+  });
+
   const finalEnv = { ...existingEnv };
   const summary = [];
-
-  const requiredKeys = ['VITE_API_URL', 'VITE_APP_NAME'];
 
   // Check if we can run in silent check-only mode
   if (!forceMode && fs.existsSync(envPath)) {
@@ -134,7 +141,7 @@ async function run() {
     summary.push({ key: 'VITE_API_URL', value: apiUrlVal, source: 'existing' });
   } else {
     if (isCI) {
-      apiUrlVal = apiUrlVal || 'http://localhost:5000/api';
+      apiUrlVal = apiUrlVal || '/api';
       summary.push({ key: 'VITE_API_URL', value: apiUrlVal, source: existingEnv['VITE_API_URL'] ? 'existing' : 'default' });
     } else {
       const promptDefault = apiUrlVal || 'http://localhost:5000/api';

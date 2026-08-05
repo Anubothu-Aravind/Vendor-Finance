@@ -21,6 +21,7 @@ export function Login() {
   const [submitting, setSubmitting]     = useState(false)
   const [error, setError]               = useState('')
   const [shake, setShake]               = useState(false)
+  const [fieldErrors, setFieldErrors]   = useState({ email: '', password: '' })
   const emailRef = useRef(null)
 
   const from = location.state?.from?.pathname || '/'
@@ -30,17 +31,36 @@ export function Login() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (submitting) return
+
+    // ── Manual field validation (so we fully control the error UI) ──
+    const newFieldErrors = { email: '', password: '' }
+    if (!email.trim())    newFieldErrors.email    = 'Email is required'
+    if (!password.trim()) newFieldErrors.password = 'Password is required'
+    if (newFieldErrors.email || newFieldErrors.password) {
+      setFieldErrors(newFieldErrors)
+      setShake(true)
+      setTimeout(() => setShake(false), 500)
+      return
+    }
+
     setSubmitting(true)
     setError('')
     try {
       const result = await login(email, password)
-      if (result?.requiresSetup) {
-        navigate('/setup', { replace: true, state: { setupToken: result.setupToken } })
+      if (result?.success) {
+        if (result?.requiresSetup) {
+          navigate('/setup', { replace: true, state: { setupToken: result.setupToken } })
+        } else {
+          navigate(from, { replace: true })
+        }
       } else {
-        navigate(from, { replace: true })
+        const msg = result?.message || 'Invalid email or password. Please try again.'
+        setError(msg)
+        setShake(true)
+        setTimeout(() => setShake(false), 500)
       }
     } catch (err) {
-      const msg = err?.response?.data?.message || err?.message || 'Invalid credentials'
+      const msg = err?.response?.data?.message || err?.message || 'Invalid email or password. Please try again.'
       setError(msg)
       setShake(true)
       setTimeout(() => setShake(false), 500)
@@ -216,25 +236,32 @@ export function Login() {
                   <input
                     ref={emailRef}
                     type="email"
-                    required
+                    autoComplete="off"
+                    data-lpignore="true"
+                    data-form-type="other"
                     value={email}
-                    onChange={e => { setEmail(e.target.value); setError('') }}
+                    onChange={e => { setEmail(e.target.value); setError(''); setFieldErrors(fe => ({ ...fe, email: '' })) }}
                     placeholder="name@company.com"
                     style={{
                       width: '100%', boxSizing: 'border-box',
                       paddingLeft: '36px', paddingRight: '12px', paddingTop: '10px', paddingBottom: '10px',
                       background: 'var(--color-bg-elevated)',
-                      border: '1px solid var(--color-border)',
+                      border: `1px solid ${fieldErrors.email ? 'var(--color-danger)' : 'var(--color-border)'}`,
                       borderRadius: '8px',
                       color: 'var(--color-text-primary)',
                       fontSize: '13px', fontWeight: 500,
                       outline: 'none', transition: 'border-color 150ms ease, box-shadow 150ms ease',
                       fontFamily: 'var(--font-body)',
                     }}
-                    onFocus={e => { e.target.style.borderColor = 'var(--color-primary)'; e.target.style.boxShadow = '0 0 0 3px rgba(0,200,150,0.14)' }}
-                    onBlur={e  => { e.target.style.borderColor = 'var(--color-border)'; e.target.style.boxShadow = 'none' }}
+                    onFocus={e => { e.target.style.borderColor = fieldErrors.email ? 'var(--color-danger)' : 'var(--color-primary)'; e.target.style.boxShadow = '0 0 0 3px rgba(0,200,150,0.14)' }}
+                    onBlur={e  => { e.target.style.borderColor = fieldErrors.email ? 'var(--color-danger)' : 'var(--color-border)'; e.target.style.boxShadow = 'none' }}
                   />
                 </div>
+                {fieldErrors.email && (
+                  <p style={{ marginTop: '4px', fontSize: '11px', color: 'var(--color-danger)', fontWeight: 500 }}>
+                    {fieldErrors.email}
+                  </p>
+                )}
               </div>
 
               {/* Password */}
@@ -248,23 +275,22 @@ export function Login() {
                   <Lock size={14} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)', pointerEvents: 'none' }} />
                   <input
                     type={showPassword ? 'text' : 'password'}
-                    required
                     value={password}
-                    onChange={e => { setPassword(e.target.value); setError('') }}
+                    onChange={e => { setPassword(e.target.value); setError(''); setFieldErrors(fe => ({ ...fe, password: '' })) }}
                     placeholder="••••••••"
                     style={{
                       width: '100%', boxSizing: 'border-box',
                       paddingLeft: '36px', paddingRight: '40px', paddingTop: '10px', paddingBottom: '10px',
                       background: 'var(--color-bg-elevated)',
-                      border: '1px solid var(--color-border)',
+                      border: `1px solid ${fieldErrors.password ? 'var(--color-danger)' : 'var(--color-border)'}`,
                       borderRadius: '8px',
                       color: 'var(--color-text-primary)',
                       fontSize: '13px', fontWeight: 500,
                       outline: 'none', transition: 'border-color 150ms ease, box-shadow 150ms ease',
                       fontFamily: 'var(--font-body)',
                     }}
-                    onFocus={e => { e.target.style.borderColor = 'var(--color-primary)'; e.target.style.boxShadow = '0 0 0 3px rgba(0,200,150,0.14)' }}
-                    onBlur={e  => { e.target.style.borderColor = 'var(--color-border)'; e.target.style.boxShadow = 'none' }}
+                    onFocus={e => { e.target.style.borderColor = fieldErrors.password ? 'var(--color-danger)' : 'var(--color-primary)'; e.target.style.boxShadow = '0 0 0 3px rgba(0,200,150,0.14)' }}
+                    onBlur={e  => { e.target.style.borderColor = fieldErrors.password ? 'var(--color-danger)' : 'var(--color-border)'; e.target.style.boxShadow = 'none' }}
                   />
                   <button
                     type="button"
@@ -281,6 +307,11 @@ export function Login() {
                     {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
                   </button>
                 </div>
+                {fieldErrors.password && (
+                  <p style={{ marginTop: '4px', fontSize: '11px', color: 'var(--color-danger)', fontWeight: 500 }}>
+                    {fieldErrors.password}
+                  </p>
+                )}
               </div>
 
               {/* Submit */}

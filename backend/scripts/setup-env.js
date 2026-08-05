@@ -14,7 +14,7 @@ const envPath = path.join(__dirname, '../.env');
 const forceMode = process.argv.includes('--force');
 const isCI = !process.stdin.isTTY;
 
-// Helper to ask questions
+// Helper to ask standard text questions
 function askQuestion(query) {
   return new Promise((resolve) => {
     const rl = readline.createInterface({
@@ -22,6 +22,38 @@ function askQuestion(query) {
       output: process.stdout
     });
     rl.question(query, (answer) => {
+      rl.close();
+      resolve(answer.trim());
+    });
+  });
+}
+
+// Helper to ask masked password questions
+function askQuestionPassword(query) {
+  return new Promise((resolve) => {
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout
+    });
+    
+    process.stdout.write(query);
+
+    let muted = false;
+    const oldWrite = rl._writeToOutput;
+    rl._writeToOutput = function _writeToOutput(stringToWrite) {
+      if (muted) {
+        if (stringToWrite === '\r\n' || stringToWrite === '\n') {
+          process.stdout.write('\n');
+        } else {
+          process.stdout.write('*');
+        }
+      } else {
+        oldWrite.call(rl, stringToWrite);
+      }
+    };
+
+    muted = true;
+    rl.question('', (answer) => {
       rl.close();
       resolve(answer.trim());
     });
@@ -71,325 +103,234 @@ function printSummaryTable(data) {
 
 async function run() {
   const existingEnv = parseEnv(envPath);
+  
+  // Merge provider-injected process.env settings if available
+  const requiredKeys = [
+    'PORT', 'MONGO_URI', 'JWT_SECRET', 'JWT_REFRESH_SECRET',
+    'CLIENT_URL', 'SETUP_TOKEN_SECRET',
+    'SMTP_HOST', 'SMTP_PORT', 'SMTP_SECURE', 'SMTP_USER', 'SMTP_PASS', 'SMTP_FROM'
+  ];
+  requiredKeys.forEach(key => {
+    if (process.env[key] !== undefined && process.env[key] !== null && process.env[key].trim() !== '') {
+      existingEnv[key] = process.env[key];
+    }
+  });
+
   const finalEnv = { ...existingEnv };
   const summary = [];
-
-  const isProdEnv = process.env.NODE_ENV === 'production';
-  const requiredKeys = ['PORT', 'MONGO_URI', 'JWT_SECRET', 'JWT_REFRESH_SECRET', 'CLIENT_URL', 'SETUP_TOKEN_SECRET'];
-  if (isProdEnv) {
-    requiredKeys.push('SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS');
-  }
   
-  // Check if we can run in silent check-only mode
-  if (!forceMode && fs.existsSync(envPath)) {
-    const allKeysPresent = requiredKeys.every(k => existingEnv[k] !== undefined && existingEnv[k] !== null && existingEnv[k].trim() !== '');
-    if (allKeysPresent) {
-      console.log("\x1b[32m%s\x1b[0m", "✓ Environment already configured.");
-      process.exit(0);
-    }
+  // Check if all required keys exist and are non-empty
+  const hasAllKeys = requiredKeys.every(k => existingEnv[k] !== undefined && existingEnv[k] !== null && existingEnv[k].trim() !== '');
+
+  if (!forceMode && fs.existsSync(envPath) && hasAllKeys) {
+    console.log("\x1b[32m%s\x1b[0m", "✓ Environment credentials verified & active.");
+    process.exit(0);
   }
 
-  console.log(`\x1b[36m%s\x1b[0m`, `=== Vastrams Backend Environment Setup ===`);
+  console.log(`\x1b[36m%s\x1b[0m`, `=== Vastrams Backend Interactive Environment Setup ===`);
   if (isCI) {
-    console.log(`[CI/Non-Interactive Mode detected. Skipping prompts and using defaults...]`);
+    console.log(`[CI/Non-Interactive Mode detected. Using defaults and environment variables...]`);
   }
 
   // 1. PORT
-  let portVal = existingEnv['PORT'];
-  if (!forceMode && portVal) {
-    summary.push({ key: 'PORT', value: portVal, source: 'existing' });
-  } else {
-    if (isCI) {
-      portVal = portVal || '5000';
-      summary.push({ key: 'PORT', value: portVal, source: existingEnv['PORT'] ? 'existing' : 'default' });
-    } else {
-      const promptDefault = portVal || '5000';
-      const ans = await askQuestion(`Enter PORT [${promptDefault}]: `);
-      portVal = ans || promptDefault;
-      summary.push({ key: 'PORT', value: portVal, source: ans ? 'user-provided' : (existingEnv['PORT'] ? 'existing' : 'default') });
-    }
-  }
+  let portVal = existingEnv['PORT'] || '5001';
   finalEnv['PORT'] = portVal;
+  summary.push({ key: 'PORT', value: portVal, source: existingEnv['PORT'] ? 'existing' : 'default' });
 
   // 2. CLIENT_URL
-  let clientUrlVal = existingEnv['CLIENT_URL'];
-  if (!forceMode && clientUrlVal) {
-    summary.push({ key: 'CLIENT_URL', value: clientUrlVal, source: 'existing' });
-  } else {
-    if (isCI) {
-      clientUrlVal = clientUrlVal || 'http://localhost:5173';
-      summary.push({ key: 'CLIENT_URL', value: clientUrlVal, source: existingEnv['CLIENT_URL'] ? 'existing' : 'default' });
-    } else {
-      const promptDefault = clientUrlVal || 'http://localhost:5173';
-      const ans = await askQuestion(`Enter CLIENT_URL [${promptDefault}]: `);
-      clientUrlVal = ans || promptDefault;
-      summary.push({ key: 'CLIENT_URL', value: clientUrlVal, source: ans ? 'user-provided' : (existingEnv['CLIENT_URL'] ? 'existing' : 'default') });
-    }
-  }
+  let clientUrlVal = existingEnv['CLIENT_URL'] || 'http://localhost:3000';
   finalEnv['CLIENT_URL'] = clientUrlVal;
+  summary.push({ key: 'CLIENT_URL', value: clientUrlVal, source: existingEnv['CLIENT_URL'] ? 'existing' : 'default' });
 
   // 3. JWT_SECRET
   let jwtSecretVal = existingEnv['JWT_SECRET'];
-  if (!forceMode && jwtSecretVal) {
-    summary.push({ key: 'JWT_SECRET', value: jwtSecretVal, source: 'existing' });
+  if (!jwtSecretVal || jwtSecretVal.length < 16) {
+    jwtSecretVal = crypto.randomBytes(64).toString('hex');
+    summary.push({ key: 'JWT_SECRET', value: jwtSecretVal, source: 'auto-generated' });
   } else {
-    if (isCI) {
-      jwtSecretVal = jwtSecretVal || crypto.randomBytes(64).toString('hex');
-      summary.push({ key: 'JWT_SECRET', value: jwtSecretVal, source: existingEnv['JWT_SECRET'] ? 'existing' : 'auto-generated' });
-    } else {
-      const ans = await askQuestion(`Enter JWT_SECRET (leave empty to auto-generate): `);
-      if (ans) {
-        jwtSecretVal = ans;
-        summary.push({ key: 'JWT_SECRET', value: jwtSecretVal, source: 'user-provided' });
-      } else if (jwtSecretVal) {
-        summary.push({ key: 'JWT_SECRET', value: jwtSecretVal, source: 'existing' });
-      } else {
-        jwtSecretVal = crypto.randomBytes(64).toString('hex');
-        summary.push({ key: 'JWT_SECRET', value: jwtSecretVal, source: 'auto-generated' });
-      }
-    }
+    summary.push({ key: 'JWT_SECRET', value: jwtSecretVal, source: 'existing' });
   }
   finalEnv['JWT_SECRET'] = jwtSecretVal;
 
   // 4. JWT_REFRESH_SECRET
   let jwtRefreshSecretVal = existingEnv['JWT_REFRESH_SECRET'];
-  if (!forceMode && jwtRefreshSecretVal) {
-    summary.push({ key: 'JWT_REFRESH_SECRET', value: jwtRefreshSecretVal, source: 'existing' });
+  if (!jwtRefreshSecretVal || jwtRefreshSecretVal.length < 16) {
+    jwtRefreshSecretVal = crypto.randomBytes(64).toString('hex');
+    summary.push({ key: 'JWT_REFRESH_SECRET', value: jwtRefreshSecretVal, source: 'auto-generated' });
   } else {
-    if (isCI) {
-      jwtRefreshSecretVal = jwtRefreshSecretVal || crypto.randomBytes(64).toString('hex');
-      summary.push({ key: 'JWT_REFRESH_SECRET', value: jwtRefreshSecretVal, source: existingEnv['JWT_REFRESH_SECRET'] ? 'existing' : 'auto-generated' });
-    } else {
-      const ans = await askQuestion(`Enter JWT_REFRESH_SECRET (leave empty to auto-generate): `);
-      if (ans) {
-        jwtRefreshSecretVal = ans;
-        summary.push({ key: 'JWT_REFRESH_SECRET', value: jwtRefreshSecretVal, source: 'user-provided' });
-      } else if (jwtRefreshSecretVal) {
-        summary.push({ key: 'JWT_REFRESH_SECRET', value: jwtRefreshSecretVal, source: 'existing' });
-      } else {
-        jwtRefreshSecretVal = crypto.randomBytes(64).toString('hex');
-        summary.push({ key: 'JWT_REFRESH_SECRET', value: jwtRefreshSecretVal, source: 'auto-generated' });
-      }
-    }
+    summary.push({ key: 'JWT_REFRESH_SECRET', value: jwtRefreshSecretVal, source: 'existing' });
   }
   finalEnv['JWT_REFRESH_SECRET'] = jwtRefreshSecretVal;
 
   // 5. SETUP_TOKEN_SECRET
   let setupTokenSecretVal = existingEnv['SETUP_TOKEN_SECRET'];
-  if (!forceMode && setupTokenSecretVal) {
-    summary.push({ key: 'SETUP_TOKEN_SECRET', value: setupTokenSecretVal, source: 'existing' });
+  if (!setupTokenSecretVal || setupTokenSecretVal.length < 16) {
+    setupTokenSecretVal = crypto.randomBytes(64).toString('hex');
+    summary.push({ key: 'SETUP_TOKEN_SECRET', value: setupTokenSecretVal, source: 'auto-generated' });
   } else {
-    if (isCI) {
-      setupTokenSecretVal = setupTokenSecretVal || crypto.randomBytes(64).toString('hex');
-      summary.push({ key: 'SETUP_TOKEN_SECRET', value: setupTokenSecretVal, source: existingEnv['SETUP_TOKEN_SECRET'] ? 'existing' : 'auto-generated' });
-    } else {
-      const ans = await askQuestion(`Enter SETUP_TOKEN_SECRET (leave empty to auto-generate): `);
-      if (ans) {
-        setupTokenSecretVal = ans;
-        summary.push({ key: 'SETUP_TOKEN_SECRET', value: setupTokenSecretVal, source: 'user-provided' });
-      } else if (setupTokenSecretVal) {
-        summary.push({ key: 'SETUP_TOKEN_SECRET', value: setupTokenSecretVal, source: 'existing' });
-      } else {
-        setupTokenSecretVal = crypto.randomBytes(64).toString('hex');
-        summary.push({ key: 'SETUP_TOKEN_SECRET', value: setupTokenSecretVal, source: 'auto-generated' });
-      }
-    }
+    summary.push({ key: 'SETUP_TOKEN_SECRET', value: setupTokenSecretVal, source: 'existing' });
   }
   finalEnv['SETUP_TOKEN_SECRET'] = setupTokenSecretVal;
 
-  // 6. MONGO_URI
+  // 6. MONGO_URI Verification & Interactive Prompt
   let mongoUriVal = existingEnv['MONGO_URI'];
-  if (!forceMode && mongoUriVal) {
-    summary.push({ key: 'MONGO_URI', value: mongoUriVal, source: 'existing' });
-  } else {
-    let mongoose;
-    try {
-      mongoose = require('mongoose');
-    } catch (err) {
-      console.error("Mongoose dependency missing. Please run 'npm install' first.");
-      process.exit(1);
-    }
+  let mongoose;
+  try {
+    mongoose = require('mongoose');
+  } catch (err) {
+    console.error("Mongoose dependency missing. Please run 'npm install' first.");
+    process.exit(1);
+  }
 
-    if (isCI) {
-      if (!mongoUriVal) {
-        console.error("\x1b[31mError: MONGO_URI is missing in environment and cannot be prompted in CI mode.\x1b[0m");
-        process.exit(1);
-      }
-      console.log("Validating MONGO_URI from environment...");
-      try {
-        await mongoose.connect(mongoUriVal, { serverSelectionTimeoutMS: 5000 });
-        console.log("Database connected successfully.");
-        const collections = await mongoose.connection.db.listCollections().toArray();
-        if (collections.length === 0) {
-          console.log("CI Mode: Empty database detected. Auto-initializing schema...");
-          const initSchema = require('./init-schema');
-          await initSchema();
-          console.log("Database schema initialized successfully.");
-        }
-        await mongoose.disconnect();
-      } catch (err) {
-        console.error(`\x1b[31mDatabase connection failed: ${err.message}\x1b[0m`);
-        process.exit(1);
-      }
-      summary.push({ key: 'MONGO_URI', value: mongoUriVal, source: 'existing' });
-    } else {
-      // Interactive validation loop
+  if (mongoUriVal && !forceMode) {
+    console.log("Validating MONGO_URI connection string...");
+    try {
+      await mongoose.connect(mongoUriVal, { serverSelectionTimeoutMS: 5000 });
+      console.log("\x1b[32m%s\x1b[0m", "✓ Connected to MongoDB database successfully!");
+      await mongoose.disconnect();
+      summary.push({ key: 'MONGO_URI', value: mongoUriVal, source: 'verified' });
+    } catch (err) {
+      console.error(`\x1b[31m⚠️ MONGO_URI Connection failed: ${err.message}\x1b[0m`);
+      if (isCI) process.exit(1);
       let isConnected = false;
       while (!isConnected) {
-        const defaultUriMsg = mongoUriVal ? ` [${mongoUriVal}]` : '';
-        const promptUri = await askQuestion(`Enter MONGO_URI${defaultUriMsg}: `);
+        const promptUri = await askQuestion(`Enter valid MONGO_URI [${mongoUriVal}]: `);
         const uriToUse = promptUri || mongoUriVal;
-
-        if (!uriToUse) {
-          console.log("\x1b[31mError: MONGO_URI is required. Please provide a connection string.\x1b[0m");
-          continue;
-        }
-
-        console.log("Validating connection to MongoDB...");
         try {
           await mongoose.connect(uriToUse, { serverSelectionTimeoutMS: 5000 });
-          console.log("\x1b[32m%s\x1b[0m", "Connected to MongoDB successfully!");
+          console.log("\x1b[32m%s\x1b[0m", "✓ Connected to MongoDB database successfully!");
           isConnected = true;
           mongoUriVal = uriToUse;
-
-          // Check if database is empty
-          const collections = await mongoose.connection.db.listCollections().toArray();
-          if (collections.length === 0) {
-            const initAns = await askQuestion("No collections found. Initialize default Vastrams schema (Vendors, Payments, Cheques, Financiers, Users...) [Y/n]: ");
-            if (initAns.toLowerCase() !== 'n') {
-              console.log("Initializing database schema...");
-              const initSchema = require('./init-schema');
-              await initSchema();
-              console.log("\x1b[32m%s\x1b[0m", "Database schema initialized successfully!");
-            }
-          } else {
-            const names = collections.map(c => c.name).join(', ');
-            console.log(`Found existing collections: ${names}. Skipping schema initialization.`);
-          }
+          await mongoose.disconnect();
+        } catch (connErr) {
+          console.error(`\x1b[31mConnection failed: ${connErr.message}\x1b[0m`);
+        }
+      }
+      summary.push({ key: 'MONGO_URI', value: mongoUriVal, source: 'user-validated' });
+    }
+  } else {
+    if (isCI) {
+      if (!mongoUriVal) {
+        console.error("\x1b[31mError: MONGO_URI is missing in environment.\x1b[0m");
+        process.exit(1);
+      }
+      summary.push({ key: 'MONGO_URI', value: mongoUriVal, source: 'ci-default' });
+    } else {
+      let isConnected = false;
+      while (!isConnected) {
+        const promptDefault = mongoUriVal ? ` [${mongoUriVal}]` : '';
+        const promptUri = await askQuestion(`Enter MONGO_URI${promptDefault}: `);
+        const uriToUse = promptUri || mongoUriVal;
+        if (!uriToUse) {
+          console.log("\x1b[31mError: MONGO_URI is required.\x1b[0m");
+          continue;
+        }
+        try {
+          await mongoose.connect(uriToUse, { serverSelectionTimeoutMS: 5000 });
+          console.log("\x1b[32m%s\x1b[0m", "✓ Connected to MongoDB database successfully!");
+          isConnected = true;
+          mongoUriVal = uriToUse;
           await mongoose.disconnect();
         } catch (err) {
           console.error(`\x1b[31mConnection failed: ${err.message}\x1b[0m`);
-          console.log("Please check if the URI is correct and your MongoDB instance is running.");
         }
       }
-      summary.push({ key: 'MONGO_URI', value: mongoUriVal, source: existingEnv['MONGO_URI'] === mongoUriVal ? 'existing' : 'user-provided' });
+      summary.push({ key: 'MONGO_URI', value: mongoUriVal, source: 'user-validated' });
     }
   }
   finalEnv['MONGO_URI'] = mongoUriVal;
 
-  // SMTP prompts (Production only)
-  if (isProdEnv) {
-    // 7. SMTP_HOST
-    let smtpHostVal = existingEnv['SMTP_HOST'];
-    if (!forceMode && smtpHostVal) {
-      summary.push({ key: 'SMTP_HOST', value: smtpHostVal, source: 'existing' });
-    } else {
-      if (isCI) {
-        if (!smtpHostVal) {
-          console.error("\x1b[31mError: SMTP_HOST is missing and cannot be prompted in CI mode.\x1b[0m");
-          process.exit(1);
-        }
-        summary.push({ key: 'SMTP_HOST', value: smtpHostVal, source: 'existing' });
-      } else {
-        while (!smtpHostVal) {
-          smtpHostVal = await askQuestion(`Enter SMTP_HOST (required for production): `);
-        }
-        summary.push({ key: 'SMTP_HOST', value: smtpHostVal, source: 'user-provided' });
-      }
-    }
-    finalEnv['SMTP_HOST'] = smtpHostVal;
+  // 7. Interactive SMTP Credentials Setup (Right after MONGO_URI)
+  console.log(`\n\x1b[36m%s\x1b[0m`, `--- SMTP Email Server Setup ---`);
 
-    // 8. SMTP_PORT
-    let smtpPortVal = existingEnv['SMTP_PORT'];
-    if (!forceMode && smtpPortVal) {
-      summary.push({ key: 'SMTP_PORT', value: smtpPortVal, source: 'existing' });
-    } else {
-      if (isCI) {
-        smtpPortVal = smtpPortVal || '587';
-        summary.push({ key: 'SMTP_PORT', value: smtpPortVal, source: 'default' });
-      } else {
-        const promptDefault = smtpPortVal || '587';
-        const ans = await askQuestion(`Enter SMTP_PORT [${promptDefault}]: `);
-        smtpPortVal = ans || promptDefault;
-        summary.push({ key: 'SMTP_PORT', value: smtpPortVal, source: ans ? 'user-provided' : 'default' });
-      }
-    }
-    finalEnv['SMTP_PORT'] = smtpPortVal;
+  let smtpHostVal = existingEnv['SMTP_HOST'];
+  let smtpPortVal = existingEnv['SMTP_PORT'];
+  let smtpUserVal = existingEnv['SMTP_USER'];
+  let smtpPassVal = existingEnv['SMTP_PASS'];
+  let smtpFromVal = existingEnv['SMTP_FROM'];
 
-    // 9. SMTP_USER
-    let smtpUserVal = existingEnv['SMTP_USER'];
-    if (!forceMode && smtpUserVal) {
-      summary.push({ key: 'SMTP_USER', value: smtpUserVal, source: 'existing' });
-    } else {
-      if (isCI) {
-        if (!smtpUserVal) {
-          console.error("\x1b[31mError: SMTP_USER is missing and cannot be prompted in CI mode.\x1b[0m");
-          process.exit(1);
-        }
-        summary.push({ key: 'SMTP_USER', value: smtpUserVal, source: 'existing' });
-      } else {
-        while (!smtpUserVal) {
-          smtpUserVal = await askQuestion(`Enter SMTP_USER (required for production): `);
-        }
-        summary.push({ key: 'SMTP_USER', value: smtpUserVal, source: 'user-provided' });
-      }
-    }
-    finalEnv['SMTP_USER'] = smtpUserVal;
+  if (!isCI) {
+    // 7.1 SMTP_HOST
+    const hostDefault = smtpHostVal || 'smtp.gmail.com';
+    const ansHost = await askQuestion(`Enter SMTP_HOST (e.g. smtp.gmail.com) [default: ${hostDefault}]: `);
+    smtpHostVal = ansHost || hostDefault;
 
-    // 10. SMTP_PASS
-    let smtpPassVal = existingEnv['SMTP_PASS'];
-    if (!forceMode && smtpPassVal) {
-      summary.push({ key: 'SMTP_PASS', value: smtpPassVal, source: 'existing' });
-    } else {
-      if (isCI) {
-        if (!smtpPassVal) {
-          console.error("\x1b[31mError: SMTP_PASS is missing and cannot be prompted in CI mode.\x1b[0m");
-          process.exit(1);
-        }
-        summary.push({ key: 'SMTP_PASS', value: smtpPassVal, source: 'existing' });
-      } else {
-        while (!smtpPassVal) {
-          smtpPassVal = await askQuestion(`Enter SMTP_PASS (required for production): `);
-        }
-        summary.push({ key: 'SMTP_PASS', value: smtpPassVal, source: 'user-provided' });
+    // 7.2 SMTP_PORT
+    const portDefault = smtpPortVal || '587';
+    const ansPort = await askQuestion(`Enter SMTP_PORT (e.g. 587 or 465) [default: ${portDefault}]: `);
+    smtpPortVal = ansPort || portDefault;
+
+    // 7.3 SMTP_USER (required, re-prompt if empty)
+    while (!smtpUserVal) {
+      smtpUserVal = await askQuestion(`Enter SMTP_USER (your email address): `);
+      if (!smtpUserVal) {
+        console.log("\x1b[31mSMTP_USER is required.\x1b[0m");
       }
     }
-    finalEnv['SMTP_PASS'] = smtpPassVal;
+
+    // 7.4 SMTP_PASS (required, masked input, re-prompt if empty)
+    while (!smtpPassVal) {
+      smtpPassVal = await askQuestionPassword(`Enter SMTP_PASS (app password, not your login password): `);
+      if (!smtpPassVal) {
+        console.log("\x1b[31mSMTP_PASS is required.\x1b[0m");
+      }
+    }
+
+    // 7.5 SMTP_FROM
+    const fromDefault = smtpFromVal || `"Vastrams" <${smtpUserVal}>`;
+    const ansFrom = await askQuestion(`Enter SMTP_FROM (display name + email, e.g. Vastrams <noreply@vastrams.in>) [default: ${fromDefault}]: `);
+    smtpFromVal = ansFrom || fromDefault;
   } else {
-    // Dev mode SMTP note
-    summary.push({ key: 'SMTP', value: 'Ethereal (dev)', source: 'default' });
+    smtpHostVal = smtpHostVal || 'smtp.gmail.com';
+    smtpPortVal = smtpPortVal || '587';
+    smtpUserVal = smtpUserVal || 'noreply@vastrams.in';
+    smtpPassVal = smtpPassVal || '';
+    smtpFromVal = smtpFromVal || `"Vastrams" <${smtpUserVal}>`;
   }
+
+  const smtpSecureVal = smtpPortVal === '465' ? 'true' : 'false';
+
+  finalEnv['SMTP_HOST']   = smtpHostVal;
+  finalEnv['SMTP_PORT']   = smtpPortVal;
+  finalEnv['SMTP_SECURE'] = smtpSecureVal;
+  finalEnv['SMTP_USER']   = smtpUserVal;
+  finalEnv['SMTP_PASS']   = smtpPassVal;
+  finalEnv['SMTP_FROM']   = smtpFromVal;
+
+  summary.push({ key: 'SMTP_HOST', value: smtpHostVal, source: 'configured' });
+  summary.push({ key: 'SMTP_PORT', value: smtpPortVal, source: 'configured' });
+  summary.push({ key: 'SMTP_USER', value: smtpUserVal, source: 'configured' });
+  summary.push({ key: 'SMTP_FROM', value: smtpFromVal, source: 'configured' });
+
+  // 7.6 Verify SMTP Connection using transporter.verify()
+  let smtpStatus = 'Not tested';
+  if (smtpUserVal && smtpPassVal) {
+    console.log("Verifying SMTP connection credentials...");
+    try {
+      const nodemailer = require('nodemailer');
+      const testTransporter = nodemailer.createTransport({
+        host: smtpHostVal,
+        port: parseInt(smtpPortVal, 10),
+        secure: smtpSecureVal === 'true',
+        auth: { user: smtpUserVal, pass: smtpPassVal }
+      });
+      await testTransporter.verify();
+      console.log('\x1b[32m%s\x1b[0m', '✓ SMTP connection verified successfully!');
+      smtpStatus = 'Verified ✓';
+    } catch (err) {
+      console.warn('\x1b[33m%s\x1b[0m', `⚠️ SMTP Verification failed: ${err.message}`);
+      console.warn('\x1b[33m%s\x1b[0m', 'Saving SMTP credentials to .env so you can fix them later.');
+      smtpStatus = 'Failed ✗';
+    }
+  }
+
+  summary.push({ key: 'SMTP Status', value: smtpStatus, source: 'connection-verify' });
 
   // Print Summary Table
   printSummaryTable(summary);
 
-  // Write merged variables back to .env
-  let envString = '';
-  // Keep original lines that aren't the ones we managed, but write managed ones nicely
-  const managedKeys = new Set(requiredKeys);
-  
-  if (fs.existsSync(envPath)) {
-    const lines = fs.readFileSync(envPath, 'utf-8').split(/\r?\n/);
-    lines.forEach(line => {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith('#')) {
-        envString += line + '\n';
-      } else {
-        const firstEquals = trimmed.indexOf('=');
-        if (firstEquals !== -1) {
-          const key = trimmed.substring(0, firstEquals).trim();
-          if (!managedKeys.has(key)) {
-            envString += line + '\n';
-          }
-        } else {
-          envString += line + '\n';
-        }
-      }
-    });
-  }
-
-  // Now append managed keys
-  envString += '\n# Generated / Managed by setup-env.js\n';
+  // Write merged & verified variables back to .env
+  let envString = '# Vastrams Backend Environment Configuration\n';
   requiredKeys.forEach(key => {
     if (finalEnv[key] !== undefined) {
       envString += `${key}=${finalEnv[key]}\n`;
@@ -397,7 +338,7 @@ async function run() {
   });
 
   fs.writeFileSync(envPath, envString.trim() + '\n', 'utf-8');
-  console.log(`\x1b[32m%s\x1b[0m`, `SUCCESS: Backend environment file configured successfully at backend/.env!\n`);
+  console.log(`\x1b[32m%s\x1b[0m`, `SUCCESS: Backend environment credentials verified and saved at backend/.env!\n`);
 }
 
 run().catch(err => {

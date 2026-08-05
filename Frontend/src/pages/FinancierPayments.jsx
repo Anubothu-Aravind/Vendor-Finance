@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useReducer, useCallback, useMemo } from 'react'
 import { Plus, Search, Trash2, Edit2, Eye, X, Building2 } from 'lucide-react'
+import PrintPreviewModal, { formatPaymentMode } from '../components/PrintPreviewModal'
 import { toInputDate, fromInputDate, getTodayFormatted } from '../utils/date'
 import DropdownSelect from '../components/ui/DropdownSelect'
 import CustomDatePicker from '../components/ui/CustomDatePicker'
@@ -15,8 +16,12 @@ import { useSaveConfirmation } from '../hooks/useSaveConfirmation'
 import { SaveConfirmationModal } from '../components/ui/SaveConfirmationModal'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Skeleton, SkeletonTableRow } from '../components/ui/Skeleton'
+import { usePagination } from '../hooks/usePagination'
+import Pagination from '../components/ui/Pagination'
 
 const fmt = (v) => new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(v)
+const initials = (name) => (name || '').split(' ').slice(0,2).map(w => w[0]).join('').toUpperCase()
+const colors = ['bg-indigo-100 text-indigo-700', 'bg-blue-100 text-blue-700', 'bg-purple-100 text-purple-700', 'bg-emerald-100 text-emerald-700']
 
 export function FinancierPayments() {
   const toast = useToast()
@@ -32,6 +37,7 @@ export function FinancierPayments() {
   const [showModal, setShowModal] = useState(false)
   const [modalMode, setModalMode] = useState('add') // 'add' | 'edit' | 'preview'
   const [selectedRepay, setSelectedRepay] = useState(null)
+  const [printDoc, setPrintDoc] = useState(null)
 
   const emptyForm = {
     financier: '',
@@ -95,7 +101,7 @@ export function FinancierPayments() {
           financier: financierName,
           date: repaymentDateStr,
           amount: r.amount,
-          mode: r.repaymentMode === 'BANK_TRANSFER' ? 'NEFT' : r.repaymentMode === 'CHEQUE' ? 'Cheque' : r.repaymentMode === 'CASH' ? 'Cash' : 'NEFT',
+          mode: formatPaymentMode(r.repaymentMode || 'BANK_TRANSFER'),
           remarks: r.remarks || `Repayment Ref: ${r.referenceNumber}`,
           allocations: [{
             noteNo: l.loanReference || '—',
@@ -201,8 +207,8 @@ export function FinancierPayments() {
                 repaymentMode: modeMapping[form.mode] || 'BANK_TRANSFER',
                 referenceNumber: 'REP-' + String(Math.floor(100 + Math.random() * 900)),
                 chequeNumber: form.mode === 'Cheque' ? form.chequeNo : undefined,
-                principalPaid: alloc.adjusted,
-                interestPaid: 0
+                principalPaid: alloc.principalPaid,
+                interestPaid: alloc.interestPaid
               })
             }
           }
@@ -240,14 +246,31 @@ export function FinancierPayments() {
 
     for (const l of financierLoans) {
       if (remaining <= 0) break
-      const adjusted = Math.min(l.outstandingPrincipal, remaining)
-      const next = l.outstandingPrincipal - adjusted
+
+      let accruedInterest = 0
+      if (l.drawdownDate && l.interestRate) {
+        const dDate = new Date(l.drawdownDate)
+        if (!isNaN(dDate.getTime())) {
+          const daysElapsed = Math.max(0, Math.floor((new Date() - dDate) / (1000 * 60 * 60 * 24)))
+          accruedInterest = (l.outstandingPrincipal * l.interestRate * daysElapsed) / (100 * 365)
+        }
+      }
+
+      const interestPaid = Math.min(accruedInterest, remaining)
+      const remAfterInterest = remaining - interestPaid
+      const principalPaid = Math.min(l.outstandingPrincipal, remAfterInterest)
+      const adjusted = interestPaid + principalPaid
+      const next = Math.max(0, l.outstandingPrincipal - principalPaid)
+
       result.push({
         loanId: l._id,
         noteNo: l.loanReference,
         prev: l.outstandingPrincipal,
-        adjusted: adjusted,
-        next: next,
+        accruedInterest: Math.round(accruedInterest * 100) / 100,
+        principalPaid: Math.round(principalPaid * 100) / 100,
+        interestPaid: Math.round(interestPaid * 100) / 100,
+        adjusted: Math.round(adjusted * 100) / 100,
+        next: Math.round(next * 100) / 100,
         status: next === 0 ? 'Closed' : 'Active'
       })
       remaining -= adjusted
@@ -269,6 +292,10 @@ export function FinancierPayments() {
     return selectedFinancierLoans.reduce((sum, l) => sum + l.outstandingPrincipal, 0)
   }, [selectedFinancierLoans])
 
+  const totalRepaid = useMemo(() => {
+    return repayments.reduce((sum, r) => sum + (Number(r.amount) || 0), 0)
+  }, [repayments])
+
   const isOverBalance = Number(form.amount) > totalOutstandingBalance
 
   const handleAmountChange = (e) => {
@@ -281,7 +308,17 @@ export function FinancierPayments() {
     setForm(prev => ({ ...prev, amount: val }))
   }
 
-  const totalRepaid = repayments.reduce((s, r) => s + r.amount, 0)
+  const tableContainerRef = React.useRef(null)
+
+
+
+  const pagination = usePagination({
+    items: filtered,
+    moduleKey: 'financier_payments',
+    initialPageSize: 20,
+    filterDependencies: [search],
+    containerRef: tableContainerRef
+  })
 
   return (
     <div className="space-y-6">
@@ -350,68 +387,71 @@ export function FinancierPayments() {
             )}
           </div>
         ) : (
-          <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider border-b border-gray-100">
-                <th className="text-left px-5 py-3">REF #</th>
-                <th className="text-left px-5 py-3">FINANCIER</th>
-                <th className="text-left px-5 py-3">REPAYMENT DATE</th>
-                <th className="text-right px-5 py-3">AMOUNT REPAID</th>
-                <th className="text-left px-5 py-3">MODE</th>
-                <th className="text-left px-5 py-3">REMARKS</th>
-                <th className="px-5 py-3"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {filtered.map((r, i) => (
-                <motion.tr 
-                  key={r._id || r.id} 
-                  onClick={() => handleOpenPreview(r)} 
-                  initial={{ opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: Math.min(i * 0.03, 0.3), duration: 0.2 }}
-                  className="hover:bg-gray-50 dark:hover:bg-slate-700/20 transition-colors cursor-pointer"
-                >
-                  <td className="px-5 py-3.5 text-sm font-mono text-gray-500">{r.ref}</td>
-                  <td className="px-5 py-3.5">
-                    <div className="flex items-center space-x-2.5">
-                      <div className="h-7 w-7 rounded-lg bg-gray-100 flex items-center justify-center text-gray-400 flex-shrink-0">
-                        <Building2 size={14} />
-                      </div>
-                      <span className="text-sm font-medium text-gray-900">{toTitleCase(r.financier)}</span>
-                    </div>
-                  </td>
-                  <td className="px-5 py-3.5 text-sm text-gray-600 font-mono">{r.date}</td>
-                  <td className="px-5 py-3.5 text-sm font-semibold text-gray-900 text-right tabular-nums">₹{fmt(r.amount)}</td>
-                  <td className="px-5 py-3.5 text-xs">
-                    <Badge variant={
-                      r.mode?.toLowerCase() === 'cash' ? 'success' :
-                      r.mode?.toLowerCase() === 'cheque' ? 'warning' :
-                      r.mode?.toLowerCase() === 'neft' || r.mode?.toLowerCase() === 'rtgs' ? 'info' : 'neutral'
-                    }>
-                      {toTitleCase(r.mode)}
-                    </Badge>
-                  </td>
-                  <td className="px-5 py-3.5 text-xs text-gray-500 italic max-w-[200px] truncate">{r.remarks || '—'}</td>
-                  <td className="px-5 py-3.5">
-                    <div className="flex items-center justify-end space-x-1.5">
-                      <button onClick={(e) => { e.stopPropagation(); handleOpenPreview(r); }} className="text-gray-400 hover:text-brand-primary p-1">
-                        <Eye size={14} />
-                      </button>
-                      <button onClick={(e) => { e.stopPropagation(); handleOpenEdit(r); }} className="text-gray-400 hover:text-brand-primary p-1">
-                        <Edit2 size={14} />
-                      </button>
-                      <button onClick={(e) => { e.stopPropagation(); handleDelete(r.id); }} className="text-gray-400 hover:text-red-500 p-1">
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </td>
-                </motion.tr>
-              ))}
-            </tbody>
-          </table>
-          </div>
+          <>
+            <div ref={tableContainerRef} className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider border-b border-gray-100">
+                    <th className="text-left px-5 py-3">REF #</th>
+                    <th className="text-left px-5 py-3">FINANCIER</th>
+                    <th className="text-left px-5 py-3">REPAYMENT DATE</th>
+                    <th className="text-right px-5 py-3">AMOUNT REPAID</th>
+                    <th className="text-left px-5 py-3">MODE</th>
+                    <th className="text-left px-5 py-3">REMARKS</th>
+                    <th className="px-5 py-3"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {pagination.paginatedItems.map((r, i) => (
+                    <motion.tr 
+                      key={r._id || r.id} 
+                      onClick={() => handleOpenPreview(r)} 
+                      initial={{ opacity: 0, y: 4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: Math.min(i * 0.03, 0.3), duration: 0.2 }}
+                      className="hover:bg-gray-50 dark:hover:bg-slate-700/20 transition-colors cursor-pointer"
+                    >
+                      <td className="px-5 py-3.5 text-sm font-mono text-gray-500">{r.ref}</td>
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center space-x-2.5">
+                          <div className={`h-7 w-7 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${colors[i % colors.length]}`}>
+                            {initials(r.financier)}
+                          </div>
+                          <span className="text-sm font-medium text-gray-900">{toTitleCase(r.financier)}</span>
+                        </div>
+                      </td>
+                      <td className="px-5 py-3.5 text-sm text-gray-600 font-mono">{r.date}</td>
+                      <td className="px-5 py-3.5 text-sm font-semibold text-gray-900 text-right tabular-nums">₹{fmt(r.amount)}</td>
+                      <td className="px-5 py-3.5 text-xs">
+                        <Badge variant={
+                          r.mode?.toLowerCase() === 'cash' ? 'success' :
+                          r.mode?.toLowerCase() === 'cheque' ? 'warning' :
+                          r.mode?.toLowerCase() === 'neft' || r.mode?.toLowerCase() === 'rtgs' ? 'info' : 'neutral'
+                        }>
+                          {toTitleCase(r.mode)}
+                        </Badge>
+                      </td>
+                      <td className="px-5 py-3.5 text-xs text-gray-500 italic max-w-[200px] truncate">{r.remarks || '—'}</td>
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center justify-end space-x-2">
+                          <button onClick={(e) => { e.stopPropagation(); handleOpenPreview(r); }} className="text-xs text-gray-500 hover:text-brand-primary font-medium px-1.5 py-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors">
+                            View
+                          </button>
+                          <button onClick={(e) => { e.stopPropagation(); handleOpenEdit(r); }} className="text-xs text-gray-500 hover:text-brand-primary font-medium px-1.5 py-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors">
+                            Edit
+                          </button>
+                          <button onClick={(e) => { e.stopPropagation(); handleDelete(r.id); }} className="text-xs text-red-500 hover:text-red-700 font-medium px-1.5 py-0.5 rounded hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors">
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </motion.tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <Pagination {...pagination} isLoading={loading} />
+          </>
         )}
       </div>
 
@@ -491,14 +531,23 @@ export function FinancierPayments() {
                   </div>
                 </div>
 
-                <div className="flex justify-end pt-4 border-t border-gray-100 mt-6">
+                <div className="flex justify-end pt-4 border-t border-gray-100 mt-6 space-x-2">
+                  <button 
+                    onClick={() => {
+                      setShowModal(false);
+                      setPrintDoc({ type: 'repayment', id: selectedRepay?.id || selectedRepay?._id });
+                    }}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg transition"
+                  >
+                    Print Receipt
+                  </button>
                   <button onClick={() => setShowModal(false)} className="px-4 py-2 bg-brand-primary text-white text-sm rounded-lg hover:bg-brand-primary/95">Close</button>
                 </div>
               </div>
             ) : (
               <form onSubmit={handleSave} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Financier *</label>
+                  <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">Financier *</label>
                   <DropdownSelect
                     value={form.financier}
                     onChange={val => setForm({...form, financier: val})}
@@ -509,27 +558,33 @@ export function FinancierPayments() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-semibold text-gray-600 mb-1">Repayment Date *</label>
+                    <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">Repayment Date *</label>
                     <CustomDatePicker
                       value={form.date}
                       onChange={val => setForm({...form, date: val})}
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-600 mb-1">Payment Mode *</label>
+                    <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">Payment Mode *</label>
                     <DropdownSelect
                       value={form.mode}
                       onChange={val => setForm({...form, mode: val})}
                       placeholder="Select Mode"
-                      options={paymentModes.map(m => ({ value: m.name, label: m.name }))}
+                      options={paymentModes.length > 0 ? paymentModes.map(m => ({ value: m.name, label: m.name })) : [
+                        { value: 'Bank Transfer', label: 'Bank Transfer' },
+                        { value: 'Cheque', label: 'Cheque' },
+                        { value: 'Cash', label: 'Cash' },
+                        { value: 'UPI', label: 'UPI' },
+                        { value: 'NEFT / RTGS', label: 'NEFT / RTGS' }
+                      ]}
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Amount *</label>
+                  <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">Amount *</label>
                   <input type="text" required value={form.amount} onChange={handleAmountChange}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none" />
+                    className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary" />
                   {isOverBalance && (
                     <p className="text-red-500 text-xs mt-1">Amount cannot exceed the total outstanding balance of ₹{fmt(totalOutstandingBalance)}.</p>
                   )}
@@ -537,9 +592,17 @@ export function FinancierPayments() {
 
                 {form.mode === 'Cheque' && (
                   <div>
-                    <label className="block text-xs font-semibold text-gray-600 mb-1">Cheque Number *</label>
+                    <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">Cheque Number *</label>
                     <input type="text" required placeholder="e.g. 123456" value={form.chequeNo || ''} onChange={e => setForm({...form, chequeNo: e.target.value.slice(0, 6).replace(/[^0-9]/g, '')})}
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none font-mono" />
+                      className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary font-mono" />
+                  </div>
+                )}
+
+                {(form.mode === 'Bank Transfer' || form.mode === 'NEFT' || form.mode === 'RTGS' || form.mode === 'UPI' || form.mode === 'NEFT / RTGS') && (
+                  <div>
+                    <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">Transaction Ref / UTR Number *</label>
+                    <input type="text" required placeholder="e.g. UTRN987654321" value={form.refNum || form.referenceNumber || ''} onChange={e => setForm({...form, refNum: e.target.value, referenceNumber: e.target.value})}
+                      className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary font-mono" />
                   </div>
                 )}
 
@@ -551,14 +614,17 @@ export function FinancierPayments() {
                       <p className="text-xs text-gray-400 italic">No outstanding active loans found for {form.financier}. This will register as an unallocated advance payment.</p>
                     ) : (
                       <div className="overflow-x-auto">
-                      <table className="w-full text-xs">
+                      <table className="w-full text-[11px]">
                         <thead>
                           <tr className="text-gray-400 border-b border-gray-100 pb-1">
                             <th className="text-left font-semibold">Note #</th>
-                            <th className="text-right font-semibold">Prev Balance</th>
-                            <th className="text-right font-semibold text-brand-primary">Adjusted</th>
-                            <th className="text-right font-semibold">New Balance</th>
-                            <th className="text-left font-semibold pl-2">New Status</th>
+                            <th className="text-right font-semibold">Principal</th>
+                            <th className="text-right font-semibold text-orange-500">Accrued Int</th>
+                            <th className="text-right font-semibold text-blue-600">Principal Paid</th>
+                            <th className="text-right font-semibold text-orange-600">Interest Paid</th>
+                            <th className="text-right font-semibold text-green-600">Total Paid</th>
+                            <th className="text-right font-semibold">New Bal</th>
+                            <th className="text-left font-semibold pl-2">Status</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -566,12 +632,17 @@ export function FinancierPayments() {
                             <tr key={idx} className="border-b border-gray-100 last:border-none py-1">
                               <td className="font-mono text-gray-700 py-1">{a.noteNo}</td>
                               <td className="text-right py-1 font-medium text-gray-600 tabular-nums">₹{fmt(a.prev)}</td>
+                              <td className="text-right py-1 font-semibold text-orange-500 tabular-nums">₹{fmt(a.accruedInterest)}</td>
+                              <td className="text-right py-1 font-semibold text-blue-600 tabular-nums">₹{fmt(a.principalPaid)}</td>
+                              <td className="text-right py-1 font-semibold text-orange-600 tabular-nums">₹{fmt(a.interestPaid)}</td>
                               <td className="text-right py-1 font-bold text-green-600 tabular-nums">₹{fmt(a.adjusted)}</td>
                               <td className="text-right py-1 font-medium text-gray-600 tabular-nums">₹{fmt(a.next)}</td>
                               <td className="py-1 pl-2">
-                                <Badge variant={a.status === 'Closed' ? 'success' : 'success'} className="text-[10px] px-1.5 py-0.5">
+                                <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                                  a.status === 'Closed' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-700'
+                                }`}>
                                   {a.status}
-                                </Badge>
+                                </span>
                               </td>
                             </tr>
                           ))}
@@ -582,9 +653,9 @@ export function FinancierPayments() {
                 )}
 
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Remarks</label>
+                  <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">Remarks</label>
                   <textarea rows={2} value={form.remarks} onChange={e => setForm({...form, remarks: e.target.value})}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none" />
+                    className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary" />
                 </div>
 
                 <div className="flex justify-end space-x-3 pt-4 border-t border-gray-100 dark:border-slate-700 mt-6">
@@ -599,6 +670,14 @@ export function FinancierPayments() {
         </div>
       )}
       <SaveConfirmationModal {...confirmConfig} isSaving={isSaving} />
+
+      {printDoc && (
+        <PrintPreviewModal
+          type={printDoc.type}
+          id={printDoc.id}
+          onClose={() => setPrintDoc(null)}
+        />
+      )}
     </div>
   )
 }

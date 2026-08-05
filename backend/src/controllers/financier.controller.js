@@ -1,4 +1,5 @@
 const Financier = require('../models/Financier')
+const Loan      = require('../models/Loan')
 
 exports.createFinancier = async (req, res, next) => {
   try {
@@ -69,6 +70,19 @@ exports.updateFinancier = async (req, res, next) => {
 
 exports.deleteFinancier = async (req, res, next) => {
   try {
+    // Guard: block deletion if financier has any active loans
+    const activeLoans = await Loan.countDocuments({
+      financierId: req.params.id,
+      isDeleted:   { $ne: true },
+      status:      { $nin: ['SETTLED', 'CLOSED'] }
+    })
+    if (activeLoans > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot delete financier with active loans. This financier has ${activeLoans} active loan(s). Please settle all loans before deleting.`
+      })
+    }
+
     const financier = await Financier.findByIdAndDelete(req.params.id)
 
     if (!financier) {

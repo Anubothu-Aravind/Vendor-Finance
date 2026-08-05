@@ -5,6 +5,14 @@ const ChequeSchema = new mongoose.Schema({
     type: String,
     required: true,
     trim: true,
+    set: function(v) {
+      if (!v) return v;
+      const digits = String(v).replace(/\D/g, '');
+      if (digits.length > 0) {
+        return digits.padStart(6, '0').slice(-6);
+      }
+      return v;
+    },
     validate: {
       validator: function(v) {
         return /^\d{6}$/.test(v); // Standard Indian cheque numbers are 6 digits

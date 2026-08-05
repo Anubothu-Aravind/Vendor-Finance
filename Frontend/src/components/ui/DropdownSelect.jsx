@@ -1,20 +1,63 @@
 import React, { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { ChevronDown, Check } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
-export function DropdownSelect({ value, onChange, options = [], placeholder = "Select...", className = "", actionLabel = null, onAction = null }) {
+export function DropdownSelect({ 
+  value, 
+  onChange, 
+  options = [], 
+  placeholder = "Select...", 
+  className = "", 
+  actionLabel = null, 
+  onAction = null,
+  dropUp = false,
+  size = "md"
+}) {
   const [isOpen, setIsOpen] = useState(false)
+  const [coords, setCoords] = useState({ top: 0, left: 0, width: 0, shouldOpenUp: false })
   const containerRef = useRef(null)
 
   useEffect(() => {
     function handleClickOutside(event) {
       if (containerRef.current && !containerRef.current.contains(event.target)) {
+        // Also check if click was inside portal dropdown
+        const portalEl = document.getElementById('dropdown-portal-root')
+        if (portalEl && portalEl.contains(event.target)) return
         setIsOpen(false)
       }
     }
     document.addEventListener("mousedown", handleClickOutside)
     return () => document.removeEventListener("mousedown", handleClickOutside)
   }, [])
+
+  useEffect(() => {
+    if (isOpen && containerRef.current) {
+      const updatePosition = () => {
+        if (!containerRef.current) return
+        const rect = containerRef.current.getBoundingClientRect()
+        const spaceBelow = window.innerHeight - rect.bottom
+        const spaceAbove = rect.top
+        const shouldOpenUp = dropUp || (spaceBelow < 200 && spaceAbove > spaceBelow)
+
+        setCoords({
+          top: rect.bottom,
+          bottomTop: rect.top,
+          left: rect.left,
+          width: rect.width,
+          shouldOpenUp
+        })
+      }
+
+      updatePosition()
+      window.addEventListener('resize', updatePosition)
+      window.addEventListener('scroll', updatePosition, true)
+      return () => {
+        window.removeEventListener('resize', updatePosition)
+        window.removeEventListener('scroll', updatePosition, true)
+      }
+    }
+  }, [isOpen, dropUp])
 
   const normalizedOptions = (options || []).map(opt => {
     if (typeof opt === 'object' && opt !== null) {
@@ -47,14 +90,17 @@ export function DropdownSelect({ value, onChange, options = [], placeholder = "S
   const selectedOption = normalizedOptions.find(o => String(o.value) === String(value))
   const isButtonDisabled = !hasOptions && !onAction
 
+  const isSmall = size === 'sm'
+  const paddingClasses = isSmall ? 'px-2 py-1 text-xs' : 'px-3 py-2 text-sm'
+
   return (
-    <div className="flex items-center space-x-2 w-full flex-wrap gap-y-1">
-      <div className={`relative flex-1 min-w-[120px] ${className}`} ref={containerRef}>
+    <div className="inline-flex items-center space-x-2 flex-wrap gap-y-1">
+      <div className={`relative ${className}`} ref={containerRef}>
         <button
           type="button"
           disabled={isButtonDisabled}
           onClick={() => setIsOpen(!isOpen)}
-          className="w-full flex items-center justify-between px-3 py-2 text-sm rounded-lg transition-all focus:outline-none animate-all"
+          className={`w-full flex items-center justify-between ${paddingClasses} rounded-lg transition-all focus:outline-none animate-all`}
           style={{
             background: 'var(--color-bg-elevated)',
             border: `1px solid var(--color-border)`,
@@ -65,18 +111,24 @@ export function DropdownSelect({ value, onChange, options = [], placeholder = "S
           onFocus={e => { if (!isButtonDisabled) e.currentTarget.style.borderColor = 'var(--color-primary)' }}
           onBlur={e => { if (!isButtonDisabled) e.currentTarget.style.borderColor = 'var(--color-border)' }}
         >
-          <span className="truncate font-medium">
+          <span className="truncate font-medium whitespace-nowrap mr-1">
             {selectedOption ? selectedOption.label : btnPlaceholder}
           </span>
-          <ChevronDown size={16} className="shrink-0 ml-2" style={{ color: 'var(--color-text-muted)' }} />
+          <ChevronDown size={isSmall ? 14 : 16} className="shrink-0 ml-1" style={{ color: 'var(--color-text-muted)' }} />
         </button>
-        {isOpen && (hasOptions || onAction) && (
+
+        {isOpen && (hasOptions || onAction) && createPortal(
           <div
-            className="absolute z-[100] mt-1 w-full rounded-lg py-1 max-h-60 overflow-y-auto focus:outline-none"
+            id="dropdown-portal-root"
+            className="fixed z-[99999] rounded-lg py-1 max-h-60 overflow-y-auto focus:outline-none"
             style={{
+              top: coords.shouldOpenUp ? 'auto' : `${coords.top + 4}px`,
+              bottom: coords.shouldOpenUp ? `${window.innerHeight - coords.bottomTop + 4}px` : 'auto',
+              left: `${coords.left}px`,
+              minWidth: `${Math.max(coords.width, 110)}px`,
               background: 'var(--color-bg-elevated)',
               border: `1px solid var(--color-border-strong)`,
-              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
+              boxShadow: '0 12px 40px rgba(0, 0, 0, 0.5), 0 4px 16px rgba(0, 0, 0, 0.3)',
             }}
           >
             {normalizedOptions.map((opt) => {
@@ -89,7 +141,7 @@ export function DropdownSelect({ value, onChange, options = [], placeholder = "S
                     onChange(opt.value)
                     setIsOpen(false)
                   }}
-                  className="w-full flex items-center justify-between px-3 py-2 text-left text-sm transition-colors"
+                  className={`w-full flex items-center justify-between ${isSmall ? 'px-2.5 py-1 text-xs' : 'px-3 py-2 text-sm'} text-left transition-colors whitespace-nowrap`}
                   style={{
                     color: isSelected ? 'var(--color-primary)' : 'var(--color-text-primary)',
                     background: isSelected ? 'var(--color-primary-muted)' : 'transparent',
@@ -102,7 +154,7 @@ export function DropdownSelect({ value, onChange, options = [], placeholder = "S
                   }}
                 >
                   <span className={isSelected ? 'font-semibold' : ''}>{opt.label}</span>
-                  {isSelected && <Check size={14} style={{ color: 'var(--color-primary)' }} className="shrink-0 ml-2" />}
+                  {isSelected && <Check size={isSmall ? 12 : 14} style={{ color: 'var(--color-primary)' }} className="shrink-0 ml-2" />}
                 </button>
               )
             })}
@@ -122,7 +174,8 @@ export function DropdownSelect({ value, onChange, options = [], placeholder = "S
                 </button>
               </div>
             )}
-          </div>
+          </div>,
+          document.body
         )}
       </div>
       {addPath && !hasOptions && (

@@ -133,10 +133,17 @@ router.post('/complete', authenticateSetupToken, async (req, res, next) => {
     const accessToken = jwt.sign(tokenPayload, ACCESS_SECRET, { expiresIn: '1h' })
     const refreshToken = jwt.sign(tokenPayload, REFRESH_SECRET, { expiresIn: '7d' })
 
+    res.cookie('accessToken', accessToken, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'strict',
+      maxAge: 15 * 60 * 1000 // 15 minutes
+    })
+
     res.cookie('refreshToken', refreshToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
+      secure: true,
+      sameSite: 'strict',
       maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     })
 
@@ -170,6 +177,10 @@ router.post('/skip', authenticateSetupToken, async (req, res, next) => {
     // Clean up any remaining verification records
     await OTPVerification.deleteMany({ setupToken: req.rawSetupToken })
 
+    // Mark setup complete in DB for returning user logins
+    user.isDefaultCredential = false
+    await user.save()
+
     // Issue normal tokens directly without credentials changes (setup is bypassed for current session only)
     const tokenPayload = {
       id: user._id,
@@ -182,10 +193,17 @@ router.post('/skip', authenticateSetupToken, async (req, res, next) => {
     const accessToken = jwt.sign(tokenPayload, ACCESS_SECRET, { expiresIn: '1h' })
     const refreshToken = jwt.sign(tokenPayload, REFRESH_SECRET, { expiresIn: '7d' })
 
+    res.cookie('accessToken', accessToken, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'strict',
+      maxAge: 15 * 60 * 1000
+    })
+
     res.cookie('refreshToken', refreshToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
+      secure: true,
+      sameSite: 'strict',
       maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     })
 
@@ -199,6 +217,29 @@ router.post('/skip', authenticateSetupToken, async (req, res, next) => {
         role: user.role
       }
     })
+  } catch (error) {
+    next(error)
+  }
+})
+
+// 5. GET /api/auth/setup/status
+router.get('/status', async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(200).json({ success: true, isComplete: false })
+    }
+    const token = authHeader.split(' ')[1]
+    try {
+      const decoded = jwt.verify(token, SETUP_SECRET)
+      const user = await User.findById(decoded.id)
+      if (!user || user.isDefaultCredential) {
+        return res.status(200).json({ success: true, isComplete: false })
+      }
+      return res.status(200).json({ success: true, isComplete: true })
+    } catch {
+      return res.status(200).json({ success: true, isComplete: false })
+    }
   } catch (error) {
     next(error)
   }

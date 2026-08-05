@@ -14,8 +14,12 @@ import { useSaveConfirmation } from '../hooks/useSaveConfirmation'
 import { SaveConfirmationModal } from '../components/ui/SaveConfirmationModal'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Skeleton, SkeletonTableRow } from '../components/ui/Skeleton'
+import { usePagination } from '../hooks/usePagination'
+import Pagination from '../components/ui/Pagination'
 
 const fmt = (v) => new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(v)
+const initials = (name) => (name || '').split(' ').slice(0,2).map(w => w[0]).join('').toUpperCase()
+const colors = ['bg-indigo-100 text-indigo-700', 'bg-blue-100 text-blue-700', 'bg-purple-100 text-purple-700', 'bg-emerald-100 text-emerald-700']
 
 export function Financiers() {
   const toast = useToast()
@@ -181,48 +185,56 @@ export function Financiers() {
     }
   }
 
+  const tableContainerRef = React.useRef(null)
+
   const filtered = financiers.filter(f =>
     (f.name || '').toLowerCase().includes(search.toLowerCase()) ||
     (f.notes && f.notes.toLowerCase().includes(search.toLowerCase()))
   )
+
+  const pagination = usePagination({
+    items: filtered,
+    moduleKey: 'financiers',
+    initialPageSize: 20,
+    filterDependencies: [search],
+    containerRef: tableContainerRef
+  })
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Finance</h1>
-          <p className="text-sm text-gray-400 mt-0.5">{financiers.length} financiers registered</p>
+          <h1 className="page-header-title">Finance</h1>
+          <p className="page-header-sub">{financiers.length} financiers registered &middot; Manage lender accounts and exposure</p>
         </div>
-        <button onClick={handleOpenAdd} className="flex items-center space-x-1.5 bg-brand-primary text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-primary/95 transition-all shadow-sm">
-          <Plus size={16} />
-          <span>Add Finance</span>
+        <button onClick={handleOpenAdd} className="btn-cta">
+          + Add Finance
         </button>
       </div>
 
       {/* Stats */}
-      <div className="flex flex-wrap w-full gap-4" style={{ boxSizing: 'border-box' }}>
-        <div className="bg-white rounded-xl border border-gray-200 px-5 py-4 min-w-0" style={{ flex: '1 1 0%', boxSizing: 'border-box' }}>
-          <p className="text-xs text-gray-400 mb-1">Total Financiers</p>
-          {loading ? <Skeleton className="h-7 w-12" /> : <p className="text-2xl font-bold text-gray-900">{financiers.length}</p>}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="stat-card">
+          <p className="label">Total Financiers</p>
+          {loading ? <Skeleton className="h-8 w-16" /> : <p className="value">{financiers.length}</p>}
         </div>
-        <div className="bg-white rounded-xl border border-gray-200 px-5 py-4 min-w-0" style={{ flex: '1 1 0%', boxSizing: 'border-box' }}>
-          <p className="text-xs text-gray-400 mb-1">Active Accounts</p>
-          {loading ? <Skeleton className="h-7 w-12" /> : <p className="text-2xl font-bold text-gray-900">{financiers.filter(f => f.status === 'Active').length}</p>}
+        <div className="stat-card">
+          <p className="label">Active Accounts</p>
+          {loading ? <Skeleton className="h-8 w-16" /> : <p className="value">{financiers.filter(f => f.status === 'Active').length}</p>}
         </div>
-        <div className="bg-white rounded-xl border border-gray-200 px-5 py-4 min-w-0" style={{ flex: '1 1 0%', boxSizing: 'border-box' }}>
-          <p className="text-xs text-gray-400 mb-1">Outstanding Exposure</p>
-          {loading ? <Skeleton className="h-7 w-24" /> : <p className="text-2xl font-bold text-red-500">₹{fmt(financiers.reduce((s,f) => s + f.outstanding, 0))}</p>}
+        <div className="stat-card">
+          <p className="label" style={{ color: 'var(--color-danger)' }}>Outstanding Exposure</p>
+          {loading ? <Skeleton className="h-8 w-24" /> : <p className="value" style={{ color: 'var(--color-danger)' }}>₹{fmt(financiers.reduce((s,f) => s + f.outstanding, 0))}</p>}
         </div>
       </div>
 
       {/* Table Card */}
-      <div className="bg-white rounded-xl border border-gray-200">
-        <div className="px-5 py-3 border-b border-gray-100">
-          <div className="relative w-64">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+      <div className="table-card">
+        <div className="px-6 py-4" style={{ borderBottom: '1px solid var(--color-border)' }}>
+          <div className="relative">
             <input type="text" placeholder="Search financiers..." value={search} onChange={e => setSearch(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary" />
+              className="search-input" />
           </div>
         </div>
 
@@ -269,67 +281,70 @@ export function Financiers() {
             )}
           </div>
         ) : (
-          <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider border-b border-gray-100">
-                <th className="text-left px-5 py-3">NAME</th>
-                <th className="text-left px-5 py-3">PHONE</th>
-                <th className="text-left px-5 py-3">ADDRESS</th>
-                <th className="text-right px-5 py-3">ACTIVE LOANS</th>
-                <th className="text-right px-5 py-3">OUTSTANDING</th>
-                <th className="text-left px-5 py-3">STATUS</th>
-                <th className="px-5 py-3"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {filtered.map((f, i) => (
-                <motion.tr 
-                  key={f._id || f.id} 
-                  onClick={() => navigate(`/financiers/${f.id}`)} 
-                  initial={{ opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: Math.min(i * 0.03, 0.3), duration: 0.2 }}
-                  className="hover:bg-gray-50 dark:hover:bg-slate-700/20 transition-colors cursor-pointer"
-                >
-                  <td className="px-5 py-3.5">
-                    <div className="flex items-center space-x-3">
-                      <div className="h-8 w-8 rounded-lg bg-gray-100 flex items-center justify-center text-gray-500 flex-shrink-0">
-                        <Building2 size={16} />
-                      </div>
-                      <div>
-                        <Link to={`/financiers/${f.id}`} onClick={(e) => e.stopPropagation()} className="text-sm font-semibold text-brand-primary no-underline block hover:opacity-80 transition-opacity" style={{textDecoration: 'none'}}>{toTitleCase(f.name)}</Link>
-                        {f.notes && <p className="text-xs text-gray-400 truncate max-w-[180px]">{f.notes}</p>}
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-5 py-3.5 text-sm text-gray-600 font-mono">{f.phone || '—'}</td>
-                  <td className="px-5 py-3.5 text-sm text-gray-500 truncate max-w-[200px]">{f.address || '—'}</td>
-                  <td className="px-5 py-3.5 text-sm text-gray-900 text-right tabular-nums font-semibold">{f.loansCount}</td>
-                  <td className="px-5 py-3.5 text-sm text-red-500 text-right font-bold tabular-nums">₹{fmt(f.outstanding)}</td>
-                  <td className="px-5 py-3.5">
-                    <Badge variant={String(f.status).toLowerCase() === 'active' ? 'success' : 'danger'}>
-                      {toTitleCase(f.status)}
-                    </Badge>
-                  </td>
-                  <td className="px-5 py-3.5">
-                    <div className="flex items-center justify-end space-x-1.5">
-                      <button onClick={(e) => { e.stopPropagation(); navigate(`/financiers/${f.id}`); }} className="text-gray-400 hover:text-brand-primary p-1">
-                        <Eye size={14} />
-                      </button>
-                      <button onClick={(e) => { e.stopPropagation(); handleOpenEdit(f); }} className="text-gray-400 hover:text-brand-primary p-1">
-                        <Edit2 size={14} />
-                      </button>
-                      <button onClick={(e) => { e.stopPropagation(); handleDelete(f.id); }} className="text-gray-400 hover:text-red-500 p-1">
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </td>
-                </motion.tr>
-              ))}
-            </tbody>
-          </table>
-          </div>
+          <>
+            <div ref={tableContainerRef} className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider border-b border-gray-100">
+                    <th className="text-left px-5 py-3">NAME</th>
+                    <th className="text-left px-5 py-3">PHONE</th>
+                    <th className="text-left px-5 py-3">ADDRESS</th>
+                    <th className="text-right px-5 py-3">ACTIVE LOANS</th>
+                    <th className="text-right px-5 py-3">OUTSTANDING</th>
+                    <th className="text-left px-5 py-3">STATUS</th>
+                    <th className="px-5 py-3"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {pagination.paginatedItems.map((f, i) => (
+                    <motion.tr 
+                      key={f._id || f.id} 
+                      onClick={() => navigate(`/financiers/${f.id}`)} 
+                      initial={{ opacity: 0, y: 4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: Math.min(i * 0.03, 0.3), duration: 0.2 }}
+                      className="hover:bg-gray-50 dark:hover:bg-slate-700/20 transition-colors cursor-pointer"
+                    >
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center space-x-3">
+                          <div className={`h-8 w-8 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 ${colors[i % colors.length]}`}>
+                            {initials(f.name)}
+                          </div>
+                          <div>
+                            <span className="text-sm font-semibold text-brand-primary block hover:opacity-80 transition-opacity">{toTitleCase(f.name)}</span>
+                            {f.notes && <p className="text-xs text-gray-400 truncate max-w-[180px]">{f.notes}</p>}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-5 py-3.5 text-sm text-gray-600 font-mono">{f.phone || '—'}</td>
+                      <td className="px-5 py-3.5 text-sm text-gray-500 truncate max-w-[200px]">{f.address || '—'}</td>
+                      <td className="px-5 py-3.5 text-sm text-gray-900 text-right tabular-nums font-semibold">{f.loansCount}</td>
+                      <td className="px-5 py-3.5 text-sm text-red-500 text-right font-bold tabular-nums">₹{fmt(f.outstanding)}</td>
+                      <td className="px-5 py-3.5">
+                        <Badge variant={String(f.status).toLowerCase() === 'active' ? 'success' : 'danger'}>
+                          {toTitleCase(f.status)}
+                        </Badge>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center justify-end space-x-2">
+                          <button onClick={(e) => { e.stopPropagation(); navigate(`/financiers/${f.id}`); }} className="text-xs text-gray-500 hover:text-brand-primary font-medium px-1.5 py-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors">
+                            View
+                          </button>
+                          <button onClick={(e) => { e.stopPropagation(); handleOpenEdit(f); }} className="text-xs text-gray-500 hover:text-brand-primary font-medium px-1.5 py-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors">
+                            Edit
+                          </button>
+                          <button onClick={(e) => { e.stopPropagation(); handleDelete(f.id); }} className="text-xs text-red-500 hover:text-red-700 font-medium px-1.5 py-0.5 rounded hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors">
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </motion.tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <Pagination {...pagination} isLoading={loading} />
+          </>
         )}
       </div>
 

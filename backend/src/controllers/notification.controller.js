@@ -15,29 +15,36 @@ exports.getNotifications = async (req, res, next) => {
 
     for (const loan of activeLoans) {
       const nextDueDate = loan.nextDueDate || loan.drawdownDate
-      if (nextDueDate && new Date(nextDueDate) <= thirtyDaysFromNow) {
-        const financierName = loan.financierId?.name || 'Financier'
-        const dueDateStr = new Date(nextDueDate).toISOString().split('T')[0]
-        const loanRef = loan.loanReference || '—'
-        const message = `Loan (Ref: ${loanRef}) of ₹${loan.principalAmount.toLocaleString('en-IN')} from ${financierName} is maturing on ${dueDateStr}.`
-        
-        // Check if warning already exists for this specific loan reference
-        const exists = await Notification.findOne({
-          userId,
-          type: 'warning',
-          link: '/loans',
-          message: { $regex: loanRef, $options: 'i' }
-        })
-
-        if (!exists) {
-          const warningNotif = new Notification({
+      if (nextDueDate) {
+        const d = new Date(nextDueDate)
+        if (!isNaN(d.getTime()) && d <= thirtyDaysFromNow) {
+          const financierName = loan.financierId?.name || 'Financier'
+          const dueDateStr = d.toISOString().split('T')[0]
+          const loanRef = loan.loanReference || 'LN-REF'
+          const amountStr = (loan.principalAmount || 0).toLocaleString('en-IN')
+          const message = `Loan (Ref: ${loanRef}) of ₹${amountStr} from ${financierName} is maturing on ${dueDateStr}.`
+          
+          // Escape special regex characters in loanRef to prevent MongoDB query SyntaxError
+          const safeRef = loanRef.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+          
+          // Check if warning already exists for this specific loan reference
+          const exists = await Notification.findOne({
             userId,
             type: 'warning',
-            title: 'Loan Maturing Soon',
-            message,
-            link: '/loans'
+            link: '/loans',
+            message: { $regex: safeRef, $options: 'i' }
           })
-          await warningNotif.save()
+
+          if (!exists) {
+            const warningNotif = new Notification({
+              userId,
+              type: 'warning',
+              title: 'Loan Maturing Soon',
+              message,
+              link: '/loans'
+            })
+            await warningNotif.save()
+          }
         }
       }
     }

@@ -6,19 +6,26 @@ import { Mail, Lock, CheckCircle2, AlertCircle, ArrowRight, Eye, EyeOff, ShieldA
 import axios from 'axios'
 
 export function Setup() {
-  const { completeSetup } = useAuth()
+  const { user, completeSetup } = useAuth()
   const { preferences, setPreferences } = usePreferences()
   const location = useLocation()
   const navigate = useNavigate()
 
-  // Retrieve setupToken from router state and check auth at mount
-  const setupToken = location.state?.setupToken
+  // Retrieve setupToken from router state or URL query parameter (invitation email link)
+  const queryParams = useMemo(() => new URLSearchParams(location.search), [location.search])
+  const queryToken = queryParams.get('token')
+  const setupToken = location.state?.setupToken || queryToken
   
   useEffect(() => {
+    // If authenticated user already has setup complete in DB, bypass /setup -> redirect straight to /
+    if (user && user.isDefaultCredential === false) {
+      navigate('/', { replace: true })
+      return
+    }
     if (!setupToken) {
       navigate('/login', { replace: true })
     }
-  }, [setupToken, navigate])
+  }, [user, setupToken, navigate])
 
   const [step, setStep] = useState(1)
   const [email, setEmail] = useState('')
@@ -332,6 +339,9 @@ export function Setup() {
                     <Mail size={14} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: colors.textSecondary, pointerEvents: 'none' }} />
                     <input
                       type="email"
+                      autoComplete="off"
+                      data-lpignore="true"
+                      data-form-type="other"
                       required
                       value={email}
                       onChange={e => { setEmail(e.target.value); setError(''); setSuccess('') }}

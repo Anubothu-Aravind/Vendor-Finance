@@ -1,12 +1,10 @@
 import React, { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { CheckCircle2, Save, Edit3, X } from 'lucide-react'
 
 export function SaveConfirmationModal({
   isOpen,
-  title = 'Confirm Changes',
-  message = 'You are about to save the following changes.',
-  changesSummary = [],
+  title = 'Save changes',
+  message = 'Are you sure you want to save your changes?',
   onConfirm,
   onCancel,
   onContinueEditing,
@@ -14,6 +12,11 @@ export function SaveConfirmationModal({
 }) {
   const saveBtnRef = useRef(null)
   const modalRef = useRef(null)
+
+  const handleClose = () => {
+    if (onCancel) onCancel()
+    else if (onContinueEditing) onContinueEditing()
+  }
 
   useEffect(() => {
     if (!isOpen) return
@@ -24,21 +27,23 @@ export function SaveConfirmationModal({
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
         e.preventDefault()
-        if (onContinueEditing) onContinueEditing()
-        else if (onCancel) onCancel()
+        handleClose()
+      } else if (e.key === 'Enter') {
+        e.preventDefault()
+        if (!isSaving && onConfirm) onConfirm()
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isOpen, onCancel, onContinueEditing])
+  }, [isOpen, isSaving, onConfirm])
 
   if (!isOpen) return null
 
   return createPortal(
     <div
       aria-live="assertive"
-      className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fadeIn"
+      className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-fadeIn"
       style={{ fontFamily: 'var(--font-body, sans-serif)' }}
     >
       <div
@@ -47,104 +52,62 @@ export function SaveConfirmationModal({
         aria-modal="true"
         aria-labelledby="save-confirm-title"
         aria-describedby="save-confirm-desc"
-        className="w-full max-w-lg rounded-2xl p-6 shadow-2xl border transition-all animate-scaleUp"
+        className="w-full max-w-sm rounded-2xl p-6 shadow-2xl transition-all flex flex-col"
         style={{
-          background: 'var(--color-bg-elevated, #1e293b)',
-          borderColor: 'var(--color-border, #334155)',
-          color: 'var(--color-text-primary, #f8fafc)',
+          background: 'var(--color-bg-surface, #ffffff)',
+          border: '1px solid var(--color-border, #e2e8f0)',
+          color: 'var(--color-text-primary, #0f172a)',
         }}
       >
-        {/* Header */}
-        <div className="flex items-start gap-4 mb-4">
-          <div
-            className="p-3 rounded-xl flex items-center justify-center shrink-0"
-            style={{ background: 'var(--color-primary-muted, rgba(0, 200, 150, 0.15))', color: 'var(--color-primary, #00C896)' }}
+        {/* Title */}
+        <div className="flex items-start justify-between mb-2">
+          <h2
+            id="save-confirm-title"
+            className="text-base font-bold"
+            style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display, sans-serif)' }}
           >
-            <CheckCircle2 size={24} />
-          </div>
-          <div className="flex-1">
-            <h2
-              id="save-confirm-title"
-              className="text-lg font-bold"
-              style={{ fontFamily: 'var(--font-display, sans-serif)' }}
-            >
-              {title}
-            </h2>
-            <p id="save-confirm-desc" className="text-xs text-gray-400 mt-1 leading-relaxed">
-              {message}
-            </p>
-          </div>
+            {title}
+          </h2>
           <button
-            onClick={onCancel || onContinueEditing}
-            className="text-gray-400 hover:text-white transition-colors"
+            type="button"
+            onClick={handleClose}
+            className="text-xs font-semibold px-2 py-1 rounded hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+            style={{ color: 'var(--color-text-muted)' }}
           >
-            <X size={18} />
+            Close
           </button>
         </div>
 
-        {/* Changes Summary Diff Box */}
-        {changesSummary && changesSummary.length > 0 ? (
-          <div className="my-4 p-3.5 rounded-xl bg-black/20 border border-white/10 space-y-2 max-h-48 overflow-y-auto text-xs">
-            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">
-              Modified Fields ({changesSummary.length}):
-            </span>
-            <div className="divide-y divide-white/5 space-y-2">
-              {changesSummary.map((item, idx) => (
-                <div key={idx} className="pt-2 first:pt-0 flex flex-col gap-0.5">
-                  <span className="font-semibold text-amber-400">{item.label}</span>
-                  <div className="flex items-center gap-2 text-[11px]">
-                    <span className="line-through text-red-400/80 truncate max-w-[180px]">
-                      {String(item.oldValue ?? 'Empty')}
-                    </span>
-                    <span className="text-gray-400">→</span>
-                    <span className="font-semibold text-green-400 truncate max-w-[180px]">
-                      {String(item.newValue ?? 'Empty')}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <div className="my-4 p-3 rounded-xl bg-black/20 border border-white/5 text-xs text-gray-300">
-            Form inputs have been modified and are ready to be saved.
-          </div>
-        )}
+        {/* Simple Message */}
+        <p id="save-confirm-desc" className="text-xs text-gray-500 dark:text-gray-400 mb-6 leading-relaxed">
+          {message}
+        </p>
 
-        {/* Action Buttons */}
-        <div className="mt-6 flex flex-col sm:flex-row gap-2.5 justify-end">
+        {/* Buttons: Cancel & Save Changes */}
+        <div className="flex items-center justify-end gap-2.5">
           <button
-            onClick={onCancel}
+            type="button"
+            onClick={handleClose}
             disabled={isSaving}
-            className="px-4 py-2.5 rounded-xl text-xs font-semibold border transition-all hover:bg-white/5 disabled:opacity-50"
-            style={{ borderColor: 'var(--color-border, #334155)', color: 'var(--color-text-secondary, #94a3b8)' }}
+            className="px-4 py-2 rounded-xl text-xs font-semibold border transition-colors hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-50"
+            style={{
+              borderColor: 'var(--color-border)',
+              color: 'var(--color-text-secondary)',
+              background: 'transparent',
+            }}
           >
             Cancel
           </button>
 
           <button
-            onClick={onContinueEditing}
-            disabled={isSaving}
-            className="px-4 py-2.5 rounded-xl text-xs font-semibold border transition-all hover:bg-white/5 flex items-center justify-center gap-1.5 disabled:opacity-50"
-            style={{ borderColor: 'var(--color-border, #334155)', color: 'var(--color-text-primary, #f8fafc)' }}
-          >
-            <Edit3 size={14} />
-            <span>Continue Editing</span>
-          </button>
-
-          <button
             ref={saveBtnRef}
+            type="button"
             onClick={onConfirm}
             disabled={isSaving}
-            className="px-4 py-2.5 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-1.5 text-white shadow-md hover:opacity-90 disabled:opacity-50"
+            className="px-5 py-2 rounded-xl text-xs font-semibold transition-all text-white shadow-sm hover:opacity-90 disabled:opacity-50"
             style={{ background: 'var(--color-primary, #00C896)' }}
           >
-            {isSaving ? (
-              <span className="animate-spin h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full" />
-            ) : (
-              <Save size={14} />
-            )}
-            <span>{isSaving ? 'Saving...' : 'Save Changes'}</span>
+            {isSaving ? 'Saving...' : 'Save Changes'}
           </button>
         </div>
       </div>
@@ -152,3 +115,5 @@ export function SaveConfirmationModal({
     document.body
   )
 }
+
+export default SaveConfirmationModal

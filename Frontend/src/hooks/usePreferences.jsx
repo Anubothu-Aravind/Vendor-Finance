@@ -9,7 +9,7 @@ export function extractFirstColor(gradient) {
   return match ? match[0] : '#00C896'
 }
 
-const DEFAULT_GRADIENT = 'linear-gradient(135deg, #00C896, #6366f1)'
+const DEFAULT_GRADIENT = 'linear-gradient(135deg, #00C896 0%, #00A87E 100%)'
 const DEFAULT_ACCENT   = '#00C896'
 
 const defaultPreferences = {
@@ -25,7 +25,7 @@ const defaultPreferences = {
 function applyGradientToDOM(gradientValue) {
   const root = document.documentElement
   const accent = extractFirstColor(gradientValue)
-  root.style.setProperty('--gradient-primary',    gradientValue)
+  root.style.setProperty('--gradient-primary',    DEFAULT_GRADIENT)
   root.style.setProperty('--color-primary',       accent)
   root.style.setProperty('--color-primary-hover', accent)
   root.style.setProperty('--color-primary-muted', accent + '20')
@@ -60,99 +60,78 @@ export function PreferencesProvider({ children }) {
 
   const [preferences, setPreferencesState] = useState(() => {
     const init = window.__INIT_PREFS__
-    if (init) {
-      return {
-        theme:       init.theme || 'dark',
-        gradient:    init.gradientValue || DEFAULT_GRADIENT,
-        accentColor: init.accentColor || DEFAULT_ACCENT,
-        currency:    init.currency || 'INR',
-        dateFormat:  init.dateFormat || 'DD-MM-YYYY',
-        numberFormat:init.numberFormat || 'Indian'
-      }
+    if (!init) return defaultPreferences
+    return {
+      theme:        init.theme        || defaultPreferences.theme,
+      gradient:     DEFAULT_GRADIENT,
+      accentColor:  DEFAULT_ACCENT,
+      currency:     init.currency     || defaultPreferences.currency,
+      dateFormat:   init.dateFormat   || defaultPreferences.dateFormat,
+      numberFormat: init.numberFormat || defaultPreferences.numberFormat,
     }
-    return defaultPreferences
   })
 
-  const setPreferences = async (newPref) => {
+  // Synchronize Preferences with Server API
+  const setPreferences = async (updater) => {
     setPreferencesState(prev => {
-      const updated = { ...prev, ...newPref }
+      const next = typeof updater === 'function' ? updater(prev) : { ...prev, ...updater }
       
-      // Async database persistence
-      api.put('/settings/appearance', {
-        theme:       updated.theme,
-        gradientValue: updated.gradient,
-        accentColor: updated.accentColor,
-        currency:    updated.currency,
-        dateFormat:  updated.dateFormat,
-        numberFormat:updated.numberFormat
-      }).catch(err => console.error('Failed to save appearance settings to DB:', err))
+      // Update DOM immediately
+      applyThemeClass(next.theme)
+      applyGradientToDOM(DEFAULT_GRADIENT)
 
-      return updated
+      // Sync with backend API
+      api.put('/settings/ui-prefs', next)
+        .catch(err => console.error('Failed to sync UI prefs:', err))
+
+      return next
     })
   }
 
-  // ── Apply gradient when it changes ──────────────────────────────────────────
-  const applyGradient = (gradientValue) => {
-    applyGradientToDOM(gradientValue)
-    setPreferences({ gradient: gradientValue, accentColor: extractFirstColor(gradientValue) })
-  }
-
-  // ── Theme effect ────────────────────────────────────────────────────────────
+  // Effect to apply theme & gradient on initial mount
   useEffect(() => {
     applyThemeClass(preferences.theme)
+    applyGradientToDOM(DEFAULT_GRADIENT)
   }, [preferences.theme])
 
-  // ── Gradient effect (on mount + change) ─────────────────────────────────────
-  useEffect(() => {
-    const gradient = preferences.gradient || DEFAULT_GRADIENT
-    applyGradientToDOM(gradient)
-  }, [preferences.gradient])
-
-  // ── System theme change listener ─────────────────────────────────────────────
+  // Listen for system theme changes when mode is set to 'system'
   useEffect(() => {
     if (preferences.theme !== 'system') return
     const mq = window.matchMedia('(prefers-color-scheme: dark)')
-    const handler = (e) => {
-      document.documentElement.classList.remove('light', 'dark')
-      document.documentElement.classList.add(e.matches ? 'dark' : 'light')
-    }
-    mq.addEventListener('change', handler)
-    return () => mq.removeEventListener('change', handler)
+    const handleChange = () => applyThemeClass('system')
+    mq.addEventListener('change', handleChange)
+    return () => mq.removeEventListener('change', handleChange)
   }, [preferences.theme])
 
-  // ── Currency formatter ───────────────────────────────────────────────────────
-  // Recreates only when currency or numberFormat preference changes.
-  // Intl.NumberFormat is constructed once inside the memo, not on every call.
-  const formatCurrency = useMemo(() => {
-    const symbolMap = { INR: '₹', USD: '$', EUR: '€' }
-    const localeMap = { Indian: 'en-IN', International: 'en-US' }
-    const symbol = symbolMap[preferences.currency] || '₹'
-    const locale = localeMap[preferences.numberFormat] || 'en-IN'
-    const formatter = new Intl.NumberFormat(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-    return (amount) => `${symbol}${formatter.format(amount || 0)}`
-  }, [preferences.currency, preferences.numberFormat])
-
-  // ── Date formatter ───────────────────────────────────────────────────────────
-  // Recreates only when dateFormat preference changes.
-  const formatDate = useMemo(() => {
-    const fmt = preferences.dateFormat
-    return (dateInput) => {
-      if (!dateInput) return '—'
-      const date = new Date(dateInput)
-      if (isNaN(date.getTime())) return String(dateInput)
-      const day   = String(date.getDate()).padStart(2, '0')
-      const month = String(date.getMonth() + 1).padStart(2, '0')
-      const year  = date.getFullYear()
-      if (fmt === 'MM-DD-YYYY') return `${month}-${day}-${year}`
-      if (fmt === 'YYYY-MM-DD') return `${year}-${month}-${day}`
-      return `${day}-${month}-${year}`
+  const formatCurrency = (val) => {
+    const num = Number(val) || 0
+    if (preferences.numberFormat === 'Indian') {
+      return num.toLocaleString('en-IN', { maximumFractionDigits: 2 })
     }
-  }, [preferences.dateFormat])
+    return num.toLocaleString('en-US', { maximumFractionDigits: 2 })
+  }
+
+  const formatDate = (d) => {
+    if (!d) return ''
+    const dt = new Date(d)
+    if (isNaN(dt.getTime())) return String(d)
+    const day = String(dt.getDate()).padStart(2, '0')
+    const month = String(dt.getMonth() + 1).padStart(2, '0')
+    const year = dt.getFullYear()
+    if (preferences.dateFormat === 'YYYY-MM-DD') return `${year}-${month}-${day}`
+    if (preferences.dateFormat === 'MM/DD/YYYY') return `${month}/${day}/${year}`
+    return `${day}-${month}-${year}`
+  }
 
   return (
-    <PreferencesContext.Provider value={{ 
-      preferences, setPreferences, applyGradient, formatCurrency, formatDate,
-      sidebarCollapsed, setSidebarCollapsed 
+    <PreferencesContext.Provider value={{
+      preferences,
+      setPreferences,
+      sidebarCollapsed,
+      setSidebarCollapsed,
+      applyGradient: () => applyGradientToDOM(DEFAULT_GRADIENT),
+      formatCurrency,
+      formatDate,
     }}>
       {children}
     </PreferencesContext.Provider>
@@ -160,7 +139,7 @@ export function PreferencesProvider({ children }) {
 }
 
 export function usePreferences() {
-  const context = useContext(PreferencesContext)
-  if (!context) throw new Error('usePreferences must be used within a PreferencesProvider')
-  return context
+  const ctx = useContext(PreferencesContext)
+  if (!ctx) throw new Error('usePreferences must be used within PreferencesProvider')
+  return ctx
 }

@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Montserrat:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -54,8 +54,8 @@
   --color-table-row-hover:#1A2235;
 
   /* Typography */
-  --font-display: 'Montserrat', sans-serif;
-  --font-body:    'Inter', sans-serif;
+  --font-display: 'Plus Jakarta Sans', 'Outfit', sans-serif;
+  --font-body:    'Plus Jakarta Sans', 'Inter', sans-serif;
 }
 
 /* ───────────────────────────────────────────────────────────────────
@@ -110,17 +110,25 @@ html.light body {
 
   html {
     color-scheme: dark;
+    font-size: 13px; /* Sleek, compact dashboard scaling */
   }
 
   body {
     background-color: var(--color-bg-base);
     color: var(--color-text-primary);
     font-family: var(--font-body);
+    font-size: 1rem;
+    line-height: 1.45;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
 
-  /* Display headings use Montserrat */
+  h1 { font-size: 1.5rem !important; }
+  h2 { font-size: 1.25rem !important; }
+  h3 { font-size: 1.1rem !important; }
+  h4 { font-size: 1rem !important; }
+
+  /* Display headings use Plus Jakarta Sans */
   h1, h2, h3, h4, h5, h6,
   .page-title,
   .brand-name,
@@ -263,7 +271,106 @@ html.light body {
   .table-responsive-clean td {
     white-space: nowrap;
   }
+
+  /* ── Premium stat card */
+  .stat-card {
+    background: var(--color-bg-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    padding: 14px 18px;
+    transition: transform 180ms ease, box-shadow 180ms ease;
+  }
+  .stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+  }
+  .stat-card .label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+    margin-bottom: 6px;
+    font-family: var(--font-display);
+  }
+  .stat-card .value {
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--color-text-primary);
+    font-family: var(--font-display);
+    line-height: 1.1;
+  }
+
+  /* ── Premium table card wrapper */
+  .table-card {
+    background: var(--color-bg-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.12);
+  }
+
+  /* ── Premium page header */
+  .page-header-title {
+    font-family: var(--font-display);
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--color-text-primary);
+    letter-spacing: -0.3px;
+    line-height: 1.2;
+  }
+  .page-header-sub {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--color-text-muted);
+    margin-top: 2px;
+  }
+
+  /* ── Premium CTA button */
+  .btn-cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 18px;
+    background: var(--gradient-primary);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    font-family: var(--font-body);
+    border-radius: 12px;
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(0, 200, 150, 0.25);
+    transition: opacity 150ms ease, transform 150ms ease, box-shadow 150ms ease;
+  }
+  .btn-cta:hover {
+    opacity: 0.92;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(0, 200, 150, 0.35);
+  }
+  .btn-cta:active {
+    transform: scale(0.98);
+  }
+
+  /* ── Premium search input */
+  .search-input {
+    padding: 8px 14px 8px 38px;
+    background: var(--color-bg-elevated) !important;
+    border: 1px solid var(--color-border) !important;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--color-text-primary) !important;
+    transition: border-color 150ms ease, box-shadow 150ms ease;
+    width: 220px;
+  }
+  .search-input:focus {
+    border-color: var(--color-primary) !important;
+    box-shadow: 0 0 0 3px rgba(0, 200, 150, 0.15) !important;
+    outline: none;
+  }
 }
+
 
 /* ═══════════════════════════════════════════════════════════════════
    TRANSITIONS
@@ -349,9 +456,22 @@ textarea:focus {
   box-shadow: 0 0 0 2px rgba(0, 200, 150, 0.18) !important;
 }
 
+@keyframes type {
+  0% {
+    clip-path: inset(0 100% 0 0);
+    opacity: 0.2;
+  }
+  100% {
+    clip-path: inset(0 0 0 0);
+    opacity: 1;
+  }
+}
+
 input::placeholder,
 textarea::placeholder {
   color: var(--color-text-muted) !important;
+  display: inline-block;
+  animation: type 2.5s steps(22) forwards;
 }
 
 /* ═══════════════════════════════════════════════════════════════════

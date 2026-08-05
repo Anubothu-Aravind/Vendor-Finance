@@ -1,11 +1,13 @@
 import React, { useState, useMemo, useEffect, useReducer, useCallback } from 'react'
 import { Plus, Search, Trash2, Edit2, Eye, X } from 'lucide-react'
+import PrintPreviewModal, { formatPaymentMode } from '../components/PrintPreviewModal'
 import { toInputDate, fromInputDate, getTodayFormatted } from '../utils/date'
 import DropdownSelect from '../components/ui/DropdownSelect'
 import CustomDatePicker from '../components/ui/CustomDatePicker'
 import { toTitleCase } from '../utils/text'
 import EmptyState from '../components/ui/EmptyState'
 import Badge from '../components/ui/Badge'
+import Button from '../components/ui/Button'
 import api from '../utils/api'
 import { useToast } from '../hooks/useToast'
 import { useConfirm } from '../hooks/useConfirm'
@@ -15,6 +17,8 @@ import { useSaveConfirmation } from '../hooks/useSaveConfirmation'
 import { SaveConfirmationModal } from '../components/ui/SaveConfirmationModal'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Skeleton, SkeletonTableRow } from '../components/ui/Skeleton'
+import { usePagination } from '../hooks/usePagination'
+import Pagination from '../components/ui/Pagination'
 
 const initials = (name) => name.split(' ').slice(0,2).map(w => w[0]).join('').toUpperCase()
 const colors = ['bg-blue-100 text-blue-700', 'bg-yellow-100 text-yellow-700', 'bg-purple-100 text-purple-700',
@@ -53,6 +57,7 @@ export function VendorPayments() {
   const [showModal, setShowModal] = useState(false)
   const [modalMode, setModalMode] = useState('add') // 'add' | 'edit' | 'preview'
   const [selectedPay, setSelectedPay] = useState(null)
+  const [printDoc, setPrintDoc] = useState(null)
 
   const emptyForm = {
     vendor: '',
@@ -127,7 +132,7 @@ export function VendorPayments() {
           vendorId: p.vendorId?._id || p.vendorId || '',
           date: paymentDateStr,
           amount: p.amount,
-          mode: p.paymentMode === 'BANK_TRANSFER' ? 'NEFT' : p.paymentMode === 'CHEQUE' ? 'Cheque' : p.paymentMode === 'CASH' ? 'Cash' : 'NEFT',
+          mode: formatPaymentMode(p.paymentMode || 'BANK_TRANSFER'),
           remarks: p.remarks || `Payment Ref: ${p.referenceNumber}`,
           allocations: mappedAllocations
         }
@@ -184,7 +189,24 @@ export function VendorPayments() {
   }
 
   const handleOpenEdit = (pay) => {
-    const editObj = { ...pay }
+    const rawMode = pay.mode || pay.paymentMode
+    let displayMode = 'Bank Transfer'
+    if (rawMode === 'CASH' || rawMode === 'Cash') displayMode = 'Cash'
+    else if (rawMode === 'CHEQUE' || rawMode === 'Cheque') displayMode = 'Cheque'
+    else if (rawMode === 'NEFT') displayMode = 'NEFT'
+    else if (rawMode === 'RTGS') displayMode = 'RTGS'
+    else if (rawMode === 'UPI') displayMode = 'UPI'
+    else if (rawMode === 'Bank Transfer' || rawMode === 'BANK_TRANSFER') displayMode = 'Bank Transfer'
+    else displayMode = rawMode || 'Bank Transfer'
+
+    const editObj = {
+      ...pay,
+      vendor: pay.vendor || pay.vendorId?.name || '',
+      date: pay.date || (pay.paymentDate ? fromInputDate(toInputDate(pay.paymentDate)) : getTodayFormatted()),
+      amount: pay.amount || 0,
+      mode: displayMode,
+      refNum: pay.refNum || pay.referenceNumber || ''
+    }
     setSelectedPay(pay)
     setForm(editObj)
     setInitialFormSnapshot(editObj)
@@ -202,9 +224,13 @@ export function VendorPayments() {
       return
     }
 
+    const isEdit = modalMode === 'edit' && selectedPay?.id
+
     requestSaveConfirmation({
-      title: 'Confirm Payment Record',
-      message: `You are about to record a payment of ₹${amt} to "${form.vendor}".`,
+      title: isEdit ? 'Confirm Payment Update' : 'Confirm Payment Record',
+      message: isEdit
+        ? `You are about to update the payment of ₹${amt} for "${form.vendor}".`
+        : `You are about to record a payment of ₹${amt} to "${form.vendor}".`,
       initialValues: initialFormSnapshot,
       currentValues: form,
       labelMap: {
@@ -229,16 +255,21 @@ export function VendorPayments() {
           amount: amt,
           paymentDate: toInputDate(form.date),
           paymentMode: modeMapping[form.mode] || 'BANK_TRANSFER',
-          referenceNumber: 'TXN-' + String(Math.floor(100 + Math.random() * 900)),
-          chequeNumber: form.mode === 'Cheque' ? 'CHQ-' + String(Math.floor(10000 + Math.random() * 90000)) : undefined
+          referenceNumber: form.refNum || form.referenceNumber || selectedPay?.refNum || ('TXN-' + String(Math.floor(100 + Math.random() * 900))),
+          chequeNumber: form.mode === 'Cheque' ? (form.chequeNumber || selectedPay?.chequeNumber || String(Math.floor(100000 + Math.random() * 900000))) : undefined
         }
 
         try {
-          await api.post('/payments', payload)
+          if (isEdit) {
+            await api.put(`/payments/${selectedPay.id}`, payload)
+            toast('Vendor payment updated successfully', 'success')
+          } else {
+            await api.post('/payments', payload)
+            toast('Vendor payment recorded successfully', 'success')
+          }
           await fetchPaymentsData()
           setShowModal(false)
           setForm(emptyForm)
-          toast('Vendor payment recorded successfully', 'success')
         } catch (err) {
           toast(err.message || 'Failed to save payment', 'error')
           return false
@@ -280,11 +311,21 @@ export function VendorPayments() {
     return result
   }, [form.vendor, form.amount, bills])
 
+  const tableContainerRef = React.useRef(null)
+
   const filtered = payments.filter(p =>
     (p.vendor || '').toLowerCase().includes(search.toLowerCase()) ||
     (p.remarks || '').toLowerCase().includes(search.toLowerCase()) ||
     (p.mode || '').toLowerCase().includes(search.toLowerCase())
   )
+
+  const pagination = usePagination({
+    items: filtered,
+    moduleKey: 'vendor_payments',
+    initialPageSize: 20,
+    filterDependencies: [search],
+    containerRef: tableContainerRef
+  })
 
   return (
     <>
@@ -307,7 +348,17 @@ export function VendorPayments() {
           <div className="relative w-64">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input type="text" placeholder="Search payments..." value={search} onChange={e => setSearch(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary" />
+              className="w-full pl-9 pr-8 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary" />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors p-0.5"
+                title="Clear search"
+              >
+                <X size={14} />
+              </button>
+            )}
           </div>
         </div>
 
@@ -354,68 +405,71 @@ export function VendorPayments() {
             )}
           </div>
         ) : (
-          <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider border-b border-gray-100">
-                <th className="text-left px-5 py-3">REF #</th>
-                <th className="text-left px-5 py-3">VENDOR</th>
-                <th className="text-left px-5 py-3">PAYMENT DATE</th>
-                <th className="text-right px-5 py-3">AMOUNT PAID</th>
-                <th className="text-left px-5 py-3">MODE</th>
-                <th className="text-left px-5 py-3">REMARKS</th>
-                <th className="px-5 py-3"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {filtered.map((p, i) => (
-                <motion.tr 
-                  key={p.id} 
-                  onClick={() => handleOpenPreview(p)} 
-                  initial={{ opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: Math.min(i * 0.03, 0.3), duration: 0.2 }}
-                  className="hover:bg-gray-50 dark:hover:bg-slate-700/20 transition-colors cursor-pointer"
-                >
-                  <td className="px-5 py-3.5 text-sm font-mono text-gray-500">{p.ref}</td>
-                  <td className="px-5 py-3.5">
-                    <div className="flex items-center space-x-2.5">
-                      <div className={`h-7 w-7 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${colors[i % colors.length]}`}>
-                        {initials(p.vendor)}
-                      </div>
-                      <span className="text-sm font-medium text-gray-900">{toTitleCase(p.vendor)}</span>
-                    </div>
-                  </td>
-                  <td className="px-5 py-3.5 text-sm text-gray-500 font-mono">{p.date}</td>
-                  <td className="px-5 py-3.5 text-sm font-semibold text-gray-900 text-right tabular-nums">₹{fmt(p.amount)}</td>
-                  <td className="px-5 py-3.5 text-xs">
-                    <Badge variant={
-                      p.mode?.toLowerCase() === 'cash' ? 'success' :
-                      p.mode?.toLowerCase() === 'cheque' ? 'warning' :
-                      p.mode?.toLowerCase() === 'neft' || p.mode?.toLowerCase() === 'rtgs' ? 'info' : 'neutral'
-                    }>
-                      {toTitleCase(p.mode)}
-                    </Badge>
-                  </td>
-                  <td className="px-5 py-3.5 text-xs text-gray-500 italic max-w-[200px] truncate">{p.remarks || '—'}</td>
-                  <td className="px-5 py-3.5">
-                    <div className="flex items-center justify-end space-x-1.5">
-                      <button onClick={(e) => { e.stopPropagation(); handleOpenPreview(p); }} className="text-gray-400 hover:text-brand-primary p-1">
-                        <Eye size={14} />
-                      </button>
-                      <button onClick={(e) => { e.stopPropagation(); handleOpenEdit(p); }} className="text-gray-400 hover:text-brand-primary p-1">
-                        <Edit2 size={14} />
-                      </button>
-                      <button onClick={(e) => { e.stopPropagation(); handleDelete(p.id); }} className="text-gray-400 hover:text-red-500 p-1">
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </td>
-                </motion.tr>
-              ))}
-            </tbody>
-          </table>
-          </div>
+          <>
+            <div ref={tableContainerRef} className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider border-b border-gray-100">
+                    <th className="text-left px-5 py-3">REF #</th>
+                    <th className="text-left px-5 py-3">VENDOR</th>
+                    <th className="text-left px-5 py-3">PAYMENT DATE</th>
+                    <th className="text-right px-5 py-3">AMOUNT PAID</th>
+                    <th className="text-left px-5 py-3">MODE</th>
+                    <th className="text-left px-5 py-3">REMARKS</th>
+                    <th className="px-5 py-3"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {pagination.paginatedItems.map((p, i) => (
+                    <motion.tr 
+                      key={p.id} 
+                      onClick={() => handleOpenPreview(p)} 
+                      initial={{ opacity: 0, y: 4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: Math.min(i * 0.03, 0.3), duration: 0.2 }}
+                      className="hover:bg-gray-50 dark:hover:bg-slate-700/20 transition-colors cursor-pointer"
+                    >
+                      <td className="px-5 py-3.5 text-sm font-mono text-gray-500">{p.ref}</td>
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center space-x-2.5">
+                          <div className={`h-7 w-7 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${colors[i % colors.length]}`}>
+                            {initials(p.vendor)}
+                          </div>
+                          <span className="text-sm font-medium text-gray-900">{toTitleCase(p.vendor)}</span>
+                        </div>
+                      </td>
+                      <td className="px-5 py-3.5 text-sm text-gray-500 font-mono">{p.date}</td>
+                      <td className="px-5 py-3.5 text-sm font-semibold text-gray-900 text-right tabular-nums">₹{fmt(p.amount)}</td>
+                      <td className="px-5 py-3.5 text-xs">
+                        <Badge variant={
+                          p.mode?.toLowerCase() === 'cash' ? 'success' :
+                          p.mode?.toLowerCase() === 'cheque' ? 'warning' :
+                          p.mode?.toLowerCase() === 'neft' || p.mode?.toLowerCase() === 'rtgs' ? 'info' : 'neutral'
+                        }>
+                          {toTitleCase(p.mode)}
+                        </Badge>
+                      </td>
+                      <td className="px-5 py-3.5 text-xs text-gray-500 italic max-w-[200px] truncate">{p.remarks || '—'}</td>
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center justify-end space-x-2">
+                          <button onClick={(e) => { e.stopPropagation(); handleOpenPreview(p); }} className="text-xs text-gray-500 hover:text-brand-primary font-medium px-1.5 py-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors">
+                            View
+                          </button>
+                          <button onClick={(e) => { e.stopPropagation(); handleOpenEdit(p); }} className="text-xs text-gray-500 hover:text-brand-primary font-medium px-1.5 py-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors">
+                            Edit
+                          </button>
+                          <button onClick={(e) => { e.stopPropagation(); handleDelete(p.id); }} className="text-xs text-red-500 hover:text-red-700 font-medium px-1.5 py-0.5 rounded hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors">
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </motion.tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <Pagination {...pagination} isLoading={loading} />
+          </>
         )}
       </div>
       </div>
@@ -496,14 +550,23 @@ export function VendorPayments() {
                   </div>
                 </div>
 
-                <div className="flex justify-end pt-4 border-t border-gray-100 mt-6">
-                  <button onClick={() => setShowModal(false)} className="px-4 py-2 bg-brand-primary text-white text-sm rounded-lg hover:bg-brand-primary/95">Close</button>
+                <div className="flex justify-end pt-4 border-t border-slate-200 dark:border-slate-700 mt-6 space-x-2">
+                  <Button 
+                    variant="default"
+                    onClick={() => {
+                      setShowModal(false);
+                      setPrintDoc({ type: 'payment', id: selectedPay?.id });
+                    }}
+                  >
+                    Print Voucher
+                  </Button>
+                  <Button variant="secondary" onClick={() => setShowModal(false)}>Close</Button>
                 </div>
               </div>
             ) : (
               <form onSubmit={handleSave} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Vendor *</label>
+                  <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">Vendor *</label>
                   <DropdownSelect
                     value={form.vendor}
                     onChange={val => setForm({...form, vendor: val})}
@@ -514,28 +577,85 @@ export function VendorPayments() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-semibold text-gray-600 mb-1">Payment Date *</label>
+                    <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">Payment Date *</label>
                     <CustomDatePicker
                       value={form.date}
                       onChange={val => setForm({...form, date: val})}
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-600 mb-1">Payment Mode *</label>
+                    <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">Payment Mode *</label>
                     <DropdownSelect
                       value={form.mode}
                       onChange={val => setForm({...form, mode: val})}
                       placeholder="Select Payment Mode"
-                      options={paymentModes.map(m => ({ value: m.name, label: m.name }))}
+                      options={paymentModes.length > 0 ? paymentModes.map(m => ({ value: m.name, label: m.name })) : [
+                        { value: 'Bank Transfer', label: 'Bank Transfer' },
+                        { value: 'Cheque', label: 'Cheque' },
+                        { value: 'Cash', label: 'Cash' },
+                        { value: 'UPI', label: 'UPI' },
+                        { value: 'NEFT / RTGS', label: 'NEFT / RTGS' }
+                      ]}
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Amount *</label>
+                  <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">Amount *</label>
                   <input type="number" required value={form.amount} onChange={e => setForm({...form, amount: e.target.value})}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none" />
+                    className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary" />
                 </div>
+
+                {/* Conditional Fields based on Payment Mode */}
+                {form.mode === 'Cheque' && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">Cheque Number *</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. 123456"
+                        value={form.chequeNumber || ''}
+                        onChange={e => setForm({ ...form, chequeNumber: e.target.value.replace(/\D/g, '').slice(0, 6) })}
+                        className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">Cheque Date *</label>
+                      <CustomDatePicker
+                        value={form.chequeDate || form.date}
+                        onChange={val => setForm({ ...form, chequeDate: val })}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {(form.mode === 'Bank Transfer' || form.mode === 'NEFT' || form.mode === 'RTGS' || form.mode === 'UPI' || form.mode === 'NEFT / RTGS') && (
+                  <div>
+                    <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">Transaction Ref / UTR Number *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. UTRN987654321 / TXN Ref"
+                      value={form.refNum || form.referenceNumber || ''}
+                      onChange={e => setForm({ ...form, refNum: e.target.value, referenceNumber: e.target.value })}
+                      className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary font-mono"
+                    />
+                  </div>
+                )}
+
+                {form.mode === 'Cash' && (
+                  <div>
+                    <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">Cash Memo / Reference (Optional)</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Memo #101"
+                      value={form.refNum || form.referenceNumber || ''}
+                      onChange={e => setForm({ ...form, refNum: e.target.value, referenceNumber: e.target.value })}
+                      className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary font-mono"
+                    />
+                  </div>
+                )}
 
                 {/* FIFO Real-Time Allocation Preview */}
                 {form.amount && Number(form.amount) > 0 && (
@@ -576,9 +696,9 @@ export function VendorPayments() {
                 )}
 
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Remarks</label>
+                  <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">Remarks</label>
                   <textarea rows={2} value={form.remarks} onChange={e => setForm({...form, remarks: e.target.value})}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none" />
+                    className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary" />
                 </div>
 
                 <div className="flex justify-end space-x-3 pt-4 border-t border-gray-100 dark:border-slate-700 mt-6">
@@ -593,6 +713,14 @@ export function VendorPayments() {
         </div>
       )}
       <SaveConfirmationModal {...confirmConfig} isSaving={isSaving} />
+
+      {printDoc && (
+        <PrintPreviewModal
+          type={printDoc.type}
+          id={printDoc.id}
+          onClose={() => setPrintDoc(null)}
+        />
+      )}
     </>
   )
 }

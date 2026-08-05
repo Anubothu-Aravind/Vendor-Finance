@@ -1,12 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import axios from 'axios'
-import { setAuthToken } from '../utils/api'
 
 const AuthContext = createContext(null)
 
 // Create a local axios instance for auth actions to avoid request/response interceptors recursion loop
 const authApi = axios.create({
   baseURL: '/api',
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json'
   }
@@ -14,13 +14,7 @@ const authApi = axios.create({
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
-  const [accessToken, setAccessToken] = useState(null)
   const [loading, setLoading] = useState(true)
-
-  // Keep API bearer token utility in sync with context access token
-  useEffect(() => {
-    setAuthToken(accessToken)
-  }, [accessToken])
 
   const logout = useCallback(async () => {
     try {
@@ -28,7 +22,6 @@ export function AuthProvider({ children }) {
     } catch (err) {
       console.error('Logout request failed:', err)
     } finally {
-      setAccessToken(null)
       setUser(null)
     }
   }, [])
@@ -37,48 +30,43 @@ export function AuthProvider({ children }) {
     try {
       const res = await authApi.post('/auth/refresh')
       if (res.data && res.data.success) {
-        const token = res.data.accessToken
-        setAccessToken(token)
-
-        // Fetch user profile using the new token
-        const meRes = await authApi.get('/auth/me', {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        })
+        // Fetch user profile using the refreshed HttpOnly cookie
+        const meRes = await authApi.get('/auth/me')
         if (meRes.data && meRes.data.success) {
           setUser(meRes.data.user)
-          return token
+          return true
         }
       }
     } catch (err) {
-      // Silent refresh failed, clear tokens (expected if cookie expired/absent)
-      setAccessToken(null)
       setUser(null)
     }
-    return null
+    return false
   }, [])
 
-  // On mount: attempt initial silent refresh
+  // On mount: attempt initial silent refresh once
   useEffect(() => {
+    let isMounted = true
     const initAuth = async () => {
       await silentRefresh()
-      setLoading(false)
+      if (isMounted) {
+        setLoading(false)
+      }
     }
     initAuth()
-  }, [silentRefresh])
+    return () => { isMounted = false }
+  }, [])
 
-  // Set up token refresh timer (every 50 minutes)
+  // Set up token refresh timer (every 10 minutes before 15-minute cookie expiration)
   useEffect(() => {
-    if (!accessToken) return
+    if (!user) return
 
     const interval = setInterval(async () => {
-      console.log('[AuthContext] Refreshing token automatically...')
+      console.log('[AuthContext] Refreshing session cookie automatically...')
       await silentRefresh()
-    }, 50 * 60 * 1000) // 50 minutes
+    }, 10 * 60 * 1000)
 
     return () => clearInterval(interval)
-  }, [accessToken, silentRefresh])
+  }, [user, silentRefresh])
 
   const login = async (email, password) => {
     try {
@@ -87,7 +75,6 @@ export function AuthProvider({ children }) {
         if (res.data.requiresSetup) {
           return { success: true, requiresSetup: true, setupToken: res.data.setupToken }
         }
-        setAccessToken(res.data.accessToken)
         setUser(res.data.user)
         return { success: true }
       }
@@ -98,14 +85,16 @@ export function AuthProvider({ children }) {
     }
   }
 
-  const completeSetup = (token, userObj) => {
-    setAccessToken(token)
-    setUser(userObj)
+  const completeSetup = (_token, userObj) => {
+    if (userObj) {
+      setUser(userObj)
+    } else {
+      silentRefresh()
+    }
   }
 
   const value = {
     user,
-    accessToken,
     loading,
     login,
     logout,

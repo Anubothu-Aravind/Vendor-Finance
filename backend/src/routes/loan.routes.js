@@ -13,6 +13,7 @@ router.route('/')
 
 router.get('/repayments', loanController.getAllRepayments)
 router.get('/repayments/all', loanController.getAllRepayments)
+router.get('/repayments/:id', loanController.getRepaymentById)
 
 router.route('/:id')
   .get(loanController.getLoanById)

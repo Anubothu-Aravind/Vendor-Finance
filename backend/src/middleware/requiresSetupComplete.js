@@ -7,11 +7,17 @@ const bypassPaths = [
   '/api/auth/login',
   '/api/auth/setup',
   '/api/auth/refresh',
-  '/api/auth/logout'
+  '/api/auth/logout',
+  '/api/events'
 ]
 
 module.exports = async (req, res, next) => {
   try {
+    // Only intercept API calls
+    if (!req.path.startsWith('/api')) {
+      return next()
+    }
+
     const isBypassed = bypassPaths.some(path => req.path.startsWith(path))
     if (isBypassed) {
       return next()

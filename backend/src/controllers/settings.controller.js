@@ -1,14 +1,90 @@
 const Settings = require('../models/Settings')
+const COMPLETION_RULES = require('../config/profileCompletionRules')
+const jobQueue = require('../utils/jobQueue')
+
+/**
+ * Compute a profile completion score from a Settings document.
+ * Weights and field lists are driven by profileCompletionRules.js — not hardcoded here.
+ *
+ * @param {object} settings  Mongoose Settings document (or plain object)
+ * @returns {{ score: number, missing: string[] }}
+ */
+function computeCompletion(settings) {
+  const { requiredWeight, optionalWeight, requiredFields, optionalFields } = COMPLETION_RULES
+  const missing = []
+  let requiredFilled = 0
+  let optionalFilled = 0
+
+  for (const field of requiredFields) {
+    const val = settings[field]
+    if (val && String(val).trim()) {
+      requiredFilled++
+    } else {
+      missing.push(field)
+    }
+  }
+
+  for (const field of optionalFields) {
+    const val = settings[field]
+    if (val && String(val).trim()) optionalFilled++
+  }
+
+  const score = Math.round(
+    (requiredFilled / requiredFields.length) * requiredWeight +
+    (optionalFilled / optionalFields.length) * optionalWeight
+  )
+
+  return { score, missing }
+}
+
+const User = require('../models/User')
 
 exports.getProfile = async (req, res, next) => {
   try {
     let settings = await Settings.findOne()
     if (!settings) {
-      // Create default settings if none exist
       settings = new Settings()
       await settings.save()
     }
-    res.status(200).json({ success: true, data: settings })
+
+    let needsSave = false
+    if (!settings.paymentModes || settings.paymentModes.length === 0) {
+      settings.paymentModes = [
+        { name: 'Bank Transfer', enabled: true },
+        { name: 'Cheque', enabled: true },
+        { name: 'Cash', enabled: true },
+        { name: 'UPI', enabled: true },
+        { name: 'NEFT / RTGS', enabled: true }
+      ]
+      needsSave = true
+    }
+
+    if (!settings.banks || settings.banks.length === 0) {
+      settings.banks = ['SBI', 'HDFC Bank', 'ICICI Bank', 'Axis Bank', 'PNB', 'Kotak Bank']
+      needsSave = true
+    }
+
+    if (needsSave) {
+      await settings.save()
+    }
+
+    const dbUsers = await User.find().select('-passwordHash')
+    const formattedUsers = dbUsers.map(u => ({
+      id: u._id,
+      name: u.name,
+      email: u.email,
+      role: u.role,
+      status: u.status
+    }))
+
+    const settingsObj = settings.toObject()
+    settingsObj.usersList = formattedUsers
+
+    res.status(200).json({
+      success: true,
+      data: settingsObj,
+      completion: computeCompletion(settings),
+    })
   } catch (error) {
     next(error)
   }
@@ -51,6 +127,10 @@ exports.updateProfile = async (req, res, next) => {
       $set.usersList = usersList.map(({ name, email: e, role, status }) => ({ name, email: e, role, status }))
     }
 
+    // Capture old logo URL before the update so we can queue its deletion
+    const existing = await Settings.findOne().select('logo').lean()
+    const oldLogoUrl = existing?.logo || ''
+
     // Use findOneAndUpdate with $set — avoids re-validating the entire document
     // and prevents cast errors on untouched subdocument arrays
     const settings = await Settings.findOneAndUpdate(
@@ -58,6 +138,13 @@ exports.updateProfile = async (req, res, next) => {
       { $set },
       { new: true, upsert: true, runValidators: false }
     )
+
+    // If the logo changed and there was a previous file, queue it for deletion.
+    // Deletion happens AFTER the DB write succeeds — old file is never removed
+    // if the save fails.
+    if (logo !== undefined && oldLogoUrl && oldLogoUrl !== logo) {
+      jobQueue.enqueueDeleteLogo({ logoUrl: oldLogoUrl })
+    }
 
     res.status(200).json({ success: true, data: settings })
   } catch (error) {
@@ -165,16 +252,33 @@ exports.uploadLogo = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'No file uploaded' })
     }
 
-    const { buffer, originalname } = req.file
+    const { buffer, originalname, mimetype, size } = req.file
 
-    // 1. Validate file extension whitelisting
-    const ext = path.extname(originalname).toLowerCase()
-    if (!['.jpg', '.jpeg', '.png'].includes(ext)) {
-      return res.status(400).json({ success: false, message: 'Only .jpg, .jpeg, and .png files are allowed' })
+    // 1. Validate max file size: 2MB — reject with 400 if exceeded
+    if (size > 2 * 1024 * 1024) {
+      return res.status(400).json({ success: false, message: 'File size exceeds 2MB limit' })
     }
 
-    // 2. Validate magic numbers (file contents verification)
-    const headerHex = buffer.slice(0, 8).toString('hex').toUpperCase()
+    // 2. Validate allowed mime types: image/jpeg, image/png, image/webp only
+    const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp']
+    if (!allowedMimeTypes.includes(mimetype)) {
+      return res.status(400).json({ success: false, message: 'Only image/jpeg, image/png, and image/webp files are allowed' })
+    }
+
+    // Determine extension from mimetype or extension
+    const extMap = {
+      'image/jpeg': '.jpg',
+      'image/png': '.png',
+      'image/webp': '.webp'
+    }
+    let ext = path.extname(originalname).toLowerCase()
+    if (!['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) {
+      ext = extMap[mimetype] || '.png'
+    }
+    if (ext === '.jpeg') ext = '.jpg'
+
+    // 3. Validate magic numbers (file contents verification)
+    const headerHex = buffer.slice(0, 12).toString('hex').toUpperCase()
     let isValidImage = false
     
     // PNG Check: 89504E470D0A1A0A
@@ -185,15 +289,18 @@ exports.uploadLogo = async (req, res, next) => {
     else if (headerHex.startsWith('FFD8FF')) {
       isValidImage = true
     }
+    // WEBP Check: RIFF (52494646) ... WEBP (57454250)
+    else if (headerHex.startsWith('52494646') && headerHex.includes('57454250')) {
+      isValidImage = true
+    }
 
     if (!isValidImage) {
       return res.status(400).json({ success: false, message: 'Invalid file format. File contents do not match extension.' })
     }
 
-    // 3. Rename uploaded files using random hashed names and path traversal protection
+    // 4. Strip original filename completely and generate a safe random filename
     const hash = crypto.randomBytes(16).toString('hex')
-    const safeBaseName = path.basename(originalname, ext).replace(/[^a-zA-Z0-9_-]/g, '')
-    const finalFilename = `${hash}_${safeBaseName}${ext}`
+    const finalFilename = `logo_${Date.now()}_${hash}${ext}`
     
     // Check and create target directory
     const targetDir = path.join(__dirname, '../../upload/user')
@@ -202,16 +309,18 @@ exports.uploadLogo = async (req, res, next) => {
     }
     const finalFilePath = path.join(targetDir, finalFilename)
 
-    // 4. Process image using sharp: strip EXIF metadata and re-encode to clean payload
+    // 5. Process image using sharp: strip EXIF metadata and re-encode to clean payload
     let imageProcessor = sharp(buffer)
     
     if (ext === '.png') {
       await imageProcessor.png({ compressionLevel: 8 }).toFile(finalFilePath)
+    } else if (ext === '.webp') {
+      await imageProcessor.webp({ quality: 85 }).toFile(finalFilePath)
     } else {
       await imageProcessor.jpeg({ quality: 85 }).toFile(finalFilePath)
     }
 
-    // 5. Construct public URL to serve static content
+    // 6. Construct public URL to serve static content
     const fileUrl = `/uploads/user/${finalFilename}`
 
     res.status(200).json({ success: true, url: fileUrl })
@@ -350,6 +459,34 @@ exports.restoreBackup = async (req, res, next) => {
     }
 
     res.status(200).json({ success: true, message: 'Data restored successfully' })
+  } catch (error) {
+    next(error)
+  }
+}
+
+const InvoiceTemplate = require('../models/InvoiceTemplate.model')
+
+exports.getInvoiceTemplate = async (req, res, next) => {
+  try {
+    let doc = await InvoiceTemplate.findOne()
+    if (!doc) {
+      doc = await InvoiceTemplate.create({})
+    }
+    res.json({ success: true, data: doc })
+  } catch (error) {
+    next(error)
+  }
+}
+
+exports.saveInvoiceTemplate = async (req, res, next) => {
+  try {
+    const data = req.body
+    const updated = await InvoiceTemplate.findOneAndUpdate(
+      {},
+      { $set: data },
+      { new: true, upsert: true, runValidators: true }
+    )
+    res.json({ success: true, data: updated, message: 'Invoice template settings saved successfully' })
   } catch (error) {
     next(error)
   }

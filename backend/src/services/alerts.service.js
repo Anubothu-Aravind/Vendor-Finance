@@ -19,17 +19,26 @@ class AlertsService {
       }).populate('vendorId financierId')
 
       bouncedCheques.forEach(cheque => {
+        const party = cheque.vendorId || cheque.financierId
         alerts.push({
           id: `cheque-${cheque._id}`,
           type: 'error',
           title: 'Cheque Bounced',
-          description: `Cheque #${cheque.chequeNumber} for ${cheque.partyName} (Amt: ₹${cheque.amount.toLocaleString('en-IN')}) bounced. Reason: ${cheque.bounceReason || 'Unspecified'}`,
+          description: `Cheque #${cheque.chequeNumber} for ${cheque.partyName} bounced. Reason: ${cheque.bounceReason || 'Unspecified'}`,
           date: cheque.bounceDate || cheque.updatedAt,
-          metadata: { 
-            type: 'cheque', 
+          metadata: {
+            type: 'cheque',
             id: cheque._id,
+            chequeId: cheque._id.toString(),
             partyName: cheque.partyName,
             amount: cheque.amount,
+            chequeNumber: cheque.chequeNumber,
+            chequeDate: cheque.chequeDate,
+            bounceDate: cheque.bounceDate || cheque.updatedAt,
+            bounceReason: cheque.bounceReason || 'Not specified',
+            chequeType: cheque.type,
+            partyGstin: party ? party.gstin || null : null,
+            partyAddress: party ? party.address || null : null,
             date: cheque.bounceDate || cheque.updatedAt
           }
         })
@@ -45,19 +54,21 @@ class AlertsService {
 
       criticalOverdueBills.forEach(bill => {
         const vendorName = bill.vendorId ? bill.vendorId.name : 'Unknown Vendor'
-        const daysOverdue = Math.floor((now.getTime() - bill.dueDate.getTime()) / (1000 * 60 * 60 * 24))
+        const billDue = bill.dueDate ? new Date(bill.dueDate) : null
+        const daysOverdue = billDue && !isNaN(billDue.getTime()) ? Math.floor((now.getTime() - billDue.getTime()) / (1000 * 60 * 60 * 24)) : 0
+        const amtStr = (bill.outstandingAmount || 0).toLocaleString('en-IN')
         alerts.push({
           id: `bill-${bill._id}`,
           type: 'error',
           title: 'Critical Overdue Bill',
-          description: `Bill #${bill.billNumber} from ${vendorName} is ${daysOverdue} days overdue (Outstanding: ₹${bill.outstandingAmount.toLocaleString('en-IN')})`,
-          date: bill.dueDate,
+          description: `Bill #${bill.billNumber || '—'} from ${vendorName} is ${daysOverdue} days overdue (Outstanding: ₹${amtStr})`,
+          date: bill.dueDate || now,
           metadata: { 
             type: 'bill', 
             id: bill._id,
             partyName: vendorName,
-            amount: bill.outstandingAmount,
-            date: bill.dueDate
+            amount: bill.outstandingAmount || 0,
+            date: bill.dueDate || now
           }
         })
       })
@@ -72,19 +83,21 @@ class AlertsService {
 
       maturingLoans.forEach(loan => {
         const financierName = loan.financierId ? loan.financierId.name : 'Unknown Financier'
-        const daysToMaturity = Math.ceil((loan.maturityDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+        const matDate = loan.maturityDate ? new Date(loan.maturityDate) : null
+        const daysToMaturity = matDate && !isNaN(matDate.getTime()) ? Math.ceil((matDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)) : 0
+        const amtStr = (loan.outstandingPrincipal || 0).toLocaleString('en-IN')
         alerts.push({
           id: `loan-${loan._id}`,
           type: 'warning',
           title: 'Loan Maturing Soon',
-          description: `Loan Ref: ${loan.loanReference} from ${financierName} matures in ${daysToMaturity} days (Outstanding Principal: ₹${loan.outstandingPrincipal.toLocaleString('en-IN')})`,
-          date: loan.maturityDate,
+          description: `Loan Ref: ${loan.loanReference || '—'} from ${financierName} matures in ${daysToMaturity} days (Outstanding Principal: ₹${amtStr})`,
+          date: loan.maturityDate || now,
           metadata: { 
             type: 'loan', 
             id: loan._id,
             partyName: financierName,
-            amount: loan.outstandingPrincipal,
-            date: loan.maturityDate
+            amount: loan.outstandingPrincipal || 0,
+            date: loan.maturityDate || now
           }
         })
       })

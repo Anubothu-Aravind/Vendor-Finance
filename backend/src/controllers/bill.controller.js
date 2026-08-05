@@ -83,7 +83,7 @@ exports.getBills = async (req, res, next) => {
 exports.getBillById = async (req, res, next) => {
   try {
     const bill = await Bill.findOne({ _id: req.params.id, isDeleted: false })
-      .populate('vendorId', 'name contactPerson email phone')
+      .populate('vendorId', 'name contactPerson email phone address gstin')
 
     if (!bill) {
       return res.status(404).json({ success: false, message: 'Bill not found' })

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Download } from 'lucide-react'
+import { Download, Search, X } from 'lucide-react'
+import PrintPreviewModal from '../components/PrintPreviewModal'
 import * as XLSX from 'xlsx'
 import DropdownSelect from '../components/ui/DropdownSelect'
 import CustomDatePicker from '../components/ui/CustomDatePicker'
@@ -9,6 +10,8 @@ import EmptyState from '../components/ui/EmptyState'
 import Badge from '../components/ui/Badge'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Skeleton, SkeletonTableRow } from '../components/ui/Skeleton'
+import { usePagination } from '../hooks/usePagination'
+import Pagination from '../components/ui/Pagination'
 import api from '../utils/api'
 import { useToast } from '../hooks/useToast'
 
@@ -50,12 +53,14 @@ const formatDate = (iso) => {
 export function RunningLedger() {
   const toast = useToast()
   const [searchParams, setSearchParams] = useSearchParams()
+  const [printDoc, setPrintDoc] = useState(null)
   const [vendors, setVendors] = useState([])
   const [financiers, setFinanciers] = useState([])
   const [partiesLoading, setPartiesLoading] = useState(true)
   const [party, setParty] = useState('')
   const [partyType, setPartyType] = useState('') // 'vendor' | 'financier'
   const [partyId, setPartyId] = useState('')
+  const [search, setSearch] = useState('')
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
   const [ledger, setLedger] = useState([])
@@ -171,6 +176,7 @@ export function RunningLedger() {
           runningBal = t.runningBalance !== undefined ? t.runningBalance : (runningBal + debit - credit)
           return {
             id: t._id,
+            referenceId: t.referenceId,
             rawDate: t.date, // keep ISO for filtering
             date: formatDate(t.date),
             ref: t.referenceId?.toString?.()?.slice(-8)?.toUpperCase() || '—',
@@ -214,8 +220,16 @@ export function RunningLedger() {
 
 
 
-  // Filter by date range using the raw ISO dates
+  // Filter by date range and search term
   const filteredLedger = ledger.filter(row => {
+    if (search) {
+      const s = search.toLowerCase()
+      const matchSearch =
+        (row.type || '').toLowerCase().includes(s) ||
+        (row.ref || '').toLowerCase().includes(s) ||
+        (row.description || '').toLowerCase().includes(s)
+      if (!matchSearch) return false
+    }
     if (!fromDate && !toDate) return true
     const rowDate = row.rawDate ? new Date(row.rawDate) : null
     if (!rowDate) return true
@@ -240,7 +254,19 @@ export function RunningLedger() {
       return
     }
     try {
-      const partyName = party ? party.split('|')[2] || 'Ledger' : 'Ledger'
+      const rawPartyName = party ? party.split('|')[2] || 'Statement' : 'Statement'
+      const cleanParty = rawPartyName.replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '')
+      const todayStr = new Date().toISOString().split('T')[0]
+      let dateSegment = todayStr
+      if (startDate && endDate) {
+        dateSegment = `${startDate}_to_${endDate}`
+      } else if (startDate) {
+        dateSegment = `from_${startDate}`
+      } else if (endDate) {
+        dateSegment = `until_${endDate}`
+      }
+      const fileName = `Ledger_${cleanParty}_${dateSegment}.xlsx`
+
       const exportData = filteredLedger.map(row => ({
         Date: row.date,
         Reference: row.ref,
@@ -250,6 +276,7 @@ export function RunningLedger() {
         'Credit (Payment)': row.credit > 0 ? row.credit : '',
         'Running Balance': row.balance,
       }))
+
       // Add totals row
       exportData.push({
         Date: 'TOTALS',
@@ -260,10 +287,11 @@ export function RunningLedger() {
         'Credit (Payment)': filteredLedger.reduce((s, r) => s + r.credit, 0),
         'Running Balance': filteredLedger[filteredLedger.length - 1]?.balance ?? 0,
       })
+
       const ws = XLSX.utils.json_to_sheet(exportData)
       const wb = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(wb, ws, 'Ledger')
-      XLSX.writeFile(wb, `${partyName}_ledger.xlsx`)
+      XLSX.writeFile(wb, fileName)
       toast('Ledger exported successfully')
     } catch (err) {
       toast('Export failed: ' + err.message, 'error')
@@ -273,6 +301,16 @@ export function RunningLedger() {
   const totalDebit = filteredLedger.reduce((s, r) => s + r.debit, 0)
   const totalCredit = filteredLedger.reduce((s, r) => s + r.credit, 0)
   const finalBalance = filteredLedger.length > 0 ? filteredLedger[filteredLedger.length - 1].balance : 0
+
+  const tableContainerRef = React.useRef(null)
+
+  const pagination = usePagination({
+    items: filteredLedger,
+    moduleKey: 'ledger',
+    initialPageSize: 20,
+    filterDependencies: [party, fromDate, toDate, search],
+    containerRef: tableContainerRef
+  })
 
   return (
     <div className="space-y-6">
@@ -293,6 +331,21 @@ export function RunningLedger() {
       <div className="rounded-xl" style={{ background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)' }}>
         {/* Filters Bar */}
         <div className="px-5 py-3 flex items-center space-x-3 flex-wrap gap-y-2" style={{ borderBottom: '1px solid var(--color-border)' }}>
+          <div className="relative w-56">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input type="text" placeholder="Search ledger..." value={search} onChange={e => setSearch(e.target.value)}
+              className="w-full pl-9 pr-8 py-1.5 text-sm border border-gray-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary" />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors p-0.5"
+                title="Clear search"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
           <div className="flex items-center space-x-2">
             <span className="text-sm font-medium" style={{ color: 'var(--color-text-muted)' }}>Party</span>
             <div className="w-64">
@@ -386,79 +439,99 @@ export function RunningLedger() {
             />
           </div>
         ) : (
-          <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider border-b border-gray-100 dark:border-slate-700">
-                <th className="text-left px-5 py-3">DATE</th>
-                <th className="text-left px-5 py-3">REFERENCE</th>
-                <th className="text-left px-5 py-3">TYPE</th>
-                <th className="text-left px-5 py-3">DESCRIPTION</th>
-                <th className="text-right px-5 py-3">DEBIT (LIABILITY)</th>
-                <th className="text-right px-5 py-3">CREDIT (PAYMENT)</th>
-                <th className="text-right px-5 py-3">BALANCE</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50 dark:divide-slate-700/40">
-              {filteredLedger.map((row, i) => (
-                <motion.tr 
-                  key={row.id} 
-                  initial={{ opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: Math.min(i * 0.03, 0.3), duration: 0.2 }}
-                  className="hover:bg-gray-50 dark:hover:bg-slate-700/20 transition-colors"
-                >
-                  <td className="px-5 py-3.5 text-sm text-gray-700 dark:text-gray-300">{row.date}</td>
-                  <td className="px-5 py-3.5 text-xs font-mono text-gray-500 dark:text-gray-400">{row.ref}</td>
-                  <td className="px-5 py-3.5">
-                    <Badge variant={
-                      row.rawType === 'BILL_PAID' || row.rawType === 'LOAN_REPAYMENT' || row.rawType === 'REPAYMENT_PRINCIPAL' || row.rawType === 'REPAYMENT_INTEREST' ? 'success' : 'info'
-                    }>
-                      {toTitleCase(row.type)}
-                    </Badge>
-                  </td>
-                  <td className="px-5 py-3.5 text-sm text-gray-700 dark:text-gray-300">{toTitleCase(row.description)}</td>
-                  <td className="px-5 py-3.5 text-right tabular-nums">
-                    {row.debit > 0
-                      ? <span className="text-sm font-semibold text-red-500">₹{fmt(row.debit)}</span>
-                      : <span className="text-sm text-gray-300 dark:text-gray-600">—</span>
-                    }
-                  </td>
-                  <td className="px-5 py-3.5 text-right tabular-nums">
-                    {row.credit > 0
-                      ? <span className="text-sm font-semibold text-green-600">₹{fmt(row.credit)}</span>
-                      : <span className="text-sm text-gray-300 dark:text-gray-600">—</span>
-                    }
-                  </td>
-                  <td className="px-5 py-3.5 text-right tabular-nums">
-                    <span className={`text-sm font-bold ${row.balance >= 0 ? 'text-gray-900 dark:text-gray-100' : 'text-red-500'}`}>
-                      {row.balance < 0 ? `-₹${fmt(Math.abs(row.balance))}` : `₹${fmt(row.balance)}`}
-                    </span>
-                  </td>
-                </motion.tr>
-              ))}
-            </tbody>
-            {/* Totals Row */}
-            <tfoot>
-              <tr className="border-t-2 border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-700/50">
-                <td colSpan={4} className="px-5 py-3 text-sm font-bold text-gray-700 dark:text-gray-200 uppercase tracking-wide">TOTALS</td>
-                <td className="px-5 py-3 text-right tabular-nums">
-                  <span className="text-sm font-bold text-red-500">₹{fmt(totalDebit)}</span>
-                </td>
-                <td className="px-5 py-3 text-right tabular-nums">
-                  <span className="text-sm font-bold text-green-600">₹{fmt(totalCredit)}</span>
-                </td>
-                <td className="px-5 py-3 text-right tabular-nums">
-                  <span className={`text-sm font-bold ${finalBalance >= 0 ? 'text-gray-900 dark:text-gray-100' : 'text-red-500'}`}>
-                    {finalBalance < 0 ? `-₹${fmt(Math.abs(finalBalance))}` : `₹${fmt(finalBalance)}`}
-                  </span>
-                </td>
-              </tr>
-            </tfoot>
-          </table>
-          </div>
+          <>
+            <div ref={tableContainerRef} className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider border-b border-gray-100 dark:border-slate-700">
+                    <th className="text-left px-5 py-3">DATE</th>
+                    <th className="text-left px-5 py-3">REFERENCE</th>
+                    <th className="text-left px-5 py-3">TYPE</th>
+                    <th className="text-left px-5 py-3">DESCRIPTION</th>
+                    <th className="text-right px-5 py-3">DEBIT (LIABILITY)</th>
+                    <th className="text-right px-5 py-3">CREDIT (PAYMENT)</th>
+                    <th className="text-right px-5 py-3">BALANCE</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50 dark:divide-slate-700/40">
+                  {pagination.paginatedItems.map((row, i) => (
+                    <motion.tr 
+                      key={row.id} 
+                      initial={{ opacity: 0, y: 4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: Math.min(i * 0.03, 0.3), duration: 0.2 }}
+                      onClick={() => {
+                        if (!row.referenceId) return
+                        let docType = 'bill'
+                        if (row.rawType === 'BILL_POSTED') docType = 'bill'
+                        else if (row.rawType === 'BILL_PAID') docType = 'payment'
+                        else if (row.rawType === 'LOAN_DRAWDOWN') docType = 'loan'
+                        else docType = 'repayment'
+                        setPrintDoc({ type: docType, id: row.referenceId })
+                      }}
+                      className={`transition-colors ${row.referenceId ? 'cursor-pointer hover:bg-indigo-50/60 dark:hover:bg-indigo-900/10' : 'hover:bg-gray-50 dark:hover:bg-slate-700/20'}`}
+                    >
+                      <td className="px-5 py-3.5 text-sm text-gray-700 dark:text-gray-300">{row.date}</td>
+                      <td className="px-5 py-3.5 text-xs font-mono font-semibold text-indigo-600 dark:text-indigo-400">
+                        {row.ref}
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <Badge variant={
+                          row.rawType === 'BILL_PAID' || row.rawType === 'LOAN_REPAYMENT' || row.rawType === 'REPAYMENT_PRINCIPAL' || row.rawType === 'REPAYMENT_INTEREST' ? 'success' : 'info'
+                        }>
+                          {toTitleCase(row.type)}
+                        </Badge>
+                      </td>
+                      <td className="px-5 py-3.5 text-sm text-gray-700 dark:text-gray-300">{toTitleCase(row.description)}</td>
+                      <td className="px-5 py-3.5 text-right tabular-nums">
+                        {row.debit > 0
+                          ? <span className="text-sm font-semibold text-red-500">₹{fmt(row.debit)}</span>
+                          : <span className="text-sm text-gray-300 dark:text-gray-600">—</span>
+                        }
+                      </td>
+                      <td className="px-5 py-3.5 text-right tabular-nums">
+                        {row.credit > 0
+                          ? <span className="text-sm font-semibold text-green-600">₹{fmt(row.credit)}</span>
+                          : <span className="text-sm text-gray-300 dark:text-gray-600">—</span>
+                        }
+                      </td>
+                      <td className="px-5 py-3.5 text-right tabular-nums">
+                        <span className={`text-sm font-bold ${row.balance >= 0 ? 'text-gray-900 dark:text-gray-100' : 'text-red-500'}`}>
+                          {row.balance < 0 ? `-₹${fmt(Math.abs(row.balance))}` : `₹${fmt(row.balance)}`}
+                        </span>
+                      </td>
+                    </motion.tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-700/50">
+                    <td colSpan={4} className="px-5 py-3 text-sm font-bold text-gray-700 dark:text-gray-200 uppercase tracking-wide">TOTALS</td>
+                    <td className="px-5 py-3 text-right tabular-nums">
+                      <span className="text-sm font-bold text-red-500">₹{fmt(totalDebit)}</span>
+                    </td>
+                    <td className="px-5 py-3 text-right tabular-nums">
+                      <span className="text-sm font-bold text-green-600">₹{fmt(totalCredit)}</span>
+                    </td>
+                    <td className="px-5 py-3 text-right tabular-nums">
+                      <span className={`text-sm font-bold ${finalBalance >= 0 ? 'text-gray-900 dark:text-gray-100' : 'text-red-500'}`}>
+                        {finalBalance < 0 ? `-₹${fmt(Math.abs(finalBalance))}` : `₹${fmt(finalBalance)}`}
+                      </span>
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+            <Pagination {...pagination} isLoading={ledgerLoading} />
+          </>
         )}
       </div>
+      {printDoc && (
+        <PrintPreviewModal
+          type={printDoc.type}
+          id={printDoc.id}
+          onClose={() => setPrintDoc(null)}
+        />
+      )}
     </div>
   )
 }

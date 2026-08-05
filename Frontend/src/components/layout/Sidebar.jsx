@@ -1,68 +1,52 @@
 import React from 'react'
 import { NavLink } from 'react-router-dom'
-import {
-  LayoutDashboard,
-  Users,
-  FileText,
-  Building2,
-  Coins,
-  CreditCard,
-  History,
-  CheckSquare,
-  BookOpen,
-  ScrollText,
-  BarChart2,
-  Settings,
-  LogOut,
-  ChevronLeft,
-  ChevronRight,
-} from 'lucide-react'
 import { useAuth } from '../../hooks/AuthContext'
 import { usePreferences } from '../../hooks/usePreferences'
 import { useDirtyStateContext } from '../../context/DirtyStateContext'
+import { useCompanyProfile } from '../../context/ProfileContext'
 
 const navGroups = [
   {
-    title: 'OVERVIEW',
+    title: 'Overview',
     items: [
-      { path: '/', label: 'Dashboard', icon: LayoutDashboard },
+      { path: '/', label: 'Dashboard' },
     ]
   },
   {
-    title: 'VENDORS',
+    title: 'Vendors',
     items: [
-      { path: '/vendors', label: 'Vendors', icon: Users },
-      { path: '/bills', label: 'Purchase bills', icon: FileText },
+      { path: '/vendors', label: 'Vendors' },
+      { path: '/bills', label: 'Purchase Bills' },
     ]
   },
   {
-    title: 'FINANCE',
+    title: 'Finance',
     items: [
-      { path: '/financiers', label: 'Finance', icon: Building2 },
-      { path: '/loans', label: 'Loans', icon: Coins },
+      { path: '/financiers', label: 'Finance' },
+      { path: '/loans', label: 'Loans' },
     ]
   },
   {
-    title: 'PAYMENTS',
+    title: 'Payments',
     items: [
-      { path: '/payments', label: 'Vendor Payments', icon: CreditCard },
-      { path: '/financier-payments', label: 'Fin. Repayments', icon: History },
-      { path: '/cheques', label: 'Cheques', icon: CheckSquare },
+      { path: '/payments', label: 'Vendor Payments' },
+      { path: '/financier-payments', label: 'Fin. Repayments' },
+      { path: '/cheques', label: 'Cheques' },
     ]
   },
   {
-    title: 'REPORTING',
+    title: 'Reporting',
     items: [
-      { path: '/outstanding', label: 'Outstanding', icon: BookOpen },
-      { path: '/ledger', label: 'Ledger', icon: ScrollText },
-      { path: '/transaction-history', label: 'Transactions', icon: FileText },
-      { path: '/reports', label: 'Reports', icon: BarChart2 },
+      { path: '/outstanding', label: 'Outstanding' },
+      { path: '/ledger', label: 'Ledger' },
+      { path: '/transaction-history', label: 'Transactions' },
+      { path: '/reports', label: 'Reports' },
     ]
   },
   {
-    title: 'SYSTEM',
+    title: 'System',
     items: [
-      { path: '/settings', label: 'Settings', icon: Settings },
+      { path: '/settings', label: 'Settings' },
     ]
   }
 ]
@@ -71,147 +55,183 @@ export function Sidebar({ onClose }) {
   const { user, logout } = useAuth()
   const { confirmNavigation } = useDirtyStateContext()
   const { sidebarCollapsed, setSidebarCollapsed } = usePreferences()
+  const { companyProfile } = useCompanyProfile()
   const initials = (user?.name || 'AU').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
+  const brandInitial = (companyProfile?.businessName || 'V')[0].toUpperCase()
 
   return (
-    <aside 
-      style={{ borderRight: '1px solid rgba(255,255,255,0.07)' }}
-      className={`sidebar-bg flex flex-col min-h-screen h-full sticky top-0 shrink-0 transition-all duration-200 ${sidebarCollapsed ? 'w-16' : 'w-56'}`}
+    <aside
+      className="sidebar-bg flex flex-col min-h-screen h-full sticky top-0 shrink-0 transition-all duration-300 w-56"
+      style={{ borderRight: '1px solid rgba(255,255,255,0.06)', width: sidebarCollapsed ? '64px' : '220px' }}
     >
       {/* Brand Header */}
-      <div style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }} className={`h-14 flex items-center shrink-0 ${sidebarCollapsed ? 'justify-center' : 'px-5'}`}>
+      <div
+        className={`h-16 flex items-center shrink-0 ${sidebarCollapsed ? 'justify-center px-0' : 'px-5 justify-between'}`}
+        style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}
+      >
         {sidebarCollapsed ? (
-          <div className="flex flex-col items-center justify-center space-y-1">
-            <div 
-              onClick={() => setSidebarCollapsed(false)}
-              className="h-8 w-8 rounded-lg flex items-center justify-center font-bold text-sm nav-logo cursor-pointer hover:opacity-80 transition-opacity"
-              style={{ background: 'var(--gradient-primary)', color: '#fff' }}
-              title="Expand Sidebar"
-            >
-              V
-            </div>
+          <div
+            onClick={() => setSidebarCollapsed(false)}
+            className="h-9 w-9 rounded-xl flex items-center justify-center font-black text-sm cursor-pointer hover:opacity-80 transition-opacity overflow-hidden"
+            style={{ background: companyProfile?.logo ? '#fff' : 'var(--gradient-primary)', color: '#fff', fontFamily: 'var(--font-display)' }}
+            title="Expand Sidebar"
+          >
+            {companyProfile?.logo ? (
+              <img src={companyProfile.logo} alt="Logo" className="h-full w-full object-contain p-0.5" />
+            ) : (
+              brandInitial
+            )}
           </div>
         ) : (
-          <div className="flex items-center justify-between w-full">
-            <div className="flex items-center space-x-2.5">
-              <div className="h-8 w-8 rounded-lg flex items-center justify-center font-bold text-sm nav-logo"
-                style={{ background: 'var(--gradient-primary)', color: '#fff' }}>
-                V
+          <>
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div
+                className="h-9 w-9 rounded-xl flex items-center justify-center font-black text-sm shrink-0 overflow-hidden"
+                style={{ background: companyProfile?.logo ? '#fff' : 'var(--gradient-primary)', color: '#fff', fontFamily: 'var(--font-display)' }}
+              >
+                {companyProfile?.logo ? (
+                  <img src={companyProfile.logo} alt="Logo" className="h-full w-full object-contain p-0.5" />
+                ) : (
+                  brandInitial
+                )}
               </div>
-              <span className="font-bold tracking-wide text-sm nav-logo" style={{ color: '#fff', fontFamily: 'var(--font-display)' }}>VASTRAMS</span>
+              <div className="truncate">
+                <p className="text-[13px] font-black tracking-wider leading-none truncate" style={{ color: '#fff', fontFamily: 'var(--font-display)', letterSpacing: '0.08em' }}>
+                  {(companyProfile?.businessName || 'VASTRAMS').toUpperCase()}
+                </p>
+                <p className="text-[9px] font-medium mt-0.5 tracking-wider" style={{ color: 'rgba(255,255,255,0.3)', letterSpacing: '0.12em' }}>
+                  VENDOR FINANCE
+                </p>
+              </div>
             </div>
-            <button 
-              onClick={() => setSidebarCollapsed(true)} 
-              className="p-1 rounded transition-colors"
-              style={{ color: 'rgba(255,255,255,0.35)' }}
-              onMouseEnter={e => e.currentTarget.style.color = 'rgba(255,255,255,0.8)'}
-              onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.35)'}
-              title="Collapse Sidebar"
+            <button
+              onClick={() => setSidebarCollapsed(true)}
+              className="text-[10px] font-medium px-2 py-1 rounded-lg transition-all shrink-0"
+              style={{ color: 'rgba(255,255,255,0.25)', background: 'rgba(255,255,255,0.05)' }}
+              onMouseEnter={e => e.currentTarget.style.color = 'rgba(255,255,255,0.7)'}
+              onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.25)'}
+              title="Collapse"
             >
-              <ChevronLeft size={16} />
+              ‹
             </button>
-          </div>
+          </>
         )}
       </div>
 
-      {/* Navigation List */}
-      <nav className={`flex-1 overflow-y-auto py-4 space-y-5 ${sidebarCollapsed ? 'px-2' : 'px-3'}`}>
+      {/* Navigation */}
+      <nav className={`flex-1 overflow-y-auto py-5 ${sidebarCollapsed ? 'px-2' : 'px-3'}`} style={{ gap: '24px', display: 'flex', flexDirection: 'column' }}>
         {navGroups.map((group, idx) => (
-          <div key={idx} className="space-y-0.5">
+          <div key={idx}>
             {!sidebarCollapsed && (
-              <p className="text-[10px] font-semibold uppercase tracking-widest px-2 pb-1"
-                style={{ color: 'rgba(255,255,255,0.25)' }}>
+              <p
+                className="text-[9.5px] font-bold uppercase px-2 mb-1.5"
+                style={{ color: 'rgba(255,255,255,0.2)', letterSpacing: '0.15em', fontFamily: 'var(--font-display)' }}
+              >
                 {group.title}
               </p>
             )}
-            {group.items.map((item, itemIdx) => (
-              <NavLink
-                key={itemIdx}
-                to={item.path}
-                end={item.path === '/'}
-                onClick={onClose}
-                title={sidebarCollapsed ? item.label : undefined}
-                className={({ isActive }) => [
-                  'flex items-center py-1.5 rounded-lg text-[13px] font-medium transition-all relative',
-                  isActive ? 'sidebar-active-indicator' : '',
-                  sidebarCollapsed ? 'justify-center px-0' : 'pl-3 pr-2.5 space-x-2'
-                ].join(' ')}
-                style={({ isActive }) => ({
-                  background: isActive ? 'rgba(0, 200, 150, 0.13)' : 'transparent',
-                  color: isActive ? '#00C896' : 'rgba(255,255,255,0.5)',
-                })}
-                onMouseEnter={e => {
-                  const isActive = e.currentTarget.getAttribute('aria-current') === 'page'
-                  if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.07)'
-                }}
-                onMouseLeave={e => {
-                  const isActive = e.currentTarget.getAttribute('aria-current') === 'page'
-                  if (!isActive) e.currentTarget.style.background = 'transparent'
-                }}
-              >
-                {({ isActive }) => (
-                  <>
-                    {sidebarCollapsed ? (
-                      <item.icon size={18} style={{ color: isActive ? 'var(--color-primary)' : 'rgba(255,255,255,0.45)', flexShrink: 0 }} />
-                    ) : (
-                      <>
-                        <item.icon size={14} style={{ color: isActive ? 'var(--color-primary)' : 'rgba(255,255,255,0.4)', flexShrink: 0 }} />
-                        <span className="font-medium">{item.label}</span>
-                      </>
-                    )}
-                  </>
-                )}
-              </NavLink>
-            ))}
+            <div className="space-y-0.5">
+              {group.items.map((item, itemIdx) => (
+                <NavLink
+                  key={itemIdx}
+                  to={item.path}
+                  end={item.path === '/'}
+                  onClick={onClose}
+                  title={sidebarCollapsed ? item.label : undefined}
+                  className={({ isActive }) => [
+                    'flex items-center rounded-lg text-[12.5px] font-semibold transition-all duration-150 relative',
+                    isActive ? 'sidebar-active-indicator' : '',
+                    sidebarCollapsed ? 'justify-center h-9 w-full' : 'px-3 py-1.5',
+                  ].join(' ')}
+                  style={({ isActive }) => ({
+                    background: isActive ? 'rgba(0, 200, 150, 0.12)' : 'transparent',
+                    color: isActive ? '#00C896' : 'rgba(255,255,255,0.45)',
+                    fontFamily: 'var(--font-body)',
+                  })}
+                  onMouseEnter={e => {
+                    const isActive = e.currentTarget.getAttribute('aria-current') === 'page'
+                    if (!isActive) {
+                      e.currentTarget.style.background = 'rgba(255,255,255,0.06)'
+                      e.currentTarget.style.color = 'rgba(255,255,255,0.75)'
+                    }
+                  }}
+                  onMouseLeave={e => {
+                    const isActive = e.currentTarget.getAttribute('aria-current') === 'page'
+                    if (!isActive) {
+                      e.currentTarget.style.background = 'transparent'
+                      e.currentTarget.style.color = 'rgba(255,255,255,0.45)'
+                    }
+                  }}
+                >
+                  {sidebarCollapsed ? (
+                    <span className="text-[10px] font-bold" style={{ fontFamily: 'var(--font-display)' }}>
+                      {item.label.slice(0, 2).toUpperCase()}
+                    </span>
+                  ) : (
+                    <span>{item.label}</span>
+                  )}
+                </NavLink>
+              ))}
+            </div>
           </div>
         ))}
       </nav>
 
       {/* Footer User Info */}
-      <div 
-        style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }} 
-        className={`p-4 shrink-0 flex ${sidebarCollapsed ? 'flex-col items-center space-y-3 justify-center' : 'items-center justify-between'}`}
+      <div
+        className={`shrink-0 ${sidebarCollapsed ? 'p-2' : 'p-4'}`}
+        style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}
       >
         {sidebarCollapsed ? (
-          <>
-            <div 
+          <div className="flex flex-col items-center gap-2">
+            <div
               onClick={() => setSidebarCollapsed(false)}
-              className="h-8 w-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0 cursor-pointer hover:opacity-80"
+              className="h-8 w-8 rounded-full flex items-center justify-center font-bold text-xs cursor-pointer hover:opacity-80 transition-opacity"
               style={{ background: 'var(--gradient-primary)', color: '#fff' }}
-              title={`${user?.name || 'Admin User'} (Click to expand)`}
+              title={`${user?.name || 'Admin User'} — Click to expand`}
             >
               {initials}
             </div>
-            <button onClick={logout}
-              className="p-1 transition-colors rounded"
-              style={{ color: 'rgba(255,255,255,0.3)' }}
-              onMouseEnter={e => e.currentTarget.style.color = 'var(--color-danger)'}
-              onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.3)'}
-              title="Log Out">
-              <LogOut size={16} />
+            <button
+              onClick={logout}
+              className="text-[9px] font-semibold px-1 py-0.5 rounded"
+              style={{ color: 'rgba(255,255,255,0.2)' }}
+              onMouseEnter={e => e.currentTarget.style.color = '#E84545'}
+              onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.2)'}
+              title="Log Out"
+            >
+              Out
             </button>
-          </>
+          </div>
         ) : (
-          <>
-            <div className="flex items-center space-x-2.5 min-w-0">
-              <div className="h-8 w-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0"
-                style={{ background: 'var(--gradient-primary)', color: '#fff' }}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div
+                className="h-8 w-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0"
+                style={{ background: 'var(--gradient-primary)', color: '#fff' }}
+              >
                 {initials}
               </div>
               <div className="min-w-0">
-                <p className="text-xs font-semibold truncate" style={{ color: 'rgba(255,255,255,0.85)' }}>{user?.name || 'Admin User'}</p>
-                <p className="text-[10px] truncate" style={{ color: 'rgba(255,255,255,0.35)' }}>{user?.email || 'admin@vastrams.in'}</p>
+                <p className="text-[12px] font-semibold truncate" style={{ color: 'rgba(255,255,255,0.85)' }}>
+                  {user?.name || 'Admin User'}
+                </p>
+                <p className="text-[10px] truncate" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                  {user?.email || 'admin@vastrams.in'}
+                </p>
               </div>
             </div>
-            <button onClick={() => confirmNavigation(logout)}
-              className="p-1 transition-colors rounded"
-              style={{ color: 'rgba(255,255,255,0.3)' }}
-              onMouseEnter={e => e.currentTarget.style.color = 'var(--color-danger)'}
-              onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.3)'}
-              title="Log Out">
-              <LogOut size={16} />
+            <button
+              onClick={() => confirmNavigation(logout)}
+              className="text-[10px] font-semibold px-2 py-1 rounded-lg transition-all"
+              style={{ color: 'rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.04)' }}
+              onMouseEnter={e => { e.currentTarget.style.color = '#E84545'; e.currentTarget.style.background = 'rgba(232,69,69,0.1)' }}
+              onMouseLeave={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.2)'; e.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}
+              title="Log Out"
+            >
+              Sign out
             </button>
-          </>
+          </div>
         )}
       </div>
     </aside>

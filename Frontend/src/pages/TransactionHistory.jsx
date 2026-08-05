@@ -1,12 +1,15 @@
 import React, { useState, useEffect, useMemo } from 'react'
-import { Link } from 'react-router-dom'
-import { Search, Trash2 } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
+import { Search, Trash2, X } from 'lucide-react'
 import DropdownSelect from '../components/ui/DropdownSelect'
+import PrintPreviewModal from '../components/PrintPreviewModal'
 import { toTitleCase } from '../utils/text'
 import EmptyState from '../components/ui/EmptyState'
 import Badge from '../components/ui/Badge'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Skeleton, SkeletonTableRow } from '../components/ui/Skeleton'
+import { usePagination } from '../hooks/usePagination'
+import Pagination from '../components/ui/Pagination'
 import api from '../utils/api'
 
 const fmt = (v) => new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, minimumIntegerDigits: 1 }).format(v)
@@ -38,9 +41,11 @@ const isFinancierType = (type) => ['LOAN_DRAWDOWN', 'LOAN_REPAYMENT', 'REPAYMENT
 const isPaymentType = (type) => ['BILL_PAID', 'LOAN_REPAYMENT', 'REPAYMENT_PRINCIPAL', 'REPAYMENT_INTEREST'].includes(type)
 
 export function TransactionHistory() {
+  const navigate = useNavigate()
   const [transactions, setTransactions] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [printDoc, setPrintDoc] = useState(null)
   const [search, setSearch] = useState('')
   const [partyFilter, setPartyFilter] = useState('All Parties')
   const [typeFilter, setTypeFilter] = useState('All Types')
@@ -117,6 +122,16 @@ export function TransactionHistory() {
     return matchSearch && matchType && matchParty && matchDeleted
   }), [transactions, search, typeFilter, partyFilter, showDeleted])
 
+  const tableContainerRef = React.useRef(null)
+
+  const pagination = usePagination({
+    items: filtered,
+    moduleKey: 'transactions',
+    initialPageSize: 20,
+    filterDependencies: [search, partyFilter, typeFilter, showDeleted],
+    containerRef: tableContainerRef
+  })
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -139,7 +154,17 @@ export function TransactionHistory() {
           <div className="relative w-56">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input type="text" placeholder="Search transactions..." value={search} onChange={e => setSearch(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 text-sm border border-gray-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary" />
+              className="w-full pl-9 pr-8 py-1.5 text-sm border border-gray-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary" />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors p-0.5"
+                title="Clear search"
+              >
+                <X size={14} />
+              </button>
+            )}
           </div>
 
           {/* Party Filter */}
@@ -214,59 +239,78 @@ export function TransactionHistory() {
             )}
           </div>
         ) : (
-          <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider border-b border-gray-100 dark:border-slate-700">
-                <th className="text-left px-5 py-3">DATE</th>
-                <th className="text-left px-5 py-3">TYPE</th>
-                <th className="text-left px-5 py-3">PARTY</th>
-                <th className="text-left px-5 py-3">REFERENCE</th>
-                <th className="text-left px-5 py-3">DESCRIPTION</th>
-                <th className="text-right px-5 py-3">AMOUNT</th>
-                <th className="text-left px-5 py-3">STATUS</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50 dark:divide-slate-700/40">
-              {filtered.map((t, i) => (
-                <motion.tr 
-                  key={t.id} 
-                  initial={{ opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: Math.min(i * 0.03, 0.3), duration: 0.2 }}
-                  className={`hover:bg-gray-50 dark:hover:bg-slate-700/20 transition-colors ${t.status === 'Deleted' ? 'opacity-55' : ''}`}
-                >
-                  <td className="px-5 py-3.5 text-sm text-gray-500 dark:text-gray-400 font-mono whitespace-nowrap">{t.date}</td>
-                  <td className="px-5 py-3.5">
-                    <Badge variant={isPaymentType(t.rawType) ? 'success' : 'info'}>
-                      {toTitleCase(t.type)}
-                    </Badge>
-                  </td>
-                  <td className="px-5 py-3.5">
-                    {t.isFinancier && t.partyId ? (
-                      <Link to={`/financiers/${t.partyId}`} className="text-sm font-semibold" style={{textDecoration: 'none', color: 'var(--color-primary)'}}>{toTitleCase(t.party)}</Link>
-                    ) : (
-                      <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{toTitleCase(t.party)}</span>
-                    )}
-                  </td>
-                  <td className="px-5 py-3.5 text-xs font-mono text-gray-400 dark:text-gray-500">{t.ref}</td>
-                  <td className="px-5 py-3.5 text-sm text-gray-600 dark:text-gray-300">{toTitleCase(t.description)}</td>
-                  <td className="px-5 py-3.5 text-sm font-semibold text-gray-900 dark:text-gray-100 text-right tabular-nums">₹{fmt(t.amount)}</td>
-                  <td className="px-5 py-3.5">
-                    <Badge variant={t.status === 'Active' ? 'success' : 'danger'}>
-                      {toTitleCase(t.status)}
-                    </Badge>
-                  </td>
-                </motion.tr>
-              ))}
-            </tbody>
-          </table>
-          </div>
+          <>
+            <div ref={tableContainerRef} className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider border-b border-gray-100 dark:border-slate-700">
+                    <th className="text-left px-5 py-3">DATE</th>
+                    <th className="text-left px-5 py-3">TYPE</th>
+                    <th className="text-left px-5 py-3">PARTY</th>
+                    <th className="text-left px-5 py-3">REFERENCE</th>
+                    <th className="text-left px-5 py-3">DESCRIPTION</th>
+                    <th className="text-right px-5 py-3">AMOUNT</th>
+                    <th className="text-left px-5 py-3">STATUS</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50 dark:divide-slate-700/40">
+                  {pagination.paginatedItems.map((t, i) => (
+                    <motion.tr 
+                      key={t.id} 
+                      initial={{ opacity: 0, y: 4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: Math.min(i * 0.03, 0.3), duration: 0.2 }}
+                      onClick={() => {
+                        if (t.isFinancier && t.partyId) {
+                          navigate(`/financiers/${t.partyId}`)
+                        } else if (t.referenceId) {
+                          let docType = 'payment'
+                          if (t.rawType === 'BILL_POSTED') docType = 'bill'
+                          else if (t.rawType === 'LOAN_DRAWDOWN') docType = 'loan'
+                          else if (t.rawType === 'LOAN_REPAYMENT' || t.rawType === 'REPAYMENT_PRINCIPAL' || t.rawType === 'REPAYMENT_INTEREST') docType = 'repayment'
+                          setPrintDoc({ type: docType, id: t.referenceId })
+                        }
+                      }}
+                      className={`hover:bg-gray-50 dark:hover:bg-slate-700/20 transition-colors cursor-pointer ${t.status === 'Deleted' ? 'opacity-55' : ''}`}
+                    >
+                      <td className="px-5 py-3.5 text-sm text-gray-500 dark:text-gray-400 font-mono whitespace-nowrap">{t.date}</td>
+                      <td className="px-5 py-3.5">
+                        <Badge variant={isPaymentType(t.rawType) ? 'success' : 'info'}>
+                          {toTitleCase(t.type)}
+                        </Badge>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        {t.isFinancier && t.partyId ? (
+                          <span className="text-sm font-semibold" style={{color: 'var(--color-primary)'}}>{toTitleCase(t.party)}</span>
+                        ) : (
+                          <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{toTitleCase(t.party)}</span>
+                        )}
+                      </td>
+                      <td className="px-5 py-3.5 text-xs font-mono text-gray-400 dark:text-gray-500">{t.ref}</td>
+                      <td className="px-5 py-3.5 text-sm text-gray-600 dark:text-gray-300">{toTitleCase(t.description)}</td>
+                      <td className="px-5 py-3.5 text-sm font-semibold text-gray-900 dark:text-gray-100 text-right tabular-nums">₹{fmt(t.amount)}</td>
+                      <td className="px-5 py-3.5">
+                        <Badge variant={t.status === 'Active' ? 'success' : 'danger'}>
+                          {toTitleCase(t.status)}
+                        </Badge>
+                      </td>
+                    </motion.tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <Pagination {...pagination} isLoading={loading} />
+          </>
         )}
-        <div className="px-5 py-3 border-t border-gray-100 dark:border-slate-700 text-xs text-gray-400">
-          1–{filtered.length} of {filtered.length}
-        </div>
       </div>
+
+      {printDoc && (
+        <PrintPreviewModal
+          type={printDoc.type}
+          id={printDoc.id}
+          onClose={() => setPrintDoc(null)}
+        />
+      )}
     </div>
   )
 }

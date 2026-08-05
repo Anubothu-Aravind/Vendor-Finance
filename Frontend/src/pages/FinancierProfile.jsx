@@ -20,6 +20,7 @@ export function FinancierProfile() {
   
   const [profile, setProfile] = useState(null)
   const [loans, setLoans] = useState([])
+  const [paymentModes, setPaymentModes] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -59,12 +60,17 @@ export function FinancierProfile() {
   const fetchProfileAndLoans = async (signal) => {
     try {
       setLoading(true)
-      const [finData, loansData] = await Promise.all([
+      const [finData, loansData, profileRes] = await Promise.all([
         api.get(`/financiers/${id}`, { signal }),
-        api.get('/loans', { signal })
+        api.get('/loans', { signal }),
+        api.get('/settings/profile', { signal }).catch(() => ({ data: {} }))
       ])
       
       if (!signal || !signal.aborted) {
+        if (profileRes.data && profileRes.data.paymentModes) {
+          const activeModes = profileRes.data.paymentModes.filter(m => m.enabled)
+          if (activeModes.length > 0) setPaymentModes(activeModes)
+        }
         setProfile({
           ...finData,
           id: finData._id
@@ -484,11 +490,12 @@ export function FinancierProfile() {
                       value={repayForm.mode}
                       onChange={val => setRepayForm({...repayForm, mode: val})}
                       placeholder="Select Mode"
-                      options={[
-                        { value: 'Cash', label: 'Cash' },
+                      options={paymentModes.length > 0 ? paymentModes.map(m => ({ value: m.name, label: m.name })) : [
+                        { value: 'Bank Transfer', label: 'Bank Transfer' },
                         { value: 'Cheque', label: 'Cheque' },
-                        { value: 'NEFT', label: 'NEFT' },
-                        { value: 'RTGS', label: 'RTGS' }
+                        { value: 'Cash', label: 'Cash' },
+                        { value: 'UPI', label: 'UPI' },
+                        { value: 'NEFT / RTGS', label: 'NEFT / RTGS' }
                       ]}
                     />
                   </div>
@@ -502,9 +509,32 @@ export function FinancierProfile() {
                   )}
                 </div>
                 {repayForm.mode === 'Cheque' && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">Cheque Number *</label>
+                      <input type="text" required placeholder="e.g. 123456" value={repayForm.chequeNo || ''} onChange={e => setRepayForm({...repayForm, chequeNo: e.target.value.slice(0, 6).replace(/[^0-9]/g, '')})}
+                        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none font-mono" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">Cheque Date *</label>
+                      <CustomDatePicker
+                        value={repayForm.chequeDate || repayForm.date}
+                        onChange={val => setRepayForm({ ...repayForm, chequeDate: val })}
+                      />
+                    </div>
+                  </div>
+                )}
+                {(repayForm.mode === 'Bank Transfer' || repayForm.mode === 'NEFT' || repayForm.mode === 'RTGS' || repayForm.mode === 'UPI' || repayForm.mode === 'NEFT / RTGS') && (
                   <div>
-                    <label className="block text-xs font-semibold text-gray-600 mb-1">Cheque Number *</label>
-                    <input type="text" required placeholder="e.g. 123456" value={repayForm.chequeNo || ''} onChange={e => setRepayForm({...repayForm, chequeNo: e.target.value.slice(0, 6).replace(/[^0-9]/g, '')})}
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Transaction Ref / UTR Number *</label>
+                    <input type="text" required placeholder="e.g. UTRN987654321 / TXN Ref" value={repayForm.refNum || repayForm.referenceNumber || ''} onChange={e => setRepayForm({...repayForm, refNum: e.target.value, referenceNumber: e.target.value})}
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none font-mono" />
+                  </div>
+                )}
+                {repayForm.mode === 'Cash' && (
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Cash Memo / Reference (Optional)</label>
+                    <input type="text" placeholder="e.g. Memo #101" value={repayForm.refNum || repayForm.referenceNumber || ''} onChange={e => setRepayForm({...repayForm, refNum: e.target.value, referenceNumber: e.target.value})}
                       className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none font-mono" />
                   </div>
                 )}

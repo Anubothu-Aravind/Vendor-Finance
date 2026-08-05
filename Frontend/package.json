@@ -7,6 +7,7 @@
     "predev": "node scripts/setup-env.cjs",
     "dev": "vite",
     "build": "vite build",
+    "test": "node --test src/tests/*.test.js",
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
     "setup-env": "node scripts/setup-env.cjs --force"
@@ -16,6 +17,7 @@
     "@tanstack/react-query": "^5.101.2",
     "axios": "^1.7.2",
     "clsx": "^2.1.1",
+    "dompurify": "^3.4.12",
     "framer-motion": "^11.2.10",
     "lucide-react": "^0.395.0",
     "react": "^18.3.1",

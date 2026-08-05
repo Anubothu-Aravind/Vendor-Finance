@@ -9,6 +9,8 @@ import Badge from '../components/ui/Badge'
 import PartyTypeBadge from '../components/ui/PartyTypeBadge'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Skeleton, SkeletonTableRow } from '../components/ui/Skeleton'
+import { usePagination } from '../hooks/usePagination'
+import Pagination from '../components/ui/Pagination'
 import api from '../utils/api'
 import { useToast } from '../hooks/useToast'
 import { useConfirm } from '../hooks/useConfirm'
@@ -266,10 +268,20 @@ export function ChequeRegistry() {
       ? financiers.map(f => ({ value: f.name, label: toTitleCase(f.name) }))
       : []
 
+  const tableContainerRef = React.useRef(null)
+
   const filtered = cheques.filter(c => {
     const matchSearch = c.chequeNo.includes(search) || (c.party || '').toLowerCase().includes(search.toLowerCase())
     const matchStatus = statusFilter === 'All Status' || c.status === statusFilter
     return matchSearch && matchStatus
+  })
+
+  const pagination = usePagination({
+    items: filtered,
+    moduleKey: 'cheques',
+    initialPageSize: 20,
+    filterDependencies: [search, statusFilter],
+    containerRef: tableContainerRef
   })
 
   return (
@@ -326,7 +338,17 @@ export function ChequeRegistry() {
           <div className="relative w-56">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input type="text" placeholder="Search cheques..." value={search} onChange={e => setSearch(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 text-sm border border-gray-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary" />
+              className="w-full pl-9 pr-8 py-1.5 text-sm border border-gray-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary" />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors p-0.5"
+                title="Clear search"
+              >
+                <X size={14} />
+              </button>
+            )}
           </div>
           <div className="w-48">
             <DropdownSelect
@@ -378,67 +400,70 @@ export function ChequeRegistry() {
             )}
           </div>
         ) : (
-          <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider border-b border-gray-100 dark:border-slate-700">
-                <th className="text-left px-5 py-3">CHEQUE NO.</th>
-                <th className="text-left px-5 py-3">CHEQUE DATE</th>
-                <th className="text-right px-5 py-3">AMOUNT</th>
-                <th className="text-left px-5 py-3">BANK NAME</th>
-                <th className="text-left px-5 py-3">PARTY TYPE</th>
-                <th className="text-left px-5 py-3">PARTY</th>
-                <th className="text-left px-5 py-3">STATUS</th>
-                <th className="text-left px-5 py-3">REMARKS</th>
-                <th className="px-5 py-3"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50 dark:divide-slate-700/40">
-              {filtered.map((c, i) => (
-                <motion.tr 
-                  key={c._id || c.id} 
-                  onClick={() => handleOpenPreview(c)} 
-                  initial={{ opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: Math.min(i * 0.03, 0.3), duration: 0.2 }}
-                  className="hover:bg-gray-50 dark:hover:bg-slate-700/20 transition-colors cursor-pointer"
-                >
-                  <td className="px-5 py-3.5 text-sm font-mono font-semibold text-gray-700 dark:text-gray-200">{c.chequeNo}</td>
-                  <td className="px-5 py-3.5 text-sm text-gray-500 dark:text-gray-400 font-mono whitespace-nowrap">{c.date}</td>
-                  <td className="px-5 py-3.5 text-sm font-semibold text-gray-900 dark:text-white text-right tabular-nums">₹{fmt(c.amount)}</td>
-                  <td className="px-5 py-3.5 text-sm text-gray-600 dark:text-gray-300">{c.bank !== '—' ? toTitleCase(c.bank) : '—'}</td>
-                  <td className="px-5 py-3.5 text-xs">
-                    <PartyTypeBadge type={c.partyType} />
-                  </td>
-                  <td className="px-5 py-3.5 text-sm text-gray-800 dark:text-gray-100 font-medium">{toTitleCase(c.party)}</td>
-                  <td className="px-5 py-3.5">
-                    <Badge variant={
-                      c.status?.toLowerCase() === 'cleared' ? 'success' :
-                      c.status?.toLowerCase() === 'pending' ? 'warning' :
-                      c.status?.toLowerCase() === 'deposited' ? 'info' : 'danger'
-                    }>
-                      {toTitleCase(c.status)}
-                    </Badge>
-                  </td>
-                  <td className="px-5 py-3.5 text-xs text-gray-500 dark:text-gray-400 italic truncate max-w-[150px]">{c.remarks || '—'}</td>
-                  <td className="px-5 py-3.5">
-                    <div className="flex items-center justify-end space-x-1.5">
-                      <button onClick={(e) => { e.stopPropagation(); handleOpenPreview(c); }} className="text-gray-400 hover:text-brand-primary p-1">
-                        <Eye size={14} />
-                      </button>
-                      <button onClick={(e) => { e.stopPropagation(); handleOpenEdit(c); }} className="text-gray-400 hover:text-brand-primary p-1">
-                        <Edit2 size={14} />
-                      </button>
-                      <button onClick={(e) => { e.stopPropagation(); handleDelete(c.id); }} className="text-gray-400 hover:text-red-500 p-1">
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </td>
-                </motion.tr>
-              ))}
-            </tbody>
-          </table>
-          </div>
+          <>
+            <div ref={tableContainerRef} className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider border-b border-gray-100 dark:border-slate-700">
+                    <th className="text-left px-5 py-3">CHEQUE NO.</th>
+                    <th className="text-left px-5 py-3">CHEQUE DATE</th>
+                    <th className="text-right px-5 py-3">AMOUNT</th>
+                    <th className="text-left px-5 py-3">BANK NAME</th>
+                    <th className="text-left px-5 py-3">PARTY TYPE</th>
+                    <th className="text-left px-5 py-3">PARTY</th>
+                    <th className="text-left px-5 py-3">STATUS</th>
+                    <th className="text-left px-5 py-3">REMARKS</th>
+                    <th className="px-5 py-3"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50 dark:divide-slate-700/40">
+                  {pagination.paginatedItems.map((c, i) => (
+                    <motion.tr 
+                      key={c._id || c.id} 
+                      onClick={() => handleOpenPreview(c)} 
+                      initial={{ opacity: 0, y: 4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: Math.min(i * 0.03, 0.3), duration: 0.2 }}
+                      className="hover:bg-gray-50 dark:hover:bg-slate-700/20 transition-colors cursor-pointer"
+                    >
+                      <td className="px-5 py-3.5 text-sm font-mono font-semibold text-gray-700 dark:text-gray-200">{c.chequeNo}</td>
+                      <td className="px-5 py-3.5 text-sm text-gray-500 dark:text-gray-400 font-mono whitespace-nowrap">{c.date}</td>
+                      <td className="px-5 py-3.5 text-sm font-semibold text-gray-900 dark:text-white text-right tabular-nums">₹{fmt(c.amount)}</td>
+                      <td className="px-5 py-3.5 text-sm text-gray-600 dark:text-gray-300">{c.bank !== '—' ? toTitleCase(c.bank) : '—'}</td>
+                      <td className="px-5 py-3.5 text-xs">
+                        <PartyTypeBadge type={c.partyType} />
+                      </td>
+                      <td className="px-5 py-3.5 text-sm text-gray-800 dark:text-gray-100 font-medium">{toTitleCase(c.party)}</td>
+                      <td className="px-5 py-3.5">
+                        <Badge variant={
+                          c.status?.toLowerCase() === 'cleared' ? 'success' :
+                          c.status?.toLowerCase() === 'pending' ? 'warning' :
+                          c.status?.toLowerCase() === 'deposited' ? 'info' : 'danger'
+                        }>
+                          {toTitleCase(c.status)}
+                        </Badge>
+                      </td>
+                      <td className="px-5 py-3.5 text-xs text-gray-500 dark:text-gray-400 italic truncate max-w-[150px]">{c.remarks || '—'}</td>
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center justify-end space-x-2">
+                          <button onClick={(e) => { e.stopPropagation(); handleOpenPreview(c); }} className="text-xs text-gray-500 hover:text-brand-primary font-medium px-1.5 py-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors">
+                            View
+                          </button>
+                          <button onClick={(e) => { e.stopPropagation(); handleOpenEdit(c); }} className="text-xs text-gray-500 hover:text-brand-primary font-medium px-1.5 py-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors">
+                            Edit
+                          </button>
+                          <button onClick={(e) => { e.stopPropagation(); handleDelete(c.id); }} className="text-xs text-red-500 hover:text-red-700 font-medium px-1.5 py-0.5 rounded hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors">
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </motion.tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <Pagination {...pagination} isLoading={loading} />
+          </>
         )}
       </div>
 

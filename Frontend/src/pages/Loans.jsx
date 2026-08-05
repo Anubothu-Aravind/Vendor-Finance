@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useReducer, useCallback, useMemo } from 'react'
 import { Plus, X, Edit2, Eye, Trash2 } from 'lucide-react'
+import PrintPreviewModal from '../components/PrintPreviewModal'
 import { toInputDate, fromInputDate, getTodayFormatted } from '../utils/date'
 import DropdownSelect from '../components/ui/DropdownSelect'
 import CustomDatePicker from '../components/ui/CustomDatePicker'
@@ -15,6 +16,8 @@ import { useSaveConfirmation } from '../hooks/useSaveConfirmation'
 import { SaveConfirmationModal } from '../components/ui/SaveConfirmationModal'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Skeleton, SkeletonCard } from '../components/ui/Skeleton'
+import { usePagination } from '../hooks/usePagination'
+import Pagination from '../components/ui/Pagination'
 
 const fmt = (v) => new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(v)
 
@@ -34,6 +37,7 @@ export function Loans() {
   const [showModal, setShowModal] = useState(false)
   const [modalMode, setModalMode] = useState('add') // 'add' | 'edit' | 'preview'
   const [selectedLoan, setSelectedLoan] = useState(null)
+  const [printDoc, setPrintDoc] = useState(null)
 
   const emptyForm = {
     financier: '',
@@ -93,17 +97,31 @@ export function Loans() {
         if (l.status === 'SETTLED') displayStatus = 'Closed'
         else if (l.status === 'OVERDUE') displayStatus = 'Overdue'
 
+        let accruedInterest = 0
+        if (l.drawdownDate && l.interestRate && l.outstandingPrincipal) {
+          const dDate = new Date(l.drawdownDate)
+          if (!isNaN(dDate.getTime())) {
+            const daysElapsed = Math.max(0, Math.floor((new Date() - dDate) / (1000 * 60 * 60 * 24)))
+            accruedInterest = (l.outstandingPrincipal * l.interestRate * daysElapsed) / (100 * 365)
+          }
+        }
+        const totalPending = Math.round(((l.outstandingPrincipal || 0) + accruedInterest) * 100) / 100
+
         return {
           id: l._id,
+          _id: l._id,
           noteNo: l.loanReference,
-          financier: l.financierId?.name || '—',
+          financier:   l.financierId?.name || null,
+          isOrphaned:  !l.financierId?.name,
           financierId: l.financierId?._id || l.financierId || '',
           loanDate: drawdownDateStr,
           maturityDate: maturityDateStr,
           amount: l.principalAmount,
           rate: String(l.interestRate),
           repaid: l.paidPrincipal,
-          pending: l.outstandingPrincipal,
+          principalOutstanding: l.outstandingPrincipal,
+          accruedInterest: Math.round(accruedInterest * 100) / 100,
+          pending: totalPending,
           remarks: l.notes || '',
           status: displayStatus,
           progress: Math.min(100, Math.round(((l.paidPrincipal || 0) / (l.principalAmount || 1)) * 100))
@@ -236,8 +254,47 @@ export function Loans() {
     }
   }
 
+  const [sortBy, setSortBy] = useState('active-first')
+
   const activeLoans = loans.filter(l => l.status === 'Active' || l.status === 'Overdue')
   const totalExposure = activeLoans.reduce((s, l) => s + l.pending, 0)
+
+  const sortedLoans = useMemo(() => {
+    return [...loans].sort((a, b) => {
+      if (sortBy === 'active-first') {
+        const aActive = a.status === 'Active' || a.status === 'Overdue' ? 0 : 1
+        const bActive = b.status === 'Active' || b.status === 'Overdue' ? 0 : 1
+        if (aActive !== bActive) return aActive - bActive
+        return (b.pending || 0) - (a.pending || 0)
+      }
+      if (sortBy === 'newest') {
+        const da = a.loanDate ? new Date(toInputDate(a.loanDate)) : 0
+        const db = b.loanDate ? new Date(toInputDate(b.loanDate)) : 0
+        return db - da
+      }
+      if (sortBy === 'oldest') {
+        const da = a.loanDate ? new Date(toInputDate(a.loanDate)) : 0
+        const db = b.loanDate ? new Date(toInputDate(b.loanDate)) : 0
+        return da - db
+      }
+      if (sortBy === 'highest-pending') {
+        return (b.pending || 0) - (a.pending || 0)
+      }
+      if (sortBy === 'highest-principal') {
+        return (b.amount || 0) - (a.amount || 0)
+      }
+      return 0
+    })
+  }, [loans, sortBy])
+
+  const cardContainerRef = React.useRef(null)
+
+  const pagination = usePagination({
+    items: sortedLoans,
+    moduleKey: 'loans',
+    initialPageSize: 20,
+    containerRef: cardContainerRef
+  })
 
   return (
     <>
@@ -248,10 +305,25 @@ export function Loans() {
           <h1 className="text-2xl font-semibold text-gray-900">Loans</h1>
           <p className="text-sm text-gray-400 mt-0.5">{activeLoans.length} active loans · ₹{(totalExposure/100000).toFixed(1)}L total pending</p>
         </div>
-        <button onClick={handleOpenAdd} className="flex items-center space-x-1.5 bg-brand-primary text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-primary/95 transition-all shadow-sm">
-          <Plus size={16} />
-          <span>Add Loan</span>
-        </button>
+        <div className="flex items-center space-x-3">
+          <div className="w-44">
+            <DropdownSelect
+              value={sortBy}
+              onChange={setSortBy}
+              options={[
+                { value: 'active-first', label: 'Active First' },
+                { value: 'newest', label: 'Newest Date' },
+                { value: 'oldest', label: 'Oldest Date' },
+                { value: 'highest-pending', label: 'Highest Pending' },
+                { value: 'highest-principal', label: 'Highest Principal' }
+              ]}
+            />
+          </div>
+          <button onClick={handleOpenAdd} className="flex items-center space-x-1.5 bg-brand-primary text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-primary/95 transition-all shadow-sm">
+            <Plus size={16} />
+            <span>Add Loan</span>
+          </button>
+        </div>
       </div>
 
       {error ? (
@@ -274,73 +346,81 @@ export function Loans() {
           />
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {loans.map((loan, i) => (
-            <motion.div 
-              key={loan._id || loan.id} 
-              onClick={() => handleOpenPreview(loan)} 
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: Math.min(i * 0.04, 0.3), duration: 0.2 }}
-              className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-5 hover:scale-[1.02] hover:shadow-md transition-all relative group cursor-pointer"
-            >
-              <div className="flex justify-between items-start mb-3">
-                <div>
-                  <p className="text-[11px] font-mono text-gray-400">Note #: {loan.noteNo || '—'}</p>
-                  <h3 className="text-base font-semibold text-gray-900 mt-0.5">{toTitleCase(loan.financier)}</h3>
-                  <p className="text-xs text-gray-400 mt-0.5">{loan.rate}% p.a. · Issued: {loan.loanDate}</p>
+        <div className="space-y-4" ref={cardContainerRef}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {pagination.paginatedItems.map((loan, i) => (
+              <motion.div 
+                key={loan._id || loan.id} 
+                onClick={() => handleOpenPreview(loan)} 
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: Math.min(i * 0.04, 0.3), duration: 0.2 }}
+                className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-5 hover:scale-[1.02] hover:shadow-md transition-all relative group cursor-pointer"
+              >
+                <div className="flex justify-between items-start mb-3">
+                  <div>
+                    <p className="text-[11px] font-mono text-gray-400">Note #: {loan.noteNo || '—'}</p>
+                    <h3 className={`text-base font-semibold mt-0.5 ${loan.isOrphaned ? 'text-gray-400 italic' : 'text-gray-900'}`}>
+                      {loan.isOrphaned ? 'Deleted Financier' : toTitleCase(loan.financier)}
+                    </h3>
+                    <p className="text-xs text-gray-400 mt-0.5">{loan.rate}% p.a. · Issued: {loan.loanDate}</p>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Badge variant={loan.status === 'Overdue' ? 'warning' : 'success'}>
+                      {toTitleCase(loan.status)}
+                    </Badge>
+                  </div>
                 </div>
-                <div className="flex items-center space-x-2">
-                  <Badge variant={loan.status === 'Overdue' ? 'warning' : 'success'}>
-                    {toTitleCase(loan.status)}
-                  </Badge>
-                </div>
-              </div>
 
-              <div className="grid grid-cols-3 gap-3 mb-4">
-                <div>
-                  <p className="text-[11px] text-gray-400 mb-0.5">Principal</p>
-                  <p className="text-sm font-semibold text-gray-900 tabular-nums">₹{fmt(loan.amount)}</p>
+                <div className="grid grid-cols-3 gap-3 mb-4">
+                  <div>
+                    <p className="text-[11px] text-gray-400 mb-0.5">Principal</p>
+                    <p className="text-sm font-semibold text-gray-900 tabular-nums">₹{fmt(loan.amount)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] text-gray-400 mb-0.5">Repaid</p>
+                    <p className="text-sm font-semibold text-green-600 tabular-nums">₹{fmt(loan.repaid)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] text-gray-400 mb-0.5">Pending</p>
+                    <p className={`text-sm font-semibold tabular-nums ${loan.pending > 0 ? 'text-red-500' : 'text-green-600'}`}>
+                      {loan.pending > 0 ? `₹${fmt(loan.pending)}` : 'Nil'}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-[11px] text-gray-400 mb-0.5">Repaid</p>
-                  <p className="text-sm font-semibold text-green-600 tabular-nums">₹{fmt(loan.repaid)}</p>
-                </div>
-                <div>
-                  <p className="text-[11px] text-gray-400 mb-0.5">Pending</p>
-                  <p className={`text-sm font-semibold tabular-nums ${loan.pending > 0 ? 'text-red-500' : 'text-green-600'}`}>
-                    {loan.pending > 0 ? `₹${fmt(loan.pending)}` : 'Nil'}
-                  </p>
-                </div>
-              </div>
 
-              {/* Progress Bar */}
-              <div className="mb-3">
-                <div className="flex justify-between text-xs text-gray-400 mb-1">
-                  <span>Repayment Progress</span>
-                  <span className="font-medium text-gray-700">{loan.progress}%</span>
+                {/* Progress Bar */}
+                <div className="mb-3">
+                  <div className="flex justify-between text-xs text-gray-400 mb-1">
+                    <span>Repayment Progress</span>
+                    <span className="font-medium text-gray-700">{loan.progress}%</span>
+                  </div>
+                  <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-brand-primary rounded-full transition-all" style={{ width: `${loan.progress}%` }} />
+                  </div>
                 </div>
-                <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                  <div className="h-full bg-brand-primary rounded-full transition-all" style={{ width: `${loan.progress}%` }} />
-                </div>
-              </div>
 
-              <div className="flex justify-between items-center pt-2 border-t border-gray-50">
-                <span className="text-xs text-gray-400 truncate max-w-[200px]" title={loan.remarks}>{loan.remarks || '—'}</span>
-                <div className="flex items-center space-x-1">
-                  <button onClick={(e) => { e.stopPropagation(); handleOpenPreview(loan); }} className="text-gray-400 hover:text-brand-primary p-1 rounded hover:bg-gray-50">
-                    <Eye size={14} />
-                  </button>
-                  <button onClick={(e) => { e.stopPropagation(); handleOpenEdit(loan); }} className="text-gray-400 hover:text-brand-primary p-1 rounded hover:bg-gray-50">
-                    <Edit2 size={14} />
-                  </button>
-                  <button onClick={(e) => { e.stopPropagation(); handleDelete(loan.id); }} className="text-gray-400 hover:text-red-500 p-1 rounded hover:bg-gray-50">
-                    <Trash2 size={14} />
-                  </button>
+                <div className="flex justify-between items-center pt-2 border-t border-gray-50">
+                  <span className="text-xs text-gray-400 truncate max-w-[200px]" title={loan.remarks}>{loan.remarks || '—'}</span>
+                    <div className="flex items-center space-x-2">
+                      <button onClick={(e) => { e.stopPropagation(); handleOpenPreview(loan); }} className="text-xs text-gray-500 hover:text-brand-primary font-medium px-1.5 py-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors">
+                        View
+                      </button>
+
+                      <button onClick={(e) => { e.stopPropagation(); handleOpenEdit(loan); }} className="text-xs text-gray-500 hover:text-brand-primary font-medium px-1.5 py-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors">
+                        Edit
+                      </button>
+                      <button onClick={(e) => { e.stopPropagation(); handleDelete(loan.id); }} className="text-xs text-red-500 hover:text-red-700 font-medium px-1.5 py-0.5 rounded hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors">
+                        Delete
+                      </button>
+                    </div>
                 </div>
-              </div>
-            </motion.div>
-          ))}
+              </motion.div>
+            ))}
+          </div>
+          <div className="bg-white rounded-xl border border-gray-200">
+            <Pagination {...pagination} isLoading={loading} />
+          </div>
         </div>
       )}
       </div>
@@ -383,23 +463,95 @@ export function Loans() {
                     <label className="text-xs text-gray-400 uppercase font-semibold">Maturity Date</label>
                     <p className="text-gray-900">{selectedLoan?.maturityDate || '—'}</p>
                   </div>
-                  <div>
-                    <label className="text-xs text-gray-400 uppercase font-semibold">Pending Balance</label>
-                    <p className="text-red-500 font-bold tabular-nums">₹{fmt(selectedLoan?.pending || 0)}</p>
-                  </div>
+                  {/* Pending Balance + Interest Accrued — computed together */}
+                  {(() => {
+                    const outstanding = selectedLoan?.pending || 0
+                    const rate = parseFloat(selectedLoan?.rate) || 0
+                    const loanDateRaw = selectedLoan?.loanDate
+
+                    let interest = 0
+                    let daysElapsed = 0
+
+                    if (outstanding && rate && loanDateRaw) {
+                      let loanDateObj = null
+                      const parts = loanDateRaw.split(/[-\s]/)
+                      if (parts.length === 3) {
+                        const months = { Jan:0, Feb:1, Mar:2, Apr:3, May:4, Jun:5, Jul:6, Aug:7, Sep:8, Oct:9, Nov:10, Dec:11 }
+                        const month = isNaN(Number(parts[1])) ? months[parts[1]] : Number(parts[1]) - 1
+                        loanDateObj = new Date(Number(parts[2]), month, Number(parts[0]))
+                      }
+                      if (loanDateObj && !isNaN(loanDateObj.getTime())) {
+                        daysElapsed = Math.max(0, Math.floor((new Date() - loanDateObj) / (1000 * 60 * 60 * 24)))
+                        interest = (outstanding * rate * daysElapsed) / (100 * 365)
+                      }
+                    }
+
+                    const fmtFull = (v) => new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v)
+                    const totalDue = outstanding + interest
+
+                    return (
+                      <>
+                        {/* Principal outstanding */}
+                        <div>
+                          <label className="text-xs text-gray-400 uppercase font-semibold">Principal Outstanding</label>
+                          <p className="text-red-500 font-bold tabular-nums">₹{fmtFull(outstanding)}</p>
+                        </div>
+
+                        {/* Interest accrued */}
+                        {interest > 0 && (
+                          <div>
+                            <label className="text-xs text-gray-400 uppercase font-semibold">Interest Accrued</label>
+                            <p className="text-orange-500 font-bold tabular-nums">₹{fmtFull(interest)}</p>
+                            <p className="text-[10px] text-gray-400 mt-0.5">{daysElapsed} days × {rate}% p.a.</p>
+                          </div>
+                        )}
+
+                        {/* Total due — col-span-2 highlighted row */}
+                        {interest > 0 && (
+                          <div className="col-span-2 rounded-lg px-3 py-2.5 border border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-700/50 flex items-center justify-between">
+                            <label className="text-xs text-gray-500 dark:text-gray-300 uppercase font-bold">Total Outstanding (Principal + Interest)</label>
+                            <p className="text-red-500 dark:text-red-400 font-extrabold tabular-nums text-base">₹{fmtFull(totalDue)}</p>
+                          </div>
+                        )}
+                      </>
+                    )
+                  })()}
+
                   <div className="col-span-2">
                     <label className="text-xs text-gray-400 uppercase font-semibold">Remarks</label>
-                    <p className="text-gray-900 bg-gray-50 p-2.5 rounded-lg border border-gray-100">{selectedLoan?.remarks || '—'}</p>
+                    <p className="text-gray-900 dark:text-gray-100 bg-gray-50 dark:bg-slate-700/50 p-2.5 rounded-lg border border-gray-100 dark:border-slate-600">{selectedLoan?.remarks || '—'}</p>
                   </div>
                 </div>
-                <div className="flex justify-end pt-4 border-t border-gray-100 mt-6">
-                  <button onClick={() => setShowModal(false)} className="px-4 py-2 bg-brand-primary text-white text-sm rounded-lg hover:bg-brand-primary/95">Close</button>
+                <div className="flex justify-end pt-4 border-t border-gray-100 mt-6 space-x-2">
+                  <button 
+                    type="button"
+                    onClick={() => {
+                      setShowModal(false);
+                      setPrintDoc({ type: 'loan', id: selectedLoan?.id || selectedLoan?._id });
+                    }}
+                    className="px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors"
+                    style={{ background: 'var(--color-primary)' }}
+                  >
+                    Print Advice
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={() => setShowModal(false)}
+                    className="px-4 py-2 text-sm font-medium rounded-lg border transition-colors"
+                    style={{
+                      background: 'var(--color-bg-elevated)',
+                      borderColor: 'var(--color-border)',
+                      color: 'var(--color-text-primary)'
+                    }}
+                  >
+                    Close
+                  </button>
                 </div>
               </div>
             ) : (
               <form onSubmit={handleSave} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Financier *</label>
+                  <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">Financier *</label>
                   <DropdownSelect
                     value={form.financier}
                     onChange={val => setForm({...form, financier: val})}
@@ -410,12 +562,12 @@ export function Loans() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-semibold text-gray-600 mb-1">Note Number</label>
+                    <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">Note Number</label>
                     <input type="text" value={form.noteNo} onChange={e => setForm({...form, noteNo: e.target.value})}
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none font-mono" />
+                      className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary font-mono" />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-600 mb-1">Loan Date *</label>
+                    <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">Loan Date *</label>
                     <CustomDatePicker
                       value={form.loanDate}
                       onChange={val => setForm({...form, loanDate: val})}
@@ -425,29 +577,29 @@ export function Loans() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-semibold text-gray-600 mb-1">Maturity Date *</label>
+                    <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">Maturity Date *</label>
                     <CustomDatePicker
                       value={form.maturityDate}
                       onChange={val => setForm({...form, maturityDate: val})}
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-600 mb-1">Amount *</label>
+                    <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">Amount *</label>
                     <input type="number" required value={form.amount} onChange={e => setForm({...form, amount: e.target.value})}
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none" />
+                      className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary" />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Interest Rate (%)</label>
+                  <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">Interest Rate (%)</label>
                   <input type="number" step="0.01" value={form.rate} onChange={e => setForm({...form, rate: e.target.value})}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none" />
+                    className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary" />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Remarks</label>
+                  <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">Remarks</label>
                   <textarea rows={2} value={form.remarks} onChange={e => setForm({...form, remarks: e.target.value})}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none" />
+                    className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary" />
                 </div>
 
                 <div className="flex justify-end space-x-3 pt-4 border-t border-gray-100 dark:border-slate-700 mt-6">
@@ -462,6 +614,14 @@ export function Loans() {
         </div>
       )}
       <SaveConfirmationModal {...confirmConfig} isSaving={isSaving} />
+
+      {printDoc && (
+        <PrintPreviewModal
+          type={printDoc.type}
+          id={printDoc.id}
+          onClose={() => setPrintDoc(null)}
+        />
+      )}
     </>
   )
 }

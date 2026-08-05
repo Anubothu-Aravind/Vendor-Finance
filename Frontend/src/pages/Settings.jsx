@@ -3,7 +3,7 @@ import { useNavigate, useBlocker, useBeforeUnload } from 'react-router-dom'
 import { 
   User, Store, Building2, Coins, CreditCard, Database, Palette, Info, 
   Search, Plus, Trash2, Edit2, X, Check, Upload, RefreshCw,
-  Sun, Moon, Monitor, Leaf, Waves, Flame, Sparkles
+  Sun, Moon, Monitor, Leaf, Waves, Flame, Sparkles, QrCode, FileText
 } from 'lucide-react'
 import api from '../utils/api'
 import DropdownSelect from '../components/ui/DropdownSelect'
@@ -19,30 +19,36 @@ import Badge from '../components/ui/Badge'
 import { usePreferences } from '../hooks/usePreferences'
 import { toInputDate, fromInputDate } from '../utils/date'
 import * as XLSX from 'xlsx'
+import ProfileCompletionCard from '../components/settings/ProfileCompletionCard'
+import LogoUploader from '../components/settings/LogoUploader'
+import StickySaveBar from '../components/settings/StickySaveBar'
+import CopyButton from '../components/ui/CopyButton'
+import useProfileDraft from '../hooks/useProfileDraft'
+import { Skeleton } from '../components/ui/Skeleton'
+import analytics from '../utils/analytics'
+import featureFlags from '../utils/featureFlags'
+import { getFormDiff } from '../utils/formDiff'
+import { useCompanyProfile } from '../context/ProfileContext'
 
 // ── Appearance Tab (extracted to keep Settings component lean) ────────────────
-function AppearanceTab({ preferences, setPreferences, applyGradient, accentGradients }) {
-  const [gradientCategory, setGradientCategory] = useState('Nature')
-  const [showCustom, setShowCustom] = useState(false)
-  const [customA,    setCustomA]    = useState('#00C896')
-  const [customB,    setCustomB]    = useState('#00A87E')
-  const [customAngle, setCustomAngle] = useState(135)
-
-  const categories = ['Nature', 'Ocean', 'Warm', 'Special']
-  const visibleGradients = accentGradients.filter(g => g.cat === gradientCategory)
-  const customGradient = `linear-gradient(${customAngle}deg, ${customA}, ${customB})`
-
+function AppearanceTab({ preferences, setPreferences, confirm, showToast }) {
   const themeOptions = [
     { value: 'light',  label: 'Light',  desc: 'Light backgrounds', Icon: Sun },
     { value: 'dark',   label: 'Dark',   desc: 'Dark canvas', Icon: Moon },
     { value: 'system', label: 'System', desc: 'Follows OS', Icon: Monitor },
   ]
 
-  const categoryIcons = {
-    Nature: Leaf,
-    Ocean: Waves,
-    Warm: Flame,
-    Special: Sparkles,
+  const handleThemeChange = async (targetTheme) => {
+    if (targetTheme === preferences.theme) return
+    const themeLabel = targetTheme === 'light' ? 'Light' : targetTheme === 'dark' ? 'Dark' : 'System Default'
+    const ok = await confirm(
+      `Are you sure you want to switch the application theme to ${themeLabel}?`,
+      { title: 'Confirm Theme Change' }
+    )
+    if (ok) {
+      setPreferences({ theme: targetTheme })
+      if (showToast) showToast(`Application theme changed to ${themeLabel}`)
+    }
   }
 
   return (
@@ -57,12 +63,13 @@ function AppearanceTab({ preferences, setPreferences, applyGradient, accentGradi
           Switch between light, dark, or follow the OS setting
         </p>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', maxWidth: '400px' }}>
-          {themeOptions.map(({ value, label, desc, Icon }) => {
+          {themeOptions.map(({ value, label, desc }) => {
             const isActive = preferences.theme === value
             return (
               <button
                 key={value}
-                onClick={() => setPreferences({ theme: value })}
+                type="button"
+                onClick={() => handleThemeChange(value)}
                 style={{
                   padding: '20px 16px',
                   borderRadius: '12px',
@@ -96,175 +103,6 @@ function AppearanceTab({ preferences, setPreferences, applyGradient, accentGradi
             )
           })}
         </div>
-      </div>
-
-      {/* ── Divider ───────────────────────────────────────────────────── */}
-      <div style={{ height: '1px', background: 'var(--color-border)' }} />
-
-      {/* ── Section 2: Accent Gradient ────────────────────────────────── */}
-      <div>
-        <h2 style={{ margin: '0 0 4px', fontSize: '16px', fontWeight: 700, color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>
-          Accent Gradient
-        </h2>
-        <p style={{ margin: '0 0 16px', fontSize: '12px', color: 'var(--color-text-muted)' }}>
-          Choose a gradient preset — applied to buttons, sidebar, stat values, and page titles
-        </p>
-
-        {/* Category filter tabs */}
-        <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
-          {categories.map(cat => {
-            const isActive = gradientCategory === cat
-            const CatIcon = categoryIcons[cat]
-            return (
-              <button
-                key={cat}
-                onClick={() => setGradientCategory(cat)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '5px 14px',
-                  borderRadius: '99px',
-                  fontSize: '12px',
-                  fontWeight: 500,
-                  border: isActive ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
-                  background: isActive ? 'var(--color-primary-muted)' : 'transparent',
-                  color: isActive ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                  cursor: 'pointer',
-                  transition: 'all 120ms',
-                }}
-              >
-                <span>{cat}</span>
-              </button>
-            )
-          })}
-        </div>
-
-        {/* 4×4 pill grid (4 cols, 4 per category shown) */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', maxWidth: '320px', marginBottom: '16px' }}>
-          {visibleGradients.map(grad => {
-            const isSelected = preferences.gradient === grad.value
-            return (
-              <button
-                key={grad.name}
-                title={grad.name}
-                onClick={() => applyGradient(grad.value)}
-                style={{
-                  width: '68px', height: '36px',
-                  borderRadius: '8px',
-                  background: grad.value,
-                  border: isSelected ? '2px solid #fff' : '2px solid transparent',
-                  cursor: 'pointer',
-                  position: 'relative',
-                  transition: 'transform 120ms, box-shadow 120ms',
-                  outline: isSelected ? '2px solid var(--color-primary)' : 'none',
-                  outlineOffset: '1px',
-                }}
-                onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.1)'; e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.4)' }}
-                onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = 'none' }}
-              >
-                {isSelected && (
-                  <span style={{
-                    position: 'absolute', inset: 0,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: '14px', color: '#fff', textShadow: '0 1px 4px rgba(0,0,0,0.5)',
-                    fontWeight: 700,
-                  }}>✓</span>
-                )}
-              </button>
-            )
-          })}
-        </div>
-
-        {/* Current gradient label */}
-        {preferences.gradient && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
-            <div style={{ width: '32px', height: '16px', borderRadius: '4px', background: preferences.gradient }} />
-            <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>
-              {accentGradients.find(g => g.value === preferences.gradient)?.name || 'Custom gradient'}
-            </span>
-          </div>
-        )}
-
-        {/* Custom gradient builder toggle */}
-        <button
-          onClick={() => setShowCustom(v => !v)}
-          style={{
-            padding: '6px 14px', fontSize: '12px', fontWeight: 500,
-            border: '1px solid var(--color-border-strong)',
-            borderRadius: '8px', background: 'transparent',
-            color: 'var(--color-text-secondary)',
-            cursor: 'pointer', transition: 'all 120ms',
-          }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-primary)'; e.currentTarget.style.color = 'var(--color-primary)' }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--color-border-strong)'; e.currentTarget.style.color = 'var(--color-text-secondary)' }}
-        >
-          {showCustom ? '✕ Close' : '+ Custom gradient'}
-        </button>
-
-        {/* Custom gradient builder */}
-        {showCustom && (
-          <div style={{
-            marginTop: '16px',
-            padding: '16px',
-            borderRadius: '12px',
-            background: 'var(--color-bg-elevated)',
-            border: '1px solid var(--color-border)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '12px',
-            maxWidth: '400px',
-          }}>
-            <p style={{ margin: 0, fontSize: '12px', fontWeight: 600, color: 'var(--color-text-secondary)' }}>
-              Custom Gradient Builder
-            </p>
-
-            {/* Color pickers row */}
-            <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '10px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Color A</label>
-                <input type="color" value={customA} onChange={e => setCustomA(e.target.value)}
-                  style={{ width: '52px', height: '36px', borderRadius: '8px', border: '1px solid var(--color-border)', cursor: 'pointer', padding: '2px', background: 'var(--color-bg-surface)' }} />
-              </div>
-              <span style={{ color: 'var(--color-text-muted)', fontSize: '18px', marginTop: '16px' }}>→</span>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '10px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Color B</label>
-                <input type="color" value={customB} onChange={e => setCustomB(e.target.value)}
-                  style={{ width: '52px', height: '36px', borderRadius: '8px', border: '1px solid var(--color-border)', cursor: 'pointer', padding: '2px', background: 'var(--color-bg-surface)' }} />
-              </div>
-            </div>
-
-            {/* Angle slider */}
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                <label style={{ fontSize: '10px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Angle</label>
-                <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-primary)' }}>{customAngle}°</span>
-              </div>
-              <input type="range" min="0" max="360" value={customAngle} onChange={e => setCustomAngle(Number(e.target.value))}
-                style={{ width: '100%', accentColor: 'var(--color-primary)' }} />
-            </div>
-
-            {/* Live preview */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{ flex: 1, height: '36px', borderRadius: '8px', background: customGradient }} />
-              <span style={{ fontSize: '11px', color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>Preview</span>
-            </div>
-
-            {/* Apply button */}
-            <button
-              onClick={() => { applyGradient(customGradient); setShowCustom(false) }}
-              style={{
-                padding: '8px 20px', fontSize: '13px', fontWeight: 600,
-                background: customGradient,
-                color: '#fff', border: 'none',
-                borderRadius: '8px', cursor: 'pointer',
-                alignSelf: 'flex-start',
-              }}
-            >
-              Apply Gradient
-            </button>
-          </div>
-        )}
       </div>
 
       {/* ── Divider ───────────────────────────────────────────────────── */}
@@ -322,6 +160,7 @@ function AppearanceTab({ preferences, setPreferences, applyGradient, accentGradi
 
 export function Settings() {
   const { preferences, setPreferences, applyGradient, formatCurrency, formatDate } = usePreferences()
+  const { updateCompanyProfile } = useCompanyProfile()
   const [activeTab, setActiveTab] = useState('profile')
   const toast = useToast()
   const confirm = useConfirm()
@@ -344,13 +183,20 @@ export function Settings() {
   })
   const [profileSnapshot, setProfileSnapshot] = useState(null)
   const [profileErrors, setProfileErrors] = useState({})
-  const [hasChanges, setHasChanges] = useState(false)
-  const [lastSaved, setLastSaved] = useState(null)
-  const [dragOver, setDragOver] = useState(false)
+  const [profileLoading, setProfileLoading] = useState(true)
+  const [completion, setCompletion] = useState(null)
+  const [savedAt, setSavedAt] = useState(null)
+  
+  // Pending deferred logo upload
+  const [pendingLogoFile, setPendingLogoFile] = useState(null)
+  const [pendingLogoPreviewUrl, setPendingLogoPreviewUrl] = useState(null)
+
+  // Draft banner state
+  const [profileDraftBanner, setProfileDraftBanner] = useState(null)
 
   const isDirty = useMemo(() => {
     if (!profileSnapshot) return false
-    return (
+    const fieldsChanged = (
       (profile.businessName || '') !== (profileSnapshot.businessName || '') ||
       (profile.ownerName || '') !== (profileSnapshot.ownerName || '') ||
       (profile.email || '') !== (profileSnapshot.email || '') ||
@@ -360,9 +206,29 @@ export function Settings() {
       (profile.website || '') !== (profileSnapshot.website || '') ||
       (profile.logo || '') !== (profileSnapshot.logo || '')
     )
-  }, [profile, profileSnapshot])
+    return fieldsChanged || pendingLogoFile !== null
+  }, [profile, profileSnapshot, pendingLogoFile])
+
+  // Form diff for "What changed?" and field counts
+  const formDiffResult = useMemo(() => {
+    if (!profileSnapshot) return { changedFields: [], count: 0 }
+    return getFormDiff(profileSnapshot, profile)
+  }, [profileSnapshot, profile])
+
+  // Draft hook integration
+  const profileDraft = useProfileDraft(profile, isDirty)
+
+  // Clean up object URLs on unmount or when pendingLogoPreviewUrl changes
+  useEffect(() => {
+    return () => {
+      if (pendingLogoPreviewUrl) {
+        URL.revokeObjectURL(pendingLogoPreviewUrl)
+      }
+    }
+  }, [pendingLogoPreviewUrl])
 
   const fetchProfile = async (signal) => {
+    setProfileLoading(true)
     try {
       const res = await api.get('/settings/profile', { signal })
       if (res.success && res.data) {
@@ -379,16 +245,30 @@ export function Settings() {
             logo: res.data.logo || '',
             banks: res.data.banks || [],
             paymentModes: res.data.paymentModes || [],
-            usersList: res.data.usersList || []
+            usersList: res.data.usersList || [],
+            invoiceTemplates: res.data.invoiceTemplates || {
+              selectedTheme: 'Modern Minimal',
+              showQr: true,
+              showHsn: false,
+              showQty: false,
+              showTaxTable: false,
+              declarationText: 'We declare that this invoice shows the actual price of the goods / services described and that all particulars are true and correct.'
+            }
           }
           setProfile(profileData)
           setProfileSnapshot(profileData)
-          setHasChanges(false)
+          if (res.completion) {
+            setCompletion(res.completion)
+          }
         }
       }
     } catch (err) {
       if (!signal || !signal.aborted) {
         showToast(err.message || 'Failed to load business profile', 'error')
+      }
+    } finally {
+      if (!signal || !signal.aborted) {
+        setProfileLoading(false)
       }
     }
   }
@@ -396,7 +276,29 @@ export function Settings() {
   useEffect(() => {
     const controller = new AbortController()
     fetchProfile(controller.signal)
+
+    // Check for unexpired draft on mount
+    profileDraft.loadDraftOnMount().then(savedDraft => {
+      if (savedDraft?.data) {
+        setProfileDraftBanner(savedDraft)
+      }
+    })
+
     return () => controller.abort()
+  }, [])
+
+  // Auto-save draft interval when dirty
+  const isDirtyRef = useRef(isDirty)
+  const profileRef = useRef(profile)
+  useEffect(() => { isDirtyRef.current = isDirty }, [isDirty])
+  useEffect(() => { profileRef.current = profile }, [profile])
+
+  useEffect(() => {
+    const cleanup = profileDraft.startAutoSave(
+      () => profileRef.current,
+      () => isDirtyRef.current
+    )
+    return cleanup
   }, [])
 
   const { confirmNavigation } = useDirtyStateContext()
@@ -407,13 +309,52 @@ export function Settings() {
     title: 'Company Profile Settings',
     isDirty: activeTab === 'profile' && isDirty,
     onSave: () => saveProfile(),
-    onDiscard: () => {
-      setProfile(profileSnapshot)
-      setHasChanges(false)
-    }
+    onDiscard: () => handleDiscardProfile()
   })
 
-  // Tab switch guard using global confirmNavigation
+  // Handle Logo Selection (Deferred Upload)
+  const handleLogoFileSelect = (file) => {
+    if (pendingLogoPreviewUrl) {
+      URL.revokeObjectURL(pendingLogoPreviewUrl)
+    }
+    const previewUrl = URL.createObjectURL(file)
+    setPendingLogoFile(file)
+    setPendingLogoPreviewUrl(previewUrl)
+  }
+
+  const handleRemoveLogo = () => {
+    if (pendingLogoPreviewUrl) {
+      URL.revokeObjectURL(pendingLogoPreviewUrl)
+      setPendingLogoPreviewUrl(null)
+    }
+    setPendingLogoFile(null)
+    setProfile(prev => ({ ...prev, logo: '' }))
+  }
+
+  const handleDiscardProfile = () => {
+    setProfile(profileSnapshot)
+    if (pendingLogoPreviewUrl) {
+      URL.revokeObjectURL(pendingLogoPreviewUrl)
+      setPendingLogoPreviewUrl(null)
+    }
+    setPendingLogoFile(null)
+    setProfileErrors({})
+  }
+
+  const handleRestoreDraftClick = async () => {
+    const draftData = await profileDraft.restoreDraft()
+    if (draftData) {
+      setProfile(prev => ({ ...prev, ...draftData }))
+      setProfileDraftBanner(null)
+      showToast('Draft restored successfully', 'info')
+    }
+  }
+
+  const handleDiscardDraftClick = async () => {
+    await profileDraft.discardDraft()
+    setProfileDraftBanner(null)
+  }
+
   const handleTabClick = (tabId) => {
     if (activeTab === tabId) return
     confirmNavigation(() => {
@@ -424,112 +365,44 @@ export function Settings() {
   const handleProfileChange = (e) => {
     const { name, value } = e.target
     setProfile(prev => ({ ...prev, [name]: value }))
-    setHasChanges(true)
     if (profileErrors[name]) {
       setProfileErrors(prev => ({ ...prev, [name]: '' }))
     }
   }
 
-  const handleDragOver = (e) => {
-    e.preventDefault()
-    setDragOver(true)
-  }
-
-  const handleDragLeave = () => {
-    setDragOver(false)
-  }
-
-  const handleDrop = async (e) => {
-    e.preventDefault()
-    setDragOver(false)
-    const file = e.dataTransfer?.files?.[0]
-    if (file) {
-      const allowed = ['.jpg', '.jpeg', '.png']
-      const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase()
-      if (!allowed.includes(ext)) {
-        showToast('Only .jpg, .jpeg, and .png files are allowed', 'error')
-        return
-      }
-
-      const formData = new FormData()
-      formData.append('logo', file)
-
-      try {
-        const res = await api.post('/settings/upload-logo', formData, {
-          headers: {
-            'Content-Type': 'multipart/form-data'
-          }
-        })
-        if (res.success && res.url) {
-          setProfile(prev => ({ ...prev, logo: res.url }))
-          setHasChanges(true)
-          showToast('Image uploaded and cleaned successfully')
-        }
-      } catch (err) {
-        showToast(err.message || 'Failed to upload logo', 'error')
-      }
+  const handleFieldFocusClick = (fieldName) => {
+    const el = document.getElementsByName(fieldName)?.[0]
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      el.focus()
     }
-  }
-
-  const handleLogoUpload = async (e) => {
-    const file = e.target?.files?.[0]
-    if (file) {
-      const allowed = ['.jpg', '.jpeg', '.png']
-      const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase()
-      if (!allowed.includes(ext)) {
-        showToast('Only .jpg, .jpeg, and .png files are allowed', 'error')
-        return
-      }
-
-      const formData = new FormData()
-      formData.append('logo', file)
-
-      try {
-        const res = await api.post('/settings/upload-logo', formData, {
-          headers: {
-            'Content-Type': 'multipart/form-data'
-          }
-        })
-        if (res.success && res.url) {
-          setProfile(prev => ({ ...prev, logo: res.url }))
-          setHasChanges(true)
-          showToast('Image uploaded and cleaned successfully')
-        }
-      } catch (err) {
-        showToast(err.message || 'Failed to upload logo', 'error')
-      }
-    }
-  }
-
-  const handleRemoveLogo = () => {
-    setProfile(prev => ({ ...prev, logo: '' }))
-    setHasChanges(true)
   }
 
   const saveProfile = (e) => {
     if (e) e.preventDefault()
     const errors = {}
-    if (!profile.businessName) errors.businessName = 'Business Name is required'
-    if (!profile.ownerName) errors.ownerName = 'Owner Name is required'
-    if (!profile.email) {
+    if (!profile.businessName?.trim()) errors.businessName = 'Business Name is required'
+    if (!profile.ownerName?.trim()) errors.ownerName = 'Owner Name is required'
+    if (!profile.email?.trim()) {
       errors.email = 'Email is required'
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(profile.email)) {
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(profile.email.trim())) {
       errors.email = 'Invalid email address'
     }
-    if (!profile.phone) {
+    if (!profile.phone?.trim()) {
       errors.phone = 'Phone is required'
     } else if (!/^[0-9]{10}$/.test(profile.phone.replace(/[-+()\s]/g, ''))) {
-      errors.phone = 'Phone must be a 10-digit number'
+      errors.phone = 'Phone must be a valid 10-digit mobile number'
     }
-    if (!profile.address) errors.address = 'Address is required'
-    if (!profile.gstin) {
+    if (!profile.address?.trim()) errors.address = 'Address is required'
+    if (!profile.gstin?.trim()) {
       errors.gstin = 'GSTIN is required'
-    } else if (!/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(profile.gstin.toUpperCase())) {
+    } else if (!/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/i.test(profile.gstin.trim())) {
       errors.gstin = 'Invalid GSTIN format (e.g., 24AAAAA0000A1Z0)'
     }
 
     if (Object.keys(errors).length > 0) {
       setProfileErrors(errors)
+      analytics.track('profile.validation.failed', { fields: Object.keys(errors) })
       showToast('Please fix the validation errors before saving', 'error')
       return
     }
@@ -550,25 +423,67 @@ export function Settings() {
         logo: 'Logo'
       },
       onSaveApi: async () => {
-        const payload = {
-          businessName: profile.businessName,
-          ownerName: profile.ownerName,
-          email: profile.email,
-          phone: profile.phone,
-          address: profile.address,
-          gstin: profile.gstin,
-          website: profile.website,
-          logo: profile.logo,
+        let finalLogoUrl = profile.logo
+
+        // 1. Upload logo if pending
+        if (pendingLogoFile && featureFlags.isEnabled('deferredLogo')) {
+          const formData = new FormData()
+          formData.append('logo', pendingLogoFile)
+          try {
+            const uploadRes = await api.post('/settings/upload-logo', formData, {
+              headers: { 'Content-Type': 'multipart/form-data' }
+            })
+            if (uploadRes.success && uploadRes.url) {
+              finalLogoUrl = uploadRes.url
+            }
+          } catch (uploadErr) {
+            analytics.track('profile.save.failed', { stage: 'logo_upload', error: uploadErr.message })
+            showToast(uploadErr.message || 'Failed to upload logo — profile not saved', 'error')
+            return false
+          }
         }
+
+        // 2. Save profile fields
+        const payload = {
+          businessName: profile.businessName.trim(),
+          ownerName: profile.ownerName.trim(),
+          email: profile.email.trim(),
+          phone: profile.phone.trim(),
+          address: profile.address.trim(),
+          gstin: profile.gstin.trim().toUpperCase(),
+          website: profile.website?.trim() || '',
+          logo: finalLogoUrl,
+        }
+
         try {
           const res = await api.post('/settings/profile', payload)
           if (res.success) {
             showToast('Business profile updated successfully', 'success')
-            setProfileSnapshot(payload)
-            setHasChanges(false)
-            setLastSaved(new Date().toLocaleTimeString())
+            setProfile(prev => ({ ...prev, ...payload, logo: finalLogoUrl }))
+            setProfileSnapshot({ ...profile, ...payload, logo: finalLogoUrl })
+            updateCompanyProfile(payload)
+            
+            if (pendingLogoPreviewUrl) {
+              URL.revokeObjectURL(pendingLogoPreviewUrl)
+              setPendingLogoPreviewUrl(null)
+            }
+            setPendingLogoFile(null)
+            
+            const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            setSavedAt(nowTime)
+
+            profileDraft.discardDraft().catch(() => {})
+            setProfileDraftBanner(null)
+
+            // Refetch to get updated completion score from backend
+            fetchProfile().catch(() => {})
+            return true
+          } else {
+            showToast(res.message || 'Failed to save business profile', 'error')
+            return false
           }
         } catch (err) {
+          analytics.track('profile.save.failed', { stage: 'profile_update', error: err.message })
           showToast(err.message || 'Failed to save business profile', 'error')
           return false
         }
@@ -884,14 +799,20 @@ export function Settings() {
   })
 
   // --- TAB 5: Cheque Banks (DB) ---
-  const [banks, setBanks] = useState([])
+  const [banks, setBanks] = useState(['SBI', 'HDFC Bank', 'ICICI Bank', 'Axis Bank', 'PNB', 'Kotak Bank'])
   const [bankInput, setBankInput] = useState('')
   const [editingBankIndex, setEditingBankIndex] = useState(-1)
   const [editingBankValue, setEditingBankValue] = useState('')
 
   useEffect(() => {
-    if (profile && profile.banks) {
-      setBanks(profile.banks)
+    if (profile) {
+      if (profile.banks && Array.isArray(profile.banks) && profile.banks.length > 0) {
+        setBanks(profile.banks)
+      } else {
+        const defaultBanks = ['SBI', 'HDFC Bank', 'ICICI Bank', 'Axis Bank', 'PNB', 'Kotak Bank']
+        setBanks(defaultBanks)
+        api.post('/settings/profile', { banks: defaultBanks }).catch(() => {})
+      }
     }
   }, [profile])
 
@@ -940,21 +861,43 @@ export function Settings() {
   }
 
   // --- TAB 6: Payment Modes (DB) ---
-  const [paymentModes, setPaymentModes] = useState([])
+  const [paymentModes, setPaymentModes] = useState([
+    { name: 'Bank Transfer', enabled: true },
+    { name: 'Cheque', enabled: true },
+    { name: 'Cash', enabled: true },
+    { name: 'UPI', enabled: true },
+    { name: 'NEFT / RTGS', enabled: true }
+  ])
   const [modeInput, setModeInput] = useState('')
   const [editingModeIndex, setEditingModeIndex] = useState(-1)
   const [editingModeValue, setEditingModeValue] = useState('')
 
   useEffect(() => {
-    if (profile && profile.paymentModes) {
-      setPaymentModes(profile.paymentModes)
+    if (profile) {
+      if (profile.paymentModes && Array.isArray(profile.paymentModes) && profile.paymentModes.length > 0) {
+        setPaymentModes(profile.paymentModes)
+      } else {
+        const defaultModes = [
+          { name: 'Bank Transfer', enabled: true },
+          { name: 'Cheque', enabled: true },
+          { name: 'Cash', enabled: true },
+          { name: 'UPI', enabled: true },
+          { name: 'NEFT / RTGS', enabled: true }
+        ]
+        setPaymentModes(defaultModes)
+        // Automatically save default payment modes if missing in DB
+        api.post('/settings/profile', { paymentModes: defaultModes }).catch(() => {})
+      }
     }
   }, [profile])
 
   const saveModesToStorage = async (newModes) => {
     setPaymentModes(newModes)
     try {
-      await api.post('/settings/profile', { paymentModes: newModes })
+      const res = await api.post('/settings/profile', { paymentModes: newModes })
+      if (res && res.data) {
+        setProfile(prev => ({ ...prev, paymentModes: res.data.paymentModes || newModes }))
+      }
     } catch (err) {
       showToast('Failed to save payment modes to database', 'error')
     }
@@ -974,10 +917,11 @@ export function Settings() {
   }
 
   const handleToggleMode = (idx) => {
-    const updated = [...paymentModes]
-    updated[idx].enabled = !updated[idx].enabled
+    const target = paymentModes[idx]
+    if (!target) return
+    const updated = paymentModes.map((m, i) => i === idx ? { ...m, enabled: !m.enabled } : m)
     saveModesToStorage(updated)
-    showToast(`Payment mode ${updated[idx].enabled ? 'enabled' : 'disabled'}`)
+    showToast(`Payment mode "${target.name}" ${!target.enabled ? 'enabled' : 'disabled'}`)
   }
 
   const handleSaveEditMode = (idx) => {
@@ -1000,7 +944,7 @@ export function Settings() {
   // --- TAB 7: Users & Access (DB) ---
   const [users, setUsers] = useState([])
   const [showInviteModal, setShowInviteModal] = useState(false)
-  const [inviteForm, setInviteForm] = useState({ name: '', email: '', role: 'Viewer' })
+  const [inviteForm, setInviteForm] = useState({ name: '', email: '', password: '', role: 'Viewer' })
 
   useEffect(() => {
     if (profile && profile.usersList) {
@@ -1017,30 +961,63 @@ export function Settings() {
     }
   }
 
-  const handleInviteUser = (e) => {
+  const handleInviteUser = async (e) => {
     e.preventDefault()
-    if (!inviteForm.name || !inviteForm.email) {
-      showToast('Name and Email are required', 'error')
+    const name = inviteForm.name.trim()
+    const email = inviteForm.email.trim().toLowerCase()
+    const password = inviteForm.password?.trim()
+
+    if (!name || !email) {
+      showToast('User name and email address are required', 'error')
       return
     }
-    const newUser = {
-      id: String(Date.now()),
-      name: inviteForm.name,
-      email: inviteForm.email,
-      role: inviteForm.role,
-      status: 'Active'
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(email)) {
+      showToast('Please enter a valid email address', 'error')
+      return
     }
-    const updated = [...users, newUser]
-    saveUsersToStorage(updated)
-    setShowInviteModal(false)
-    setInviteForm({ name: '', email: '', role: 'Viewer' })
-    showToast(`Invite sent to ${newUser.email}`)
+
+    try {
+      const res = await api.post('/auth/register', {
+        name,
+        email,
+        password: password || undefined,
+        role: inviteForm.role || 'Viewer'
+      })
+
+      const registeredUser = res.user || res.data?.user || {}
+      const newUser = {
+        id: registeredUser.id || String(Date.now()),
+        name: registeredUser.name || name,
+        email: registeredUser.email || email,
+        role: registeredUser.role || inviteForm.role || 'Viewer',
+        status: 'Active'
+      }
+
+      const updated = [...users.filter(u => u.email !== email), newUser]
+      saveUsersToStorage(updated)
+      setShowInviteModal(false)
+      setInviteForm({ name: '', email: '', password: '', role: 'Viewer' })
+
+      const emailSent = res.emailSent || res.data?.emailSent
+      const emailNote = emailSent ? 'Invitation email sent' : 'Account created'
+      showToast(`User ${name} invited successfully (${emailNote})`)
+      fetchProfile()
+    } catch (err) {
+      const msg = err.message || err.response?.data?.message || 'Failed to create user account'
+      showToast(msg, 'error')
+    }
   }
 
-  const handleChangeUserRole = (id, newRole) => {
-    const updated = users.map(u => u.id === id ? { ...u, role: newRole } : u)
-    saveUsersToStorage(updated)
-    showToast('User role updated')
+  const handleChangeUserRole = async (id, newRole) => {
+    try {
+      await api.patch(`/auth/users/${id}/role`, { role: newRole })
+      showToast('User role updated')
+      fetchProfile()
+    } catch (err) {
+      showToast(err.message || 'Failed to update user role', 'error')
+    }
   }
 
   const handleDeleteUser = async (u) => {
@@ -1051,9 +1028,13 @@ export function Settings() {
     }
 
     if (await confirm(`Are you sure you want to remove user ${u.name}?`, { title: 'Remove User' })) {
-      const updated = users.filter(usr => usr.id !== u.id)
-      saveUsersToStorage(updated)
-      showToast('User removed successfully')
+      try {
+        await api.delete(`/auth/users/${u.id}`)
+        showToast('User removed successfully')
+        fetchProfile()
+      } catch (err) {
+        showToast(err.message || 'Failed to remove user', 'error')
+      }
     }
   }
 
@@ -1127,7 +1108,9 @@ export function Settings() {
         XLSX.utils.book_append_sheet(wb, ws, sheet.name)
       })
 
-      XLSX.writeFile(wb, 'vastrams_financial_data.xlsx')
+      const todayStr = new Date().toISOString().split('T')[0]
+      const fileName = `Vastrams_Financial_Backup_${todayStr}.xlsx`
+      XLSX.writeFile(wb, fileName)
       showToast('Excel Export completed successfully!')
     } catch (error) {
       console.error('Excel export error:', error)
@@ -1284,268 +1267,342 @@ export function Settings() {
     switch (activeTab) {
       case 'profile':
         return (
-          <div className="space-y-8 pb-16">
-            <div>
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white" style={{ fontFamily: 'var(--font-display)' }}>Business Profile</h2>
-              <p className="text-xs text-gray-400 mt-0.5">Manage your corporate details, invoicing info, and logo</p>
+          <div className="space-y-6 pb-24">
+            <div className="border-b border-gray-200 dark:border-slate-800 pb-3 mb-2">
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white" style={{ fontFamily: 'var(--font-display)' }}>Business Profile</h2>
+              <p className="text-xs text-gray-400 mt-0.5">Manage corporate credentials, contact information, and branding assets</p>
             </div>
 
-            <form onSubmit={saveProfile} className="space-y-8">
-              
-              {/* --- SECTION 1: Business Information --- */}
-              <div className="space-y-4">
-                <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Business Information</h3>
-                <div className="h-[1px] bg-gray-200 dark:bg-slate-800" />
-                <div className="flex flex-col md:flex-row gap-6 items-start">
-                  
-                  {/* Logo Dropzone */}
-                  <div
-                    onDragOver={handleDragOver}
-                    onDragLeave={handleDragLeave}
-                    onDrop={handleDrop}
-                    className={`border border-dashed rounded-xl p-4 flex flex-col items-center justify-center text-center transition-all ${
-                      dragOver ? 'border-brand-primary bg-brand-primary/5' : 'border-gray-200 dark:border-slate-700'
-                    }`}
-                    style={{ 
-                      minWidth: '220px', 
-                      height: '150px', 
-                      background: 'var(--color-bg-elevated)',
+            {/* Draft restore banner */}
+            {profileDraftBanner && (
+              <div
+                style={{
+                  background: 'var(--color-bg-elevated)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: '10px',
+                  padding: '10px 14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '12px',
+                }}
+              >
+                <div>
+                  <p style={{ margin: 0, fontSize: '12px', fontWeight: 600, color: 'var(--color-text-primary)' }}>
+                    Unsaved profile draft available
+                  </p>
+                  <p style={{ margin: '2px 0 0', fontSize: '10px', color: 'var(--color-text-muted)' }}>
+                    Saved {new Date(profileDraftBanner.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={handleRestoreDraftClick}
+                    style={{
+                      padding: '4px 10px',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      borderRadius: '6px',
+                      background: 'var(--color-primary)',
+                      color: '#fff',
+                      border: 'none',
+                      cursor: 'pointer',
                     }}
                   >
-                    {profile.logo ? (
-                      <div className="relative h-16 w-16 rounded-lg overflow-hidden border border-gray-200 dark:border-slate-700 bg-white">
-                        <img src={profile.logo} alt="Logo Preview" className="object-contain h-full w-full" />
+                    Apply Draft
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDiscardDraftClick}
+                    style={{
+                      padding: '4px 10px',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      borderRadius: '6px',
+                      background: 'transparent',
+                      color: 'var(--color-text-muted)',
+                      border: '1px solid var(--color-border)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Discard
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {profileLoading ? (
+              /* Loading Skeleton Shimmer */
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
+                <div className="md:col-span-4 space-y-4">
+                  <Skeleton className="h-32 w-full rounded-xl" />
+                  <Skeleton className="h-44 w-full rounded-xl" />
+                </div>
+                <div className="md:col-span-8 space-y-6">
+                  <Skeleton className="h-10 w-full rounded-lg" />
+                  <Skeleton className="h-10 w-full rounded-lg" />
+                  <Skeleton className="h-24 w-full rounded-lg" />
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={saveProfile} className="grid grid-cols-1 md:grid-cols-12 gap-8 items-start">
+                
+                {/* ── LEFT COLUMN (Fixed 4 Cols): Completion Card + Logo Uploader ── */}
+                <div className="md:col-span-4 space-y-4">
+                  <ProfileCompletionCard
+                    completion={completion}
+                    onFieldClick={handleFieldFocusClick}
+                  />
+
+                  <div
+                    style={{
+                      background: 'var(--color-bg-elevated)',
+                      border: '1px solid var(--color-border)',
+                      borderRadius: '12px',
+                      padding: '16px',
+                    }}
+                  >
+                    <h3 style={{ margin: '0 0 12px', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-text-muted)' }}>
+                      Company Logo
+                    </h3>
+                    <LogoUploader
+                      currentLogoUrl={profile.logo}
+                      pendingPreviewUrl={pendingLogoPreviewUrl}
+                      onFileSelect={handleLogoFileSelect}
+                      onRemove={handleRemoveLogo}
+                      disabled={isSaving}
+                    />
+                  </div>
+                </div>
+
+                {/* ── RIGHT COLUMN (8 Cols): Form Sections ── */}
+                <div className="md:col-span-8 space-y-8">
+                  
+                  {/* Section 1: Business Information */}
+                  <div className="space-y-4">
+                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Business Identity</h3>
+                    <div className="h-[1px] bg-gray-200 dark:bg-slate-800" />
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-[13px] font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                          Business Name <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          name="businessName"
+                          value={profile.businessName}
+                          onChange={handleProfileChange}
+                          placeholder="e.g. Vastrams Textiles Ltd"
+                          aria-required="true"
+                          aria-describedby={profileErrors.businessName ? "businessName-error" : undefined}
+                          style={{
+                            background: 'var(--color-bg-surface)',
+                            border: '1px solid var(--color-border-strong)',
+                            color: 'var(--color-text-primary)',
+                            fontSize: '14px'
+                          }}
+                          className="w-full px-3 py-2 border rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary"
+                        />
+                        {profileErrors.businessName && (
+                          <p id="businessName-error" role="alert" className="text-[11px] text-red-500 mt-1 font-medium">
+                            {profileErrors.businessName}
+                          </p>
+                        )}
                       </div>
-                    ) : (
-                      <div className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1">No Logo</div>
-                    )}
-                    <p className="text-[10px] text-gray-400 mt-1">Drag logo here or upload</p>
-                    <div className="flex gap-2 mt-2">
-                      <label className="px-2.5 py-1 text-[10px] font-semibold bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-slate-700 text-gray-700 dark:text-gray-200 transition-colors">
-                        <span>Upload</span>
-                        <input type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" />
+
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="block text-[13px] font-semibold text-gray-700 dark:text-gray-300">
+                            GSTIN Number <span className="text-red-500">*</span>
+                          </label>
+                          {profile.gstin && <CopyButton value={profile.gstin} label="Copy GSTIN" />}
+                        </div>
+                        <input
+                          type="text"
+                          name="gstin"
+                          value={profile.gstin}
+                          onChange={handleProfileChange}
+                          placeholder="e.g. 24AAAAA0000A1Z0"
+                          aria-required="true"
+                          aria-describedby={profileErrors.gstin ? "gstin-error" : undefined}
+                          style={{
+                            background: 'var(--color-bg-surface)',
+                            border: '1px solid var(--color-border-strong)',
+                            color: 'var(--color-text-primary)',
+                            fontSize: '14px'
+                          }}
+                          className="w-full px-3 py-2 border rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary font-mono uppercase"
+                        />
+                        {profileErrors.gstin && (
+                          <p id="gstin-error" role="alert" className="text-[11px] text-red-500 mt-1 font-medium">
+                            {profileErrors.gstin}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Section 2: Contact Information */}
+                  <div className="space-y-4">
+                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Contact Credentials</h3>
+                    <div className="h-[1px] bg-gray-200 dark:bg-slate-800" />
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-[13px] font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                          Owner Name <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          name="ownerName"
+                          value={profile.ownerName}
+                          onChange={handleProfileChange}
+                          placeholder="Owner name"
+                          aria-required="true"
+                          aria-describedby={profileErrors.ownerName ? "ownerName-error" : undefined}
+                          style={{
+                            background: 'var(--color-bg-surface)',
+                            border: '1px solid var(--color-border-strong)',
+                            color: 'var(--color-text-primary)',
+                            fontSize: '14px'
+                          }}
+                          className="w-full px-3 py-2 border rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary"
+                        />
+                        {profileErrors.ownerName && (
+                          <p id="ownerName-error" role="alert" className="text-[11px] text-red-500 mt-1 font-medium">
+                            {profileErrors.ownerName}
+                          </p>
+                        )}
+                      </div>
+
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="block text-[13px] font-semibold text-gray-700 dark:text-gray-300">
+                            Email <span className="text-red-500">*</span>
+                          </label>
+                          {profile.email && <CopyButton value={profile.email} label="Copy email" />}
+                        </div>
+                        <input
+                          type="email"
+                          name="email"
+                          autoComplete="off"
+                          data-lpignore="true"
+                          data-form-type="other"
+                          value={profile.email}
+                          onChange={handleProfileChange}
+                          placeholder="email@company.com"
+                          aria-required="true"
+                          aria-describedby={profileErrors.email ? "email-error" : undefined}
+                          style={{
+                            background: 'var(--color-bg-surface)',
+                            border: '1px solid var(--color-border-strong)',
+                            color: 'var(--color-text-primary)',
+                            fontSize: '14px'
+                          }}
+                          className="w-full px-3 py-2 border rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary"
+                        />
+                        {profileErrors.email && (
+                          <p id="email-error" role="alert" className="text-[11px] text-red-500 mt-1 font-medium">
+                            {profileErrors.email}
+                          </p>
+                        )}
+                      </div>
+
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="block text-[13px] font-semibold text-gray-700 dark:text-gray-300">
+                            Phone <span className="text-red-500">*</span>
+                          </label>
+                          {profile.phone && <CopyButton value={profile.phone} label="Copy phone" />}
+                        </div>
+                        <input
+                          type="text"
+                          name="phone"
+                          autoComplete="off"
+                          data-lpignore="true"
+                          data-form-type="other"
+                          value={profile.phone}
+                          onChange={handleProfileChange}
+                          placeholder="9876543210"
+                          aria-required="true"
+                          aria-describedby={profileErrors.phone ? "phone-error" : undefined}
+                          style={{
+                            background: 'var(--color-bg-surface)',
+                            border: '1px solid var(--color-border-strong)',
+                            color: 'var(--color-text-primary)',
+                            fontSize: '14px'
+                          }}
+                          className="w-full px-3 py-2 border rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary"
+                        />
+                        {profileErrors.phone && (
+                          <p id="phone-error" role="alert" className="text-[11px] text-red-500 mt-1 font-medium">
+                            {profileErrors.phone}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Section 3: Address */}
+                  <div className="space-y-4">
+                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Corporate Address</h3>
+                    <div className="h-[1px] bg-gray-200 dark:bg-slate-800" />
+                    <div>
+                      <label className="block text-[13px] font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                        Full Registered Address <span className="text-red-500">*</span>
                       </label>
-                      {profile.logo && (
-                        <button
-                          type="button"
-                          onClick={handleRemoveLogo}
-                          className="px-2.5 py-1 text-[10px] font-semibold text-red-500 border border-red-200 dark:border-red-900/50 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
-                        >
-                          Remove
-                        </button>
+                      <textarea
+                        name="address"
+                        rows={3}
+                        value={profile.address}
+                        onChange={handleProfileChange}
+                        placeholder="Enter registered corporate address"
+                        aria-required="true"
+                        aria-describedby={profileErrors.address ? "address-error" : undefined}
+                        style={{
+                          background: 'var(--color-bg-surface)',
+                          border: '1px solid var(--color-border-strong)',
+                          color: 'var(--color-text-primary)',
+                          fontSize: '14px'
+                        }}
+                        className="w-full px-3 py-2 border rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary resize-none"
+                      />
+                      {profileErrors.address && (
+                        <p id="address-error" role="alert" className="text-[11px] text-red-500 mt-1 font-medium">
+                          {profileErrors.address}
+                        </p>
                       )}
                     </div>
                   </div>
 
-                  {/* Fields */}
-                  <div className="flex-1 w-full space-y-4">
+                  {/* Section 4: Online Presence */}
+                  <div className="space-y-4">
+                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Online Presence</h3>
+                    <div className="h-[1px] bg-gray-200 dark:bg-slate-800" />
                     <div>
-                      <label className="block text-[13px] font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Business Name *</label>
-                      <input 
-                        type="text" 
-                        name="businessName" 
-                        value={profile.businessName} 
+                      <label className="block text-[13px] font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                        Official Website
+                      </label>
+                      <input
+                        type="text"
+                        name="website"
+                        value={profile.website}
                         onChange={handleProfileChange}
-                        placeholder="Company Name"
+                        placeholder="e.g. https://www.company.com"
                         style={{
                           background: 'var(--color-bg-surface)',
                           border: '1px solid var(--color-border-strong)',
                           color: 'var(--color-text-primary)',
-                          fontSize: '15px'
+                          fontSize: '14px'
                         }}
-                        className="w-full px-3 py-2 border rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary hover:border-gray-400 dark:hover:border-slate-500" 
+                        className="w-full px-3 py-2 border rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary"
                       />
-                      {profileErrors.businessName && <p className="text-[11px] text-red-500 mt-1 font-medium">{profileErrors.businessName}</p>}
-                    </div>
-                    <div>
-                      <label className="block text-[13px] font-semibold text-gray-700 dark:text-gray-300 mb-1.5">GSTIN Number *</label>
-                      <input 
-                        type="text" 
-                        name="gstin" 
-                        value={profile.gstin} 
-                        onChange={handleProfileChange}
-                        placeholder="22AAAAA0000A1Z0"
-                        style={{
-                          background: 'var(--color-bg-surface)',
-                          border: '1px solid var(--color-border-strong)',
-                          color: 'var(--color-text-primary)',
-                          fontSize: '15px'
-                        }}
-                        className="w-full px-3 py-2 border rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary hover:border-gray-400 dark:hover:border-slate-500 font-mono uppercase" 
-                      />
-                      {profileErrors.gstin && <p className="text-[11px] text-red-500 mt-1 font-medium">{profileErrors.gstin}</p>}
                     </div>
                   </div>
-                </div>
-              </div>
 
-              {/* --- SECTION 2: Contact Information --- */}
-              <div className="space-y-4">
-                <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Contact Information</h3>
-                <div className="h-[1px] bg-gray-200 dark:bg-slate-800" />
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-[13px] font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Owner Name *</label>
-                    <input 
-                      type="text" 
-                      name="ownerName" 
-                      value={profile.ownerName} 
-                      onChange={handleProfileChange}
-                      placeholder="Owner name"
-                      style={{
-                        background: 'var(--color-bg-surface)',
-                        border: '1px solid var(--color-border-strong)',
-                        color: 'var(--color-text-primary)',
-                        fontSize: '15px'
-                      }}
-                      className="w-full px-3 py-2 border rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary hover:border-gray-400 dark:hover:border-slate-500" 
-                    />
-                    {profileErrors.ownerName && <p className="text-[11px] text-red-500 mt-1 font-medium">{profileErrors.ownerName}</p>}
-                  </div>
-                  <div>
-                    <label className="block text-[13px] font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Email Address *</label>
-                    <input 
-                      type="email" 
-                      name="email" 
-                      value={profile.email} 
-                      onChange={handleProfileChange}
-                      placeholder="email@company.com"
-                      style={{
-                        background: 'var(--color-bg-surface)',
-                        border: '1px solid var(--color-border-strong)',
-                        color: 'var(--color-text-primary)',
-                        fontSize: '15px'
-                      }}
-                      className="w-full px-3 py-2 border rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary hover:border-gray-400 dark:hover:border-slate-500" 
-                    />
-                    {profileErrors.email && <p className="text-[11px] text-red-500 mt-1 font-medium">{profileErrors.email}</p>}
-                  </div>
-                  <div>
-                    <label className="block text-[13px] font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Phone Number *</label>
-                    <input 
-                      type="text" 
-                      name="phone" 
-                      value={profile.phone} 
-                      onChange={handleProfileChange}
-                      placeholder="9876543210"
-                      style={{
-                        background: 'var(--color-bg-surface)',
-                        border: '1px solid var(--color-border-strong)',
-                        color: 'var(--color-text-primary)',
-                        fontSize: '15px'
-                      }}
-                      className="w-full px-3 py-2 border rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary hover:border-gray-400 dark:hover:border-slate-500" 
-                    />
-                    {profileErrors.phone && <p className="text-[11px] text-red-500 mt-1 font-medium">{profileErrors.phone}</p>}
-                  </div>
                 </div>
-              </div>
-
-              {/* --- SECTION 3: Address --- */}
-              <div className="space-y-4">
-                <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Address</h3>
-                <div className="h-[1px] bg-gray-200 dark:bg-slate-800" />
-                <div>
-                  <label className="block text-[13px] font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Full Corporate Address *</label>
-                  <textarea 
-                    name="address" 
-                    rows={2} 
-                    value={profile.address} 
-                    onChange={handleProfileChange}
-                    placeholder="Enter corporate address"
-                    style={{
-                      background: 'var(--color-bg-surface)',
-                      border: '1px solid var(--color-border-strong)',
-                      color: 'var(--color-text-primary)',
-                      fontSize: '15px'
-                    }}
-                    className="w-full px-3 py-2 border rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary hover:border-gray-400 dark:hover:border-slate-500 resize-none" 
-                  />
-                  {profileErrors.address && <p className="text-[11px] text-red-500 mt-1 font-medium">{profileErrors.address}</p>}
-                </div>
-              </div>
-
-              {/* --- SECTION 4: Online Presence --- */}
-              <div className="space-y-4">
-                <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Online Presence</h3>
-                <div className="h-[1px] bg-gray-200 dark:bg-slate-800" />
-                <div>
-                  <label className="block text-[13px] font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Website</label>
-                  <input 
-                    type="text" 
-                    name="website" 
-                    value={profile.website} 
-                    onChange={handleProfileChange}
-                    placeholder="https://www.company.com"
-                    style={{
-                      background: 'var(--color-bg-surface)',
-                      border: '1px solid var(--color-border-strong)',
-                      color: 'var(--color-text-primary)',
-                      fontSize: '15px'
-                    }}
-                    className="w-full px-3 py-2 border rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary hover:border-gray-400 dark:hover:border-slate-500" 
-                  />
-                </div>
-              </div>
-
-              {/* Unsaved changes status indicator */}
-              {!isDirty && lastSaved && (
-                <div className="flex justify-end pt-2 text-[11px] text-gray-400 font-medium">
-                  Last saved at {lastSaved}
-                </div>
-              )}
-
-              {/* Sticky Action Footer */}
-              <div 
-                className="fixed bottom-0 left-0 right-0 z-50 py-4 px-6 flex justify-between items-center border-t backdrop-blur-sm"
-                style={{
-                  background: 'rgba(17, 24, 39, 0.95)',
-                  borderColor: 'var(--color-border)',
-                  boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.25)',
-                }}
-              >
-                <div className="flex items-center space-x-2 text-xs font-semibold text-amber-500">
-                  {isDirty && (
-                    <>
-                      <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
-                      <span>Unsaved Changes</span>
-                    </>
-                  )}
-                </div>
-                <div className="flex items-center space-x-3">
-                  <button
-                    type="button"
-                    disabled={!isDirty}
-                    onClick={() => {
-                      if (profileSnapshot) {
-                        setProfile(profileSnapshot)
-                      }
-                    }}
-                    className={`px-4 py-2 text-xs font-semibold rounded-lg transition-colors ${
-                      isDirty 
-                        ? 'text-gray-300 border border-slate-700 hover:bg-slate-800 cursor-pointer' 
-                        : 'text-gray-600 border border-slate-800 cursor-not-allowed opacity-50'
-                    }`}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={!isDirty}
-                    className="px-5 py-2 text-xs font-semibold text-white rounded-lg transition-all shadow-md"
-                    style={{
-                      background: isDirty ? 'var(--gradient-primary)' : 'var(--color-bg-elevated)',
-                      border: isDirty ? 'none' : '1px solid var(--color-border)',
-                      cursor: isDirty ? 'pointer' : 'not-allowed',
-                      opacity: isDirty ? 1 : 0.5,
-                      color: isDirty ? '#fff' : 'var(--color-text-muted)'
-                    }}
-                  >
-                    Save Changes
-                  </button>
-                </div>
-              </div>
-            </form>
+              </form>
+            )}
           </div>
         )
 
@@ -1983,15 +2040,15 @@ export function Settings() {
                         <td className="px-4 py-3 font-semibold" style={{ color: 'var(--color-text-primary)' }}>{u.name}</td>
                         <td className="px-4 py-3 font-mono text-xs">{u.email}</td>
                         <td className="px-4 py-3">
-                          <select 
-                            value={u.role} 
-                            onChange={e => handleChangeUserRole(u.id, e.target.value)}
-                            className="px-2 py-0.5 text-xs rounded focus:outline-none"
-                            style={{ background: 'var(--color-bg-elevated)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }}
-                          >
-                            <option value="Admin">Admin</option>
-                            <option value="Viewer">Viewer</option>
-                          </select>
+                          <DropdownSelect
+                            value={u.role}
+                            onChange={val => handleChangeUserRole(u.id, val)}
+                            options={[
+                              { value: 'Admin', label: 'Admin' },
+                              { value: 'Viewer', label: 'Viewer' }
+                            ]}
+                            className="w-28 text-xs"
+                          />
                         </td>
                         <td className="px-4 py-3">
                           <Badge variant={u.status === 'Active' ? 'success' : 'danger'}>
@@ -2110,50 +2167,127 @@ export function Settings() {
         return <AppearanceTab
           preferences={preferences}
           setPreferences={setPreferences}
-          applyGradient={applyGradient}
-          accentGradients={accentGradients}
+          confirm={confirm}
+          showToast={showToast}
         />
 
       case 'about':
         return (
-          <div className="space-y-6">
-            <div className="space-y-1">
-              <h2 className="text-3xl font-extrabold text-gray-900 tracking-tight">Vastrams</h2>
-              <p className="text-sm font-semibold text-brand-primary">Vendor & Finance Management System</p>
-              <p className="text-xs text-gray-400 mt-1">Enterprise ledger management, automated FIFO payables reconciliation, and lender notes tracker.</p>
+          <div style={{ maxWidth: '640px' }}>
+            {/* Dark hero card */}
+            <div style={{
+              background: 'linear-gradient(135deg, #0a0f1e 0%, #0d1a2e 60%, #0a1628 100%)',
+              borderRadius: '20px',
+              padding: '40px 36px',
+              border: '1px solid rgba(0,200,150,0.12)',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
+              position: 'relative',
+              overflow: 'hidden',
+              marginBottom: '24px',
+            }}>
+              {/* Radial glow */}
+              <div style={{
+                position: 'absolute', top: '-60px', right: '-60px',
+                width: '260px', height: '260px',
+                borderRadius: '50%',
+                background: 'radial-gradient(circle, rgba(0,200,150,0.15) 0%, transparent 70%)',
+                pointerEvents: 'none',
+              }} />
+
+              <div style={{ position: 'relative', zIndex: 1 }}>
+                {/* Brand mark */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '20px' }}>
+                  <div style={{
+                    width: '52px', height: '52px', borderRadius: '14px',
+                    background: 'linear-gradient(135deg, #00C896, #00A87E)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '22px', fontWeight: 900, color: '#fff',
+                    fontFamily: 'var(--font-display)',
+                    boxShadow: '0 4px 20px rgba(0,200,150,0.35)',
+                  }}>V</div>
+                  <div>
+                    <p style={{ margin: 0, fontSize: '22px', fontWeight: 900, color: '#fff', fontFamily: 'var(--font-display)', letterSpacing: '-0.5px' }}>Vastrams</p>
+                    <p style={{ margin: 0, fontSize: '11px', fontWeight: 600, color: 'rgba(255,255,255,0.4)', letterSpacing: '0.12em', textTransform: 'uppercase' }}>Vendor & Finance</p>
+                  </div>
+                </div>
+
+                {/* Tagline */}
+                <p style={{ margin: '0 0 20px', fontSize: '13px', color: 'rgba(255,255,255,0.55)', lineHeight: 1.6 }}>
+                  Enterprise ledger management, automated FIFO payables reconciliation,<br />
+                  and lender notes tracker — built for India's fast-moving trade.
+                </p>
+
+                {/* Version badges */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                  {[
+                    { label: 'Version', value: 'v1.0.0' },
+                    { label: 'Build', value: new Date().toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }) },
+                    { label: 'Environment', value: 'Production' },
+                  ].map(({ label, value }) => (
+                    <div key={label} style={{
+                      padding: '6px 14px',
+                      borderRadius: '99px',
+                      background: 'rgba(255,255,255,0.06)',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      display: 'flex', alignItems: 'center', gap: '6px',
+                    }}>
+                      <span style={{ fontSize: '10px', fontWeight: 600, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{label}</span>
+                      <span style={{ fontSize: '11px', fontWeight: 700, color: '#fff' }}>{value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-xl">
-              <div className="bg-gray-50 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-200">
-                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">App Version</span>
-                <span className="text-sm font-semibold text-gray-900 mt-1 block">v1.0.0</span>
-              </div>
-              <div className="bg-gray-50 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-200">
-                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Build Date</span>
-                <span className="text-sm font-semibold text-gray-900 mt-1 block">{new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Technology Stack</h3>
-              <div className="flex flex-wrap gap-2">
-                {['React 18', 'Vite', 'Tailwind CSS', 'Node.js', 'Express.js', 'MongoDB (Mongoose)'].map((tech) => (
-                  <span key={tech} className="px-2.5 py-1 bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 rounded-lg text-xs font-medium border border-gray-200">
-                    {tech}
-                  </span>
+            {/* Tech stack section */}
+            <div style={{ marginBottom: '20px' }}>
+              <p style={{ margin: '0 0 12px', fontSize: '10px', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.12em' }}>Built With</p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                {[
+                  { name: 'React 18', color: '#61dafb', bg: 'rgba(97,218,251,0.08)' },
+                  { name: 'Vite', color: '#646cff', bg: 'rgba(100,108,255,0.08)' },
+                  { name: 'Tailwind CSS', color: '#38bdf8', bg: 'rgba(56,189,248,0.08)' },
+                  { name: 'Node.js', color: '#74c14d', bg: 'rgba(116,193,77,0.08)' },
+                  { name: 'Express.js', color: '#aaa', bg: 'rgba(170,170,170,0.08)' },
+                  { name: 'MongoDB', color: '#00ed64', bg: 'rgba(0,237,100,0.08)' },
+                ].map(({ name, color, bg }) => (
+                  <span key={name} style={{
+                    padding: '5px 12px',
+                    borderRadius: '8px',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    background: bg,
+                    color: color,
+                    border: `1px solid ${color}22`,
+                  }}>{name}</span>
                 ))}
               </div>
             </div>
 
-            <div className="pt-2">
-              <button onClick={checkUpdates} className="flex items-center space-x-1.5 px-4 py-2 text-xs font-semibold bg-brand-primary text-white rounded-lg hover:opacity-90 transition-opacity">
-                <RefreshCw size={12} />
-                <span>Check for Updates</span>
+            {/* Check updates + copyright */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+              <button
+                onClick={checkUpdates}
+                style={{
+                  padding: '9px 20px',
+                  background: 'var(--gradient-primary)',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '10px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 14px rgba(0,200,150,0.25)',
+                  transition: 'opacity 150ms',
+                }}
+                onMouseEnter={e => e.currentTarget.style.opacity = '0.85'}
+                onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+              >
+                Check for Updates
               </button>
-            </div>
-
-            <div className="pt-8 border-t border-gray-200">
-              <p className="text-[10px] text-gray-400">Developed for Vastrams Accounts Division. All Rights Reserved &copy; 2026.</p>
+              <p style={{ fontSize: '10px', color: 'var(--color-text-muted)', margin: 0 }}>
+                Developed for Vastrams Accounts Division &copy; 2026. All Rights Reserved.
+              </p>
             </div>
           </div>
         )
@@ -2170,33 +2304,33 @@ export function Settings() {
         { id: 'profile', label: 'Business Profile', icon: User },
         { id: 'appearance', label: 'Appearance', icon: Palette },
         { id: 'users', label: 'Users & Access', icon: User },
-        { id: 'backups', label: 'Data & Backups', icon: Database },
       ]
     },
     {
       title: 'Finance',
       items: [
+        { id: 'banks', label: 'Cheque Banks', icon: Building2 },
+        { id: 'paymentModes', label: 'Payment Modes', icon: CreditCard },
         { id: 'vendors', label: 'Vendors Master', icon: Store },
         { id: 'financiers', label: 'Financiers Master', icon: Building2 },
         { id: 'loans', label: 'Loan Manager', icon: Coins },
-        { id: 'banks', label: 'Cheque Banks', icon: Building2 },
-        { id: 'paymentModes', label: 'Payment Modes', icon: CreditCard },
       ]
     },
     {
       title: 'System',
       items: [
+        { id: 'backups', label: 'Data & Backups', icon: Database },
         { id: 'about', label: 'About', icon: Info },
       ]
     }
   ]
 
   return (
-    <div className="space-y-8 pb-20">
+    <div className="space-y-6 pt-2 pb-24">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-extrabold text-gray-900 dark:text-white tracking-tight" style={{ fontFamily: 'var(--font-display)' }}>Settings</h1>
-        <p className="text-xs text-gray-400 mt-1">Configure system parameters, manage profile details, and maintain backups</p>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight" style={{ fontFamily: 'var(--font-display)' }}>Settings</h1>
+        <p className="text-xs text-gray-400 mt-0.5">Configure system parameters, manage profile details, and maintain backups</p>
       </div>
 
       {/* Main Two-Column Layout */}
@@ -2385,26 +2519,26 @@ export function Settings() {
             <form onSubmit={handleSaveLoan} className="space-y-4">
               <div className="space-y-3">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Note Number *</label>
+                  <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">Note Number *</label>
                   <input type="text" value={loanForm.noteNumber} onChange={e => setLoanForm({ ...loanForm, noteNumber: e.target.value })}
-                    className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary" />
+                    className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary font-mono" />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Loan Date</label>
+                  <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">Loan Date</label>
                   <CustomDatePicker
                     value={loanForm.date}
                     onChange={val => setLoanForm({ ...loanForm, date: val })}
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Loan Amount *</label>
+                  <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">Loan Amount *</label>
                   <input type="number" value={loanForm.amount} onChange={e => setLoanForm({ ...loanForm, amount: e.target.value })}
-                    className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none" />
+                    className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary" />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Notes</label>
+                  <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">Notes</label>
                   <textarea rows={2} value={loanForm.notes} onChange={e => setLoanForm({ ...loanForm, notes: e.target.value })}
-                    className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none resize-none" />
+                    className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary resize-none" />
                 </div>
               </div>
               <div className="flex justify-end space-x-2 pt-2">
@@ -2422,22 +2556,55 @@ export function Settings() {
           <div className="rounded-xl border max-w-sm w-full p-6 space-y-4 shadow-2xl" style={{ background: 'var(--color-bg-surface)', borderColor: 'var(--color-border)' }}>
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold uppercase tracking-wide" style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>Invite New User</h3>
-              <button onClick={() => setShowInviteModal(false)} className="text-gray-400 hover:text-gray-900"><X size={16} /></button>
+              <button onClick={() => setShowInviteModal(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-white"><X size={16} /></button>
             </div>
             <form onSubmit={handleInviteUser} className="space-y-4">
               <div className="space-y-3">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">User Name *</label>
-                  <input type="text" value={inviteForm.name} onChange={e => setInviteForm({ ...inviteForm, name: e.target.value })}
-                    className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none" />
+                  <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>User Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={inviteForm.name}
+                    onChange={e => setInviteForm({ ...inviteForm, name: e.target.value })}
+                    placeholder="Full name"
+                    className="w-full px-3 py-2 text-sm rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary"
+                    style={{ background: 'var(--color-bg-elevated)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }}
+                  />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Email Address *</label>
-                  <input type="email" value={inviteForm.email} onChange={e => setInviteForm({ ...inviteForm, email: e.target.value })}
-                    className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none" />
+                  <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Email Address *</label>
+                  <input
+                    type="email"
+                    required
+                    autoComplete="off"
+                    data-lpignore="true"
+                    data-form-type="other"
+                    value={inviteForm.email}
+                    onChange={e => setInviteForm({ ...inviteForm, email: e.target.value })}
+                    placeholder="user@company.com"
+                    className="w-full px-3 py-2 text-sm rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary"
+                    style={{ background: 'var(--color-bg-elevated)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }}
+                  />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Access Role</label>
+                  <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
+                    Initial Password <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>(Optional)</span>
+                  </label>
+                  <input
+                    type="password"
+                    autoComplete="new-password"
+                    data-lpignore="true"
+                    data-form-type="other"
+                    value={inviteForm.password || ''}
+                    onChange={e => setInviteForm({ ...inviteForm, password: e.target.value })}
+                    placeholder="Default: Vastrams@123"
+                    className="w-full px-3 py-1.5 text-sm rounded-lg focus:outline-none"
+                    style={{ background: 'var(--color-bg-elevated)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--color-text-secondary)' }}>Access Role</label>
                   <DropdownSelect
                     value={inviteForm.role}
                     onChange={val => setInviteForm({ ...inviteForm, role: val })}
@@ -2449,8 +2616,21 @@ export function Settings() {
                 </div>
               </div>
               <div className="flex justify-end space-x-2 pt-2">
-                <button type="button" onClick={() => setShowInviteModal(false)} className="px-3.5 py-2 text-xs font-semibold text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">Cancel</button>
-                <button type="submit" className="px-3.5 py-2 text-xs font-semibold bg-brand-primary text-white rounded-lg hover:opacity-90">Send Invite</button>
+                <button
+                  type="button"
+                  onClick={() => setShowInviteModal(false)}
+                  className="px-3.5 py-2 text-xs font-semibold rounded-lg transition-colors"
+                  style={{ background: 'transparent', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-3.5 py-2 text-xs font-semibold text-white rounded-lg hover:opacity-90 transition-opacity"
+                  style={{ background: 'var(--color-primary)' }}
+                >
+                  Send Invite
+                </button>
               </div>
             </form>
           </div>
@@ -2527,6 +2707,36 @@ export function Settings() {
             </div>
           </div>
         </div>
+      )}
+      {activeTab === 'profile' && (
+        <StickySaveBar
+          isDirty={isDirty}
+          isSaving={isSaving}
+          savedAt={savedAt}
+          changedFieldCount={formDiffResult.count}
+          changedFieldNames={formDiffResult.changedFields}
+          onSave={saveProfile}
+          onDiscard={handleDiscardProfile}
+          onWhatChanged={() => {
+            requestSaveConfirmation({
+              title: 'Form Changes Summary',
+              message: 'Review modified fields below.',
+              initialValues: profileSnapshot,
+              currentValues: profile,
+              labelMap: {
+                businessName: 'Business Name',
+                ownerName: 'Owner Name',
+                email: 'Email',
+                phone: 'Phone',
+                address: 'Address',
+                gstin: 'GSTIN',
+                website: 'Website',
+                logo: 'Logo'
+              },
+              onSaveApi: async () => true // Read-only diff preview
+            })
+          }}
+        />
       )}
       <SaveConfirmationModal {...confirmConfig} isSaving={isSaving} />
     </div>

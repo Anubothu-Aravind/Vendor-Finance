@@ -16,7 +16,8 @@ const UserSchema = new mongoose.Schema({
   },
   passwordHash: {
     type: String,
-    required: true
+    required: true,
+    select: false // Exclude passwordHash by default on all Mongoose database lookups
   },
   role: {
     type: String,
@@ -39,6 +40,7 @@ const UserSchema = new mongoose.Schema({
 })
 
 UserSchema.methods.comparePassword = async function(candidatePassword) {
+  if (!this.passwordHash) return false
   return bcrypt.compare(candidatePassword, this.passwordHash)
 }
 

@@ -383,4 +383,24 @@ exports.deleteRepayment = async (req, res, next) => {
   }
 }
 
+exports.getRepaymentById = async (req, res, next) => {
+  try {
+    const repayment = await Repayment.findOne({ _id: req.params.id, isDeleted: false })
+      .populate({
+        path: 'loanId',
+        populate: {
+          path: 'financierId'
+        }
+      })
+      .populate('chequeId')
+
+    if (!repayment) {
+      return res.status(404).json({ success: false, message: 'Repayment not found' })
+    }
+    res.status(200).json(repayment)
+  } catch (error) {
+    next(error)
+  }
+}
+
 

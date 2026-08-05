@@ -11,6 +11,8 @@ router.route('/')
   .get(paymentController.getPayments)
 
 router.route('/:id')
+  .get(paymentController.getPaymentById)
+  .put(requireRole(['Admin']), validatePayment, paymentController.updatePayment)
   .delete(requireRole(['Admin']), paymentController.deletePayment)
 
 module.exports = router

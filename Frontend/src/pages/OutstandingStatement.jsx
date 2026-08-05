@@ -7,6 +7,8 @@ import EmptyState from '../components/ui/EmptyState'
 import PartyTypeBadge from '../components/ui/PartyTypeBadge'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Skeleton, SkeletonTableRow } from '../components/ui/Skeleton'
+import { usePagination } from '../hooks/usePagination'
+import Pagination from '../components/ui/Pagination'
 import api from '../utils/api'
 
 const fmt = (v) => new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, minimumIntegerDigits: 1 }).format(v)
@@ -73,10 +75,20 @@ export function OutstandingStatement() {
 
   const totalOutstanding = kpis.totalOutstanding
 
+  const tableContainerRef = React.useRef(null)
+
   const filtered = parties.filter(p => {
     const matchSearch = (p.name || '').toLowerCase().includes(search.toLowerCase())
     const matchType = typeFilter === 'All' || p.type === typeFilter
     return matchSearch && matchType
+  })
+
+  const pagination = usePagination({
+    items: filtered,
+    moduleKey: 'outstanding',
+    initialPageSize: 20,
+    filterDependencies: [search, typeFilter],
+    containerRef: tableContainerRef
   })
 
   // Row click: navigate to ledger with deep link query parameters for both vendors and financiers
@@ -181,70 +193,70 @@ export function OutstandingStatement() {
             )}
           </div>
         ) : (
-          <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)', borderBottom: '1px solid var(--color-border)' }}>
-                <th className="text-left px-5 py-3">NAME</th>
-                <th className="text-left px-5 py-3">TYPE</th>
-                <th className="text-right px-5 py-3">ITEMS</th>
-                <th className="text-right px-5 py-3">TOTAL AMOUNT</th>
-                <th className="text-right px-5 py-3">PAID</th>
-                <th className="text-right px-5 py-3">OUTSTANDING</th>
-                <th className="text-left px-5 py-3">OLDEST DUE</th>
-                <th className="text-right px-5 py-3">DAYS OVERDUE</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((p, i) => (
-                <motion.tr 
-                  key={p.id} 
-                  initial={{ opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: Math.min(i * 0.03, 0.3), duration: 0.2 }}
-                  className="transition-colors"
-                  style={{ borderBottom: '1px solid var(--color-border)', cursor: 'pointer' }}
-                  onClick={() => handleRowClick(p)}
-                  onMouseEnter={e => e.currentTarget.style.background = 'var(--color-bg-elevated)'}
-                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                >
-                  <td className="px-5 py-3.5">
-                    <div className="flex items-center space-x-2.5">
-                      <div className={`h-7 w-7 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${avatarColors[p.idx % avatarColors.length]}`}>
-                        {initials(p.name)}
-                      </div>
-                      <span className="text-sm font-semibold" style={{ color: p.type === 'financier' ? 'var(--color-primary)' : 'var(--color-text-primary)' }}>
-                        {toTitleCase(p.name)}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-5 py-3.5">
-                    <PartyTypeBadge type={p.type} />
-                  </td>
-                  <td className="px-5 py-3.5 text-sm text-right tabular-nums" style={{ color: 'var(--color-text-secondary)' }}>{p.items > 0 ? p.items : '—'}</td>
-                  <td className="px-5 py-3.5 text-sm text-right tabular-nums" style={{ color: 'var(--color-text-primary)' }}>{p.total > 0 ? `₹${fmt(p.total)}` : '—'}</td>
-                  <td className="px-5 py-3.5 text-sm font-semibold text-green-600 text-right tabular-nums">{p.paid > 0 ? `₹${fmt(p.paid)}` : '—'}</td>
-                  <td className="px-5 py-3.5 text-right tabular-nums">
-                    <span className={`text-sm font-bold ${p.outstanding > 0 ? 'text-red-500' : 'text-gray-400'}`}>
-                      {p.outstanding > 0 ? `₹${fmt(p.outstanding)}` : '—'}
-                    </span>
-                  </td>
-                  <td className="px-5 py-3.5 text-sm font-mono" style={{ color: 'var(--color-text-muted)' }}>{p.oldestDue}</td>
-                  <td className="px-5 py-3.5 text-right">
-                    {p.daysOverdue !== null && p.daysOverdue !== undefined && p.daysOverdue !== 0
-                      ? <span className="text-sm font-bold text-red-500 tabular-nums">{p.daysOverdue}d</span>
-                      : <span className="text-sm text-gray-400">—</span>
-                    }
-                  </td>
-                </motion.tr>
-              ))}
-            </tbody>
-          </table>
-          </div>
+          <React.Fragment>
+            <div ref={tableContainerRef} className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)', borderBottom: '1px solid var(--color-border)' }}>
+                    <th className="text-left px-5 py-3">NAME</th>
+                    <th className="text-left px-5 py-3">TYPE</th>
+                    <th className="text-right px-5 py-3">ITEMS</th>
+                    <th className="text-right px-5 py-3">TOTAL AMOUNT</th>
+                    <th className="text-right px-5 py-3">PAID</th>
+                    <th className="text-right px-5 py-3">OUTSTANDING</th>
+                    <th className="text-left px-5 py-3">OLDEST DUE</th>
+                    <th className="text-right px-5 py-3">DAYS OVERDUE</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pagination.paginatedItems.map((p, i) => (
+                    <motion.tr 
+                      key={p.id} 
+                      initial={{ opacity: 0, y: 4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: Math.min(i * 0.03, 0.3), duration: 0.2 }}
+                      className="transition-colors"
+                      style={{ borderBottom: '1px solid var(--color-border)', cursor: 'pointer' }}
+                      onClick={() => handleRowClick(p)}
+                      onMouseEnter={e => e.currentTarget.style.background = 'var(--color-bg-elevated)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                    >
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center space-x-2.5">
+                          <div className={`h-7 w-7 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${avatarColors[p.idx % avatarColors.length]}`}>
+                            {initials(p.name)}
+                          </div>
+                          <span className="text-sm font-semibold" style={{ color: p.type === 'financier' ? 'var(--color-primary)' : 'var(--color-text-primary)' }}>
+                            {toTitleCase(p.name)}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <PartyTypeBadge type={p.type} />
+                      </td>
+                      <td className="px-5 py-3.5 text-sm text-right tabular-nums" style={{ color: 'var(--color-text-secondary)' }}>{p.items > 0 ? p.items : '—'}</td>
+                      <td className="px-5 py-3.5 text-sm text-right tabular-nums" style={{ color: 'var(--color-text-primary)' }}>{p.total > 0 ? `₹${fmt(p.total)}` : '—'}</td>
+                      <td className="px-5 py-3.5 text-sm font-semibold text-green-600 text-right tabular-nums">{p.paid > 0 ? `₹${fmt(p.paid)}` : '—'}</td>
+                      <td className="px-5 py-3.5 text-right tabular-nums">
+                        <span className={`text-sm font-bold ${p.outstanding > 0 ? 'text-red-500' : 'text-gray-400'}`}>
+                          {p.outstanding > 0 ? `₹${fmt(p.outstanding)}` : '—'}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3.5 text-sm font-mono" style={{ color: 'var(--color-text-muted)' }}>{p.oldestDue}</td>
+                      <td className="px-5 py-3.5 text-right">
+                        {p.daysOverdue !== null && p.daysOverdue !== undefined && p.daysOverdue !== 0
+                          ? <span className="text-sm font-bold text-red-500 tabular-nums">{p.daysOverdue}d</span>
+                          : <span className="text-sm text-gray-400">—</span>
+                        }
+                      </td>
+                    </motion.tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <Pagination {...pagination} isLoading={loading} />
+          </React.Fragment>
         )}
-        <div className="px-5 py-3 text-xs" style={{ borderTop: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}>
-          1–{filtered.length} of {filtered.length}
-        </div>
       </div>
     </div>
   )

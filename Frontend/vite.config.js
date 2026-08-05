@@ -10,6 +10,9 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  build: {
+    sourcemap: false, // Block public trace visibility & map leaks in production
+  },
   server: {
     port: 3000,
     proxy: {

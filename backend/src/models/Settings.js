@@ -104,6 +104,17 @@ const SettingsSchema = new mongoose.Schema({
       { name: 'Cheque', enabled: true }
     ]
   },
+  invoiceTemplates: {
+    selectedTheme: { type: String, default: 'Modern Minimal' },
+    showQr: { type: Boolean, default: true },
+    showHsn: { type: Boolean, default: false },
+    showQty: { type: Boolean, default: false },
+    showTaxTable: { type: Boolean, default: false },
+    declarationText: { 
+      type: String, 
+      default: 'We declare that this invoice shows the actual price of the goods / services described and that all particulars are true and correct.' 
+    }
+  },
   usersList: {
     type: [
       {

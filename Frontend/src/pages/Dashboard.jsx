@@ -63,8 +63,8 @@ export function Dashboard() {
       { label: 'FINANCIER OUTSTANDING', value: `₹${fmt(summary.kpis.financierOutstanding)}`, change: 'Total financier exposure', color: 'text-blue-600 bg-blue-50 border-blue-100', link: '/outstanding', icon: Coins },
       { label: "TODAY'S PAYMENTS",      value: `₹${fmt(todayPmts.reduce((s,p) => s+p.amount, 0))}`, change: `${todayPmts.length} payments today`, color: 'text-gray-500 bg-gray-50 border-gray-100', link: '/payments', icon: CreditCard },
       { label: "THIS WEEK'S PAYMENTS",  value: `₹${fmt(weekPmts.reduce((s,p) => s+p.amount, 0))}`, change: `${weekPmts.length} payments this week`, color: 'text-green-600 bg-green-50 border-green-100', link: '/payments', icon: CreditCard },
-      { label: 'OVERDUE BILLS',         value: String(summary.kpis.overdueBills), change: 'Outstanding overdue payables', color: 'text-red-600 bg-red-50 border-red-100', link: '/bills', icon: FileText },
-      { label: 'ACTIVE LOANS',          value: String(activeLoans.length), change: 'Total active credit notes', color: 'text-purple-600 bg-purple-50 border-purple-100', link: '/loans', icon: Coins },
+      { label: 'OVERDUE BILLS',         value: `₹${fmt(summary.kpis.overdueBills)}`, change: 'Outstanding overdue payables', color: 'text-red-600 bg-red-50 border-red-100', link: '/bills', icon: FileText },
+      { label: 'ACTIVE LOANS',          value: String(activeLoans.length), change: 'Active loan accounts', color: 'text-purple-600 bg-purple-50 border-purple-100', link: '/loans', icon: Coins },
       { label: 'UPCOMING CHEQUES',      value: `₹${fmt(pendingCheques.reduce((s,c) => s+c.amount, 0))}`, change: 'Cheques in transit / pending', color: 'text-amber-600 bg-amber-50 border-amber-100', link: '/cheques', icon: CheckSquare },
     ]
   }, [summary, payments, loans, cheques])

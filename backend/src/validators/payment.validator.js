@@ -23,9 +23,17 @@ exports.validatePayment = [
         return true // Handled by vendorId validation
       }
       
-      const outstanding = vendor.outstandingBalance || 0
-      if (value > outstanding) {
-        throw new Error(`Payment amount ₹${value.toLocaleString('en-IN')} exceeds outstanding balance of ₹${outstanding.toLocaleString('en-IN')}`)
+      let maxAllowed = vendor.outstandingBalance || 0
+      if (req.params && req.params.id) {
+        const Payment = require('../models/Payment')
+        const currentPayment = await Payment.findById(req.params.id)
+        if (currentPayment && !currentPayment.isDeleted) {
+          maxAllowed += (currentPayment.amount || 0)
+        }
+      }
+
+      if (value > maxAllowed) {
+        throw new Error(`Payment amount ₹${value.toLocaleString('en-IN')} exceeds available outstanding balance of ₹${maxAllowed.toLocaleString('en-IN')}`)
       }
       return true
     }),
