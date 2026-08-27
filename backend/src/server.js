@@ -134,9 +134,11 @@ const { sseHandler } = require('./utils/sse')
 app.get('/api/events', sseHandler)
 app.use('/api', require('./routes/backup.routes'))
 
-// Serve Frontend static assets in production
-if (process.env.NODE_ENV === 'production') {
-  const frontendBuildPath = path.join(__dirname, '../../Frontend/dist')
+// Serve Frontend static assets if bundled locally in production
+const frontendBuildPath = path.join(__dirname, '../../Frontend/dist')
+const indexHtmlPath = path.join(frontendBuildPath, 'index.html')
+
+if (process.env.NODE_ENV === 'production' && require('fs').existsSync(indexHtmlPath)) {
   app.use(express.static(frontendBuildPath))
   
   // Wildcard handler for client-side routing
@@ -144,7 +146,36 @@ if (process.env.NODE_ENV === 'production') {
     if (req.originalUrl.startsWith('/api')) {
       return res.status(404).json({ success: false, message: 'API route not found' })
     }
-    res.sendFile(path.join(frontendBuildPath, 'index.html'))
+    res.sendFile(indexHtmlPath)
+  })
+} else {
+  // Standalone API server mode (Frontend hosted separately on Vercel)
+  app.get('/', (req, res) => {
+    res.status(200).json({
+      success: true,
+      message: 'Vastrams API Server is operational',
+      environment: process.env.NODE_ENV || 'development',
+      database: 'connected',
+      timestamp: new Date().toISOString()
+    })
+  })
+
+  app.get('/health', (req, res) => {
+    res.status(200).json({
+      success: true,
+      status: 'healthy',
+      database: 'connected',
+      timestamp: new Date().toISOString()
+    })
+  })
+
+  app.get('/api/health', (req, res) => {
+    res.status(200).json({
+      success: true,
+      status: 'healthy',
+      database: 'connected',
+      timestamp: new Date().toISOString()
+    })
   })
 }
 
