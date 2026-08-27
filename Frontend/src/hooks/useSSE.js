@@ -1,18 +1,15 @@
 import { useEffect } from 'react'
+import { API_BASE_URL } from '../utils/api'
 
 export function useSSE() {
   useEffect(() => {
-    // Exclude setup, login, and error pages from SSE connection if desired, 
-    // but running globally inside layout ensures active connection for dashboard/pages.
-    const isLocal = window.location.hostname === 'localhost'
-    
     // Construct absolute or relative URL for EventSource
-    const sseUrl = '/api/events'
+    const sseUrl = `${API_BASE_URL}/events`
     console.log('[SSE] Connecting to event stream at:', sseUrl)
     
     let eventSource
     try {
-      eventSource = new EventSource(sseUrl)
+      eventSource = new EventSource(sseUrl, { withCredentials: true })
 
       eventSource.onopen = () => {
         console.log('[SSE] Connection opened successfully.')

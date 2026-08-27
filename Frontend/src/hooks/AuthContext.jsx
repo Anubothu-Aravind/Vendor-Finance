@@ -1,11 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import axios from 'axios'
+import { API_BASE_URL } from '../utils/api'
 
 const AuthContext = createContext(null)
 
-// Create a local axios instance for auth actions to avoid request/response interceptors recursion loop
+// Create a dedicated axios instance for auth actions targeting the backend API URL
 const authApi = axios.create({
-  baseURL: '/api',
+  baseURL: API_BASE_URL,
   withCredentials: true,
   headers: {
     'Content-Type': 'application/json'

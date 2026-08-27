@@ -2,6 +2,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
 import './styles/index.css'
+import { API_BASE_URL } from './utils/api'
 
 const DEFAULT_APPEARANCE = {
   theme: 'light',
@@ -39,8 +40,8 @@ function applyAppearance(appearance) {
 }
 
 Promise.all([
-  fetch('/api/settings/appearance').then(r => r.json()).catch(() => DEFAULT_APPEARANCE),
-  fetch('/api/settings/ui-prefs').then(r => r.json()).catch(() => DEFAULT_UI_PREFS)
+  fetch(`${API_BASE_URL}/settings/appearance`).then(r => r.json()).catch(() => DEFAULT_APPEARANCE),
+  fetch(`${API_BASE_URL}/settings/ui-prefs`).then(r => r.json()).catch(() => DEFAULT_UI_PREFS)
 ])
 .then(([appearance, uiPrefs]) => {
   const finalAppearance = appearance.success ? appearance : DEFAULT_APPEARANCE

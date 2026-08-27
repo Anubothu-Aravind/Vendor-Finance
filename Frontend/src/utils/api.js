@@ -5,7 +5,19 @@ export const setAuthToken = () => {
   // Access tokens are now managed purely via HttpOnly cookies by the browser.
 }
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || '/api'
+// Resolve production vs development API endpoint
+export const getApiBaseUrl = () => {
+  const envUrl = import.meta.env.VITE_API_URL
+  if (envUrl && envUrl.trim() !== '' && envUrl.trim() !== '/api') {
+    return envUrl.trim().replace(/\/+$/, '')
+  }
+  if (import.meta.env.PROD) {
+    return 'https://vastrams.onrender.com/api'
+  }
+  return '/api'
+}
+
+export const API_BASE_URL = getApiBaseUrl()
 
 const api = axios.create({
   baseURL: API_BASE_URL,

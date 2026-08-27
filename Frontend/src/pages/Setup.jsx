@@ -4,6 +4,7 @@ import { useAuth } from '../hooks/AuthContext'
 import { usePreferences } from '../hooks/usePreferences'
 import { Mail, Lock, CheckCircle2, AlertCircle, ArrowRight, Eye, EyeOff, ShieldAlert, Sun, Moon } from 'lucide-react'
 import axios from 'axios'
+import { API_BASE_URL } from '../utils/api'
 
 export function Setup() {
   const { user, completeSetup } = useAuth()
@@ -49,7 +50,7 @@ export function Setup() {
   // Axios instance with setupToken
   const setupApi = useMemo(() => {
     return axios.create({
-      baseURL: '/api/auth/setup',
+      baseURL: `${API_BASE_URL}/auth/setup`,
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${setupToken}`
