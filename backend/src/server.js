@@ -117,6 +117,7 @@ app.use(requiresSetupComplete)
 // Route definitions
 app.use('/api/auth/setup', require('./routes/auth/setup'))
 app.use('/api/auth', require('./routes/auth.routes'))
+app.use('/api/users', require('./routes/auth.routes'))
 app.use('/api/dashboard', require('./routes/dashboard.routes'))
 app.use('/api/vendors', require('./routes/vendor.routes'))
 app.use('/api/bills', require('./routes/bill.routes'))

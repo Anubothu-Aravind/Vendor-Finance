@@ -59,6 +59,6 @@ test('Loan unit tests', async (t) => {
 
   await t.test('amount-in-words converts rupees and paise correctly', () => {
     const words = numberToWords(201972.60)
-    assert.equal(words, 'Indian Rupee Two Lakh One Thousand Nine Hundred Seventy Two and Sixty Paise Only')
+    assert.equal(words, 'Indian Rupee Two Lakh One Thousand Nine Hundred and Seventy Two and Sixty Paise Only')
   })
 })

@@ -1,18 +1,21 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Search, Trash2, X } from 'lucide-react'
+import { Search, History, ArrowDownLeft, ArrowUpRight, DollarSign, Eye } from 'lucide-react'
 import DropdownSelect from '../components/ui/DropdownSelect'
 import PrintPreviewModal from '../components/PrintPreviewModal'
 import { toTitleCase } from '../utils/text'
 import EmptyState from '../components/ui/EmptyState'
 import Badge from '../components/ui/Badge'
+import PageHeader from '../components/ui/PageHeader'
+import { Card, KpiCard } from '../components/ui/Card'
+import FilterToolbar from '../components/ui/FilterToolbar'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Skeleton, SkeletonTableRow } from '../components/ui/Skeleton'
 import { usePagination } from '../hooks/usePagination'
 import Pagination from '../components/ui/Pagination'
 import api from '../utils/api'
 
-const fmt = (v) => new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, minimumIntegerDigits: 1 }).format(v)
+const fmt = (v) => new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(v)
 
 const formatDate = (iso) => {
   if (!iso) return '—'
@@ -22,7 +25,6 @@ const formatDate = (iso) => {
   } catch { return '—' }
 }
 
-// Map backend transaction type → UI type label
 const txTypeLabel = (type) => {
   switch (type) {
     case 'BILL_POSTED': return 'Bill'
@@ -37,6 +39,19 @@ const txTypeLabel = (type) => {
   }
 }
 
+const getTxBadgeVariant = (type) => {
+  switch (type) {
+    case 'BILL_POSTED': return 'info'
+    case 'BILL_PAID': return 'success'
+    case 'LOAN_DRAWDOWN': return 'purple'
+    case 'LOAN_REPAYMENT':
+    case 'REPAYMENT_PRINCIPAL':
+    case 'REPAYMENT_INTEREST': return 'teal'
+    case 'CHEQUE_BOUNCED_REVERSAL': return 'danger'
+    default: return 'neutral'
+  }
+}
+
 const isFinancierType = (type) => ['LOAN_DRAWDOWN', 'LOAN_REPAYMENT', 'REPAYMENT_PRINCIPAL', 'REPAYMENT_INTEREST', 'INTEREST_ACCRUED'].includes(type)
 const isPaymentType = (type) => ['BILL_PAID', 'LOAN_REPAYMENT', 'REPAYMENT_PRINCIPAL', 'REPAYMENT_INTEREST'].includes(type)
 
@@ -47,8 +62,8 @@ export function TransactionHistory() {
   const [error, setError] = useState(null)
   const [printDoc, setPrintDoc] = useState(null)
   const [search, setSearch] = useState('')
-  const [partyFilter, setPartyFilter] = useState('All Parties')
-  const [typeFilter, setTypeFilter] = useState('All Types')
+  const [partyFilter, setPartyFilter] = useState('ALL')
+  const [typeFilter, setTypeFilter] = useState('ALL')
   const [showDeleted, setShowDeleted] = useState(false)
 
   const fetchData = async (includeDeleted = false, signal) => {
@@ -73,6 +88,7 @@ export function TransactionHistory() {
           amount: t.amount,
           status: t.isDeleted ? 'Deleted' : 'Active',
           mongoId: t._id,
+          referenceId: t.referenceId
         }
       })
       if (!signal || !signal.aborted) {
@@ -96,9 +112,8 @@ export function TransactionHistory() {
     return () => controller.abort()
   }, [showDeleted])
 
-  // Map user-facing type display names to internal types
   const typeFilterFn = (t) => {
-    if (typeFilter === 'All Types') return true
+    if (typeFilter === 'ALL') return true
     if (typeFilter === 'Bills') return t.rawType === 'BILL_POSTED'
     if (typeFilter === 'Loans') return t.rawType === 'LOAN_DRAWDOWN'
     if (typeFilter === 'Vendor Payments') return t.rawType === 'BILL_PAID'
@@ -122,6 +137,10 @@ export function TransactionHistory() {
     return matchSearch && matchType && matchParty && matchDeleted
   }), [transactions, search, typeFilter, partyFilter, showDeleted])
 
+  const totalVolume = useMemo(() => filtered.reduce((s, t) => s + (t.amount || 0), 0), [filtered])
+  const creditCount = useMemo(() => filtered.filter(t => isPaymentType(t.rawType)).length, [filtered])
+  const debitCount = useMemo(() => filtered.filter(t => !isPaymentType(t.rawType)).length, [filtered])
+
   const tableContainerRef = React.useRef(null)
 
   const pagination = usePagination({
@@ -133,133 +152,147 @@ export function TransactionHistory() {
   })
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-[1600px] mx-auto">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Transaction History</h1>
-        <p className="text-sm text-gray-400 mt-0.5 font-medium">Complete audit trail of all financial transactions</p>
+      <PageHeader
+        title="Transaction History"
+        description="Comprehensive chronological audit trail of all financial movements and entries"
+        breadcrumbs={[{ label: 'Transactions' }]}
+      />
+
+      {/* KPI Stats */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+        <KpiCard
+          title="Total Transaction Volume"
+          value={loading ? <Skeleton className="h-8 w-32" /> : `₹${fmt(totalVolume)}`}
+          subtitle="Aggregate cash & invoice flow"
+          icon={DollarSign}
+          iconColor="text-emerald-600 dark:text-emerald-400"
+          iconBg="bg-emerald-50 dark:bg-emerald-950/40 border-emerald-100 dark:border-emerald-900/40"
+        />
+        <KpiCard
+          title="Payment Outflows"
+          value={loading ? <Skeleton className="h-8 w-16" /> : String(creditCount)}
+          subtitle="Vendor & loan settlements"
+          icon={ArrowUpRight}
+          iconColor="text-blue-600 dark:text-blue-400"
+          iconBg="bg-blue-50 dark:bg-blue-950/40 border-blue-100 dark:border-blue-900/40"
+        />
+        <KpiCard
+          title="Invoices & Liabilities"
+          value={loading ? <Skeleton className="h-8 w-16" /> : String(debitCount)}
+          subtitle="Bills & loan drawdowns"
+          icon={ArrowDownLeft}
+          iconColor="text-rose-600 dark:text-rose-400"
+          iconBg="bg-rose-50 dark:bg-rose-950/40 border-rose-100 dark:border-rose-900/40"
+        />
       </div>
 
-      {/* Error Banner */}
-      {error && (
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-xl px-5 py-3 text-sm text-red-600 dark:text-red-400">
-          {error} — <button onClick={() => fetchData(showDeleted)} className="underline font-medium">Retry</button>
+      {/* Filter Toolbar */}
+      <FilterToolbar
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search party, reference #, description..."
+        isFiltered={search !== '' || partyFilter !== 'ALL' || typeFilter !== 'ALL' || showDeleted}
+        onReset={() => { setSearch(''); setPartyFilter('ALL'); setTypeFilter('ALL'); setShowDeleted(false); }}
+      >
+        <div className="w-44">
+          <DropdownSelect
+            value={partyFilter}
+            onChange={setPartyFilter}
+            options={[
+              { value: 'ALL', label: 'All Entities' },
+              { value: 'Vendors', label: 'Vendors' },
+              { value: 'Financiers', label: 'Financiers' }
+            ]}
+          />
         </div>
-      )}
-
-      {/* Table */}
-      <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700">
-        {/* Filters */}
-        <div className="px-5 py-3 border-b border-gray-100 dark:border-slate-700 flex items-center space-x-3 flex-wrap gap-y-2">
-          <div className="relative w-56">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input type="text" placeholder="Search transactions..." value={search} onChange={e => setSearch(e.target.value)}
-              className="w-full pl-9 pr-8 py-1.5 text-sm border border-gray-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary" />
-            {search && (
-              <button
-                type="button"
-                onClick={() => setSearch('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors p-0.5"
-                title="Clear search"
-              >
-                <X size={14} />
-              </button>
-            )}
-          </div>
-
-          {/* Party Filter */}
-          <div className="w-48">
-            <DropdownSelect
-              value={partyFilter}
-              onChange={val => setPartyFilter(val)}
-              options={[
-                { value: 'All Parties', label: 'All Parties' },
-                { value: 'Vendors', label: 'Vendors' },
-                { value: 'Financiers', label: 'Financiers' }
-              ]}
-            />
-          </div>
-
-          {/* Type Filter */}
-          <div className="w-52">
-            <DropdownSelect
-              value={typeFilter}
-              onChange={val => setTypeFilter(val)}
-              options={[
-                { value: 'All Types', label: 'All Types' },
-                { value: 'Bills', label: 'Bills' },
-                { value: 'Loans', label: 'Loans' },
-                { value: 'Vendor Payments', label: 'Vendor Payments' },
-                { value: 'Financier Payments', label: 'Financier Payments' }
-              ]}
-            />
-          </div>
-
-          <label className="flex items-center space-x-2 cursor-pointer pl-2">
-            <input type="checkbox" checked={showDeleted} onChange={e => setShowDeleted(e.target.checked)} className="rounded text-brand-primary focus:ring-brand-primary" />
-            <span className="text-xs text-gray-500 dark:text-gray-400 font-medium select-none">Show deleted</span>
-          </label>
+        <div className="w-52">
+          <DropdownSelect
+            value={typeFilter}
+            onChange={setTypeFilter}
+            options={[
+              { value: 'ALL', label: 'All Types' },
+              { value: 'Bills', label: 'Bills' },
+              { value: 'Loans', label: 'Loans' },
+              { value: 'Vendor Payments', label: 'Vendor Payments' },
+              { value: 'Financier Payments', label: 'Financier Payments' }
+            ]}
+          />
         </div>
+        <label className="flex items-center gap-2 cursor-pointer pl-1 py-1">
+          <input
+            type="checkbox"
+            checked={showDeleted}
+            onChange={e => setShowDeleted(e.target.checked)}
+            className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4 cursor-pointer"
+          />
+          <span className="text-sm text-slate-600 dark:text-slate-400 font-medium select-none">Show deleted</span>
+        </label>
+      </FilterToolbar>
 
-        {loading ? (
+      {/* Table Card */}
+      <Card className="overflow-hidden">
+        {error ? (
+          <div className="p-8">
+            <EmptyState icon="search" title="Error Loading Transactions" description={error} />
+          </div>
+        ) : loading ? (
           <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider border-b border-gray-100 dark:border-slate-700">
-                  <th className="text-left px-5 py-3">DATE</th>
-                  <th className="text-left px-5 py-3">TYPE</th>
-                  <th className="text-left px-5 py-3">PARTY</th>
-                  <th className="text-left px-5 py-3">REFERENCE</th>
-                  <th className="text-left px-5 py-3">DESCRIPTION</th>
-                  <th className="text-right px-5 py-3">AMOUNT</th>
-                  <th className="text-left px-5 py-3">STATUS</th>
+            <table className="w-full text-left text-sm">
+              <thead className="bg-slate-50/90 dark:bg-slate-800/60 border-b border-slate-200/80 dark:border-slate-700 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                <tr>
+                  <th className="px-6 py-3.5">Date</th>
+                  <th className="px-6 py-3.5">Type</th>
+                  <th className="px-6 py-3.5">Party</th>
+                  <th className="px-6 py-3.5">Reference</th>
+                  <th className="px-6 py-3.5">Description</th>
+                  <th className="px-6 py-3.5 text-right">Amount</th>
+                  <th className="px-6 py-3.5">Status</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50 dark:divide-slate-700/40">
-                {Array.from({ length: 5 }).map((_, idx) => (
-                  <SkeletonTableRow key={idx} cols={7} widths={["w-20", "w-16", "w-32", "w-16", "w-40", "w-16", "w-12"]} />
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
+                {Array.from({ length: 6 }).map((_, idx) => (
+                  <SkeletonTableRow key={idx} cols={7} widths={["w-24", "w-20", "w-36", "w-20", "w-48", "w-20", "w-16"]} />
                 ))}
               </tbody>
             </table>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="p-6">
+          <div className="p-8">
             {transactions.length === 0 ? (
               <EmptyState
                 icon="history"
                 title="No Transactions Found"
-                description="Transaction history will populate as bills, payments, loans, and repayments are registered"
+                description="Transactions will appear here as bills, payments, and loan activities occur."
               />
             ) : (
               <EmptyState
                 icon="search"
-                title="No Results Found"
-                description="No transactions match your current search and filter settings"
+                title="No Matching Transactions"
+                description="No transactions match your current search and filter criteria."
               />
             )}
           </div>
         ) : (
           <>
             <div ref={tableContainerRef} className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider border-b border-gray-100 dark:border-slate-700">
-                    <th className="text-left px-5 py-3">DATE</th>
-                    <th className="text-left px-5 py-3">TYPE</th>
-                    <th className="text-left px-5 py-3">PARTY</th>
-                    <th className="text-left px-5 py-3">REFERENCE</th>
-                    <th className="text-left px-5 py-3">DESCRIPTION</th>
-                    <th className="text-right px-5 py-3">AMOUNT</th>
-                    <th className="text-left px-5 py-3">STATUS</th>
+              <table className="w-full text-left text-sm">
+                <thead className="bg-slate-50/90 dark:bg-slate-800/60 border-b border-slate-200/80 dark:border-slate-700 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  <tr>
+                    <th className="px-6 py-3.5">Date</th>
+                    <th className="px-6 py-3.5">Type</th>
+                    <th className="px-6 py-3.5">Party</th>
+                    <th className="px-6 py-3.5">Reference</th>
+                    <th className="px-6 py-3.5">Description</th>
+                    <th className="px-6 py-3.5 text-right">Amount</th>
+                    <th className="px-6 py-3.5">Status</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-50 dark:divide-slate-700/40">
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
                   {pagination.paginatedItems.map((t, i) => (
-                    <motion.tr 
-                      key={t.id} 
-                      initial={{ opacity: 0, y: 4 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: Math.min(i * 0.03, 0.3), duration: 0.2 }}
+                    <tr 
+                      key={t.id || i}
                       onClick={() => {
                         if (t.isFinancier && t.partyId) {
                           navigate(`/financiers/${t.partyId}`)
@@ -271,30 +304,28 @@ export function TransactionHistory() {
                           setPrintDoc({ type: docType, id: t.referenceId })
                         }
                       }}
-                      className={`hover:bg-gray-50 dark:hover:bg-slate-700/20 transition-colors cursor-pointer ${t.status === 'Deleted' ? 'opacity-55' : ''}`}
+                      className={`hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors cursor-pointer h-14 ${t.status === 'Deleted' ? 'opacity-50' : ''}`}
                     >
-                      <td className="px-5 py-3.5 text-sm text-gray-500 dark:text-gray-400 font-mono whitespace-nowrap">{t.date}</td>
-                      <td className="px-5 py-3.5">
-                        <Badge variant={isPaymentType(t.rawType) ? 'success' : 'info'}>
+                      <td className="px-6 py-4 text-slate-500 dark:text-slate-400 font-medium whitespace-nowrap">{t.date}</td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <Badge variant={getTxBadgeVariant(t.rawType)} dot>
                           {toTitleCase(t.type)}
                         </Badge>
                       </td>
-                      <td className="px-5 py-3.5">
-                        {t.isFinancier && t.partyId ? (
-                          <span className="text-sm font-semibold" style={{color: 'var(--color-primary)'}}>{toTitleCase(t.party)}</span>
-                        ) : (
-                          <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{toTitleCase(t.party)}</span>
-                        )}
+                      <td className="px-6 py-4">
+                        <span className="font-semibold text-slate-900 dark:text-slate-100">{toTitleCase(t.party)}</span>
                       </td>
-                      <td className="px-5 py-3.5 text-xs font-mono text-gray-400 dark:text-gray-500">{t.ref}</td>
-                      <td className="px-5 py-3.5 text-sm text-gray-600 dark:text-gray-300">{toTitleCase(t.description)}</td>
-                      <td className="px-5 py-3.5 text-sm font-semibold text-gray-900 dark:text-gray-100 text-right tabular-nums">₹{fmt(t.amount)}</td>
-                      <td className="px-5 py-3.5">
-                        <Badge variant={t.status === 'Active' ? 'success' : 'danger'}>
+                      <td className="px-6 py-4 font-mono text-xs text-slate-400 dark:text-slate-500 font-semibold">{t.ref}</td>
+                      <td className="px-6 py-4 text-slate-600 dark:text-slate-300 font-normal max-w-[320px] truncate">{toTitleCase(t.description)}</td>
+                      <td className="px-6 py-4 text-right font-bold text-slate-900 dark:text-slate-100 tabular-nums whitespace-nowrap">
+                        ₹{fmt(t.amount)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <Badge variant={t.status === 'Active' ? 'success' : 'danger'} dot>
                           {toTitleCase(t.status)}
                         </Badge>
                       </td>
-                    </motion.tr>
+                    </tr>
                   ))}
                 </tbody>
               </table>
@@ -302,7 +333,7 @@ export function TransactionHistory() {
             <Pagination {...pagination} isLoading={loading} />
           </>
         )}
-      </div>
+      </Card>
 
       {printDoc && (
         <PrintPreviewModal

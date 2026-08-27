@@ -4,8 +4,8 @@ import App from './App.jsx'
 import './styles/index.css'
 
 const DEFAULT_APPEARANCE = {
-  theme: 'dark',
-  gradientValue: 'linear-gradient(135deg, #00C896, #6366f1)',
+  theme: 'light',
+  gradientValue: 'linear-gradient(135deg, #00C896, #00A87E)',
   accentColor: '#00C896',
   currency: 'INR',
   dateFormat: 'DD-MM-YYYY',
@@ -18,7 +18,7 @@ const DEFAULT_UI_PREFS = {
 
 function applyAppearance(appearance) {
   const root = document.documentElement
-  const theme = appearance.theme || 'dark'
+  const theme = appearance?.theme || 'light'
   root.classList.remove('light', 'dark')
   if (theme === 'dark') {
     root.classList.add('dark')

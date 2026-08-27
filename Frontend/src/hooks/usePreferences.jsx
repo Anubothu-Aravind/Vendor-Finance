@@ -13,7 +13,7 @@ const DEFAULT_GRADIENT = 'linear-gradient(135deg, #00C896 0%, #00A87E 100%)'
 const DEFAULT_ACCENT   = '#00C896'
 
 const defaultPreferences = {
-  theme:       'dark',    // 'light' | 'dark' | 'system'
+  theme:       'light',    // 'light' | 'dark' | 'system'
   gradient:    DEFAULT_GRADIENT,
   accentColor: DEFAULT_ACCENT,
   currency:    'INR',     // 'INR' | 'USD' | 'EUR'
@@ -32,7 +32,7 @@ function applyGradientToDOM(gradientValue) {
 }
 
 // ── Apply theme class to <html> ───────────────────────────────────────────────
-function applyThemeClass(theme) {
+function applyThemeClass(theme = 'light') {
   const root = document.documentElement
   root.classList.remove('light', 'dark')
   if (theme === 'dark') {
@@ -80,9 +80,15 @@ export function PreferencesProvider({ children }) {
       applyThemeClass(next.theme)
       applyGradientToDOM(DEFAULT_GRADIENT)
 
-      // Sync with backend API
-      api.put('/settings/ui-prefs', next)
-        .catch(err => console.error('Failed to sync UI prefs:', err))
+      // Sync with backend API (appearance endpoint for theme & format preferences)
+      api.put('/settings/appearance', {
+        theme: next.theme,
+        gradientValue: next.gradient,
+        accentColor: next.accentColor,
+        currency: next.currency,
+        dateFormat: next.dateFormat,
+        numberFormat: next.numberFormat
+      }).catch(err => console.error('Failed to sync appearance prefs:', err))
 
       return next
     })

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useReducer, useCallback, useMemo } from 'react'
-import { Plus, X, Edit2, Eye, Trash2 } from 'lucide-react'
+import { Plus, X, Edit2, Eye, Trash2, Landmark, Coins, TrendingUp, Percent } from 'lucide-react'
 import PrintPreviewModal from '../components/PrintPreviewModal'
 import { toInputDate, fromInputDate, getTodayFormatted } from '../utils/date'
 import DropdownSelect from '../components/ui/DropdownSelect'
@@ -7,6 +7,9 @@ import CustomDatePicker from '../components/ui/CustomDatePicker'
 import { toTitleCase } from '../utils/text'
 import EmptyState from '../components/ui/EmptyState'
 import Badge from '../components/ui/Badge'
+import Button from '../components/ui/Button'
+import PageHeader from '../components/ui/PageHeader'
+import { Card, KpiCard } from '../components/ui/Card'
 import api from '../utils/api'
 import { useToast } from '../hooks/useToast'
 import { useConfirm } from '../hooks/useConfirm'
@@ -20,12 +23,6 @@ import { usePagination } from '../hooks/usePagination'
 import Pagination from '../components/ui/Pagination'
 
 const fmt = (v) => new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(v)
-
-const statusStyle = {
-  Active: 'text-blue-600 bg-blue-50 border-blue-200',
-  Closed: 'text-gray-500 bg-gray-50 border-gray-200',
-  Overdue: 'text-red-600 bg-red-50 border-red-200',
-}
 
 export function Loans() {
   const toast = useToast()
@@ -119,12 +116,12 @@ export function Loans() {
           amount: l.principalAmount,
           rate: String(l.interestRate),
           repaid: l.paidPrincipal,
-          principalOutstanding: l.outstandingPrincipal,
-          accruedInterest: Math.round(accruedInterest * 100) / 100,
           pending: totalPending,
+          principalPending: l.outstandingPrincipal,
+          accruedInterest: accruedInterest,
+          progress: l.principalAmount > 0 ? Math.min(100, Math.round((l.paidPrincipal / l.principalAmount) * 100)) : 0,
           remarks: l.notes || '',
-          status: displayStatus,
-          progress: Math.min(100, Math.round(((l.paidPrincipal || 0) / (l.principalAmount || 1)) * 100))
+          status: displayStatus
         }
       })
 
@@ -148,9 +145,7 @@ export function Loans() {
   }, [])
 
   useEffect(() => {
-    const handleDataChanged = () => {
-      fetchLoansAndFinanciers()
-    }
+    const handleDataChanged = () => fetchLoansAndFinanciers()
     window.addEventListener('api-data-changed', handleDataChanged)
     return () => window.removeEventListener('api-data-changed', handleDataChanged)
   }, [])
@@ -169,7 +164,10 @@ export function Loans() {
   }
 
   const handleOpenEdit = (loan) => {
-    const editObj = { ...loan }
+    const editObj = {
+      ...loan,
+      financier: loan.financierId || loan.financier
+    }
     setSelectedLoan(loan)
     setForm(editObj)
     setInitialFormSnapshot(editObj)
@@ -179,26 +177,6 @@ export function Loans() {
 
   const handleSave = (e) => {
     if (e) e.preventDefault()
-    const amt = Number(form.amount) || 0
-    const selectedFinancierObj = financiers.find(f => f.name === form.financier)
-    if (!selectedFinancierObj) {
-      toast('Selected financier not found', 'error')
-      return
-    }
-
-    if (!form.maturityDate) {
-      toast('Maturity date is required', 'error')
-      return
-    }
-
-    const drawdown = new Date(toInputDate(form.loanDate))
-    const maturity = new Date(toInputDate(form.maturityDate))
-    
-    if (maturity <= drawdown) {
-      toast('Maturity date must be after loan date', 'error')
-      return
-    }
-
     requestSaveConfirmation({
       title: modalMode === 'add' ? 'Confirm Add Loan' : 'Confirm Loan Update',
       message: `You are about to save changes for Loan #${form.noteNo || 'New'}.`,
@@ -206,23 +184,22 @@ export function Loans() {
       currentValues: form,
       labelMap: {
         financier: 'Financier',
-        noteNo: 'Loan Note Number',
-        loanDate: 'Drawdown Date',
+        noteNo: 'Note Number',
+        loanDate: 'Loan Date',
         maturityDate: 'Maturity Date',
-        amount: 'Loan Principal Amount',
+        amount: 'Loan Amount',
         rate: 'Interest Rate (%)',
         remarks: 'Remarks'
       },
       onSaveApi: async () => {
         const payload = {
+          financierId: form.financier,
           loanReference: form.noteNo,
-          financierId: selectedFinancierObj._id,
           drawdownDate: toInputDate(form.loanDate),
-          maturityDate: toInputDate(form.maturityDate),
-          principalAmount: amt,
-          interestRate: Number(form.rate) || selectedFinancierObj.defaultInterestRate || 12,
-          notes: form.remarks,
-          status: 'ACTIVE'
+          maturityDate: form.maturityDate ? toInputDate(form.maturityDate) : undefined,
+          principalAmount: Number(form.amount) || 0,
+          interestRate: Number(form.rate) || 0,
+          notes: form.remarks
         }
 
         try {
@@ -234,7 +211,7 @@ export function Loans() {
           await fetchLoansAndFinanciers()
           setShowModal(false)
           setForm(emptyForm)
-          toast(modalMode === 'add' ? 'Loan added successfully' : 'Loan updated successfully', 'success')
+          toast(modalMode === 'add' ? 'Loan created successfully' : 'Loan updated successfully', 'success')
         } catch (err) {
           toast(err.message || 'Failed to save loan', 'error')
           return false
@@ -244,10 +221,11 @@ export function Loans() {
   }
 
   const handleDelete = async (id) => {
-    if (await confirm('Are you sure you want to delete this loan entry? This action cannot be undone.', { title: 'Delete Loan' })) {
+    if (await confirm('Are you sure you want to delete this loan? This action cannot be undone.', { title: 'Delete Loan' })) {
       try {
         await api.delete(`/loans/${id}`)
         await fetchLoansAndFinanciers()
+        toast('Loan deleted successfully', 'success')
       } catch (err) {
         toast(err.message || 'Failed to delete loan', 'error')
       }
@@ -258,6 +236,7 @@ export function Loans() {
 
   const activeLoans = loans.filter(l => l.status === 'Active' || l.status === 'Overdue')
   const totalExposure = activeLoans.reduce((s, l) => s + l.pending, 0)
+  const totalPrincipal = loans.reduce((s, l) => s + (l.amount || 0), 0)
 
   const sortedLoans = useMemo(() => {
     return [...loans].sort((a, b) => {
@@ -297,15 +276,14 @@ export function Loans() {
   })
 
   return (
-    <>
-      <div className="space-y-6">
+    <div className="space-y-6 max-w-[1600px] mx-auto">
       {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Loans</h1>
-          <p className="text-sm text-gray-400 mt-0.5">{activeLoans.length} active loans · ₹{(totalExposure/100000).toFixed(1)}L total pending</p>
-        </div>
-        <div className="flex items-center space-x-3">
+      <PageHeader
+        title="Loans"
+        description={`${activeLoans.length} active facilities · ₹${fmt(totalExposure)} total pending exposure`}
+        breadcrumbs={[{ label: 'Loans' }]}
+      >
+        <div className="flex items-center gap-3">
           <div className="w-44">
             <DropdownSelect
               value={sortBy}
@@ -319,310 +297,329 @@ export function Loans() {
               ]}
             />
           </div>
-          <button onClick={handleOpenAdd} className="flex items-center space-x-1.5 bg-brand-primary text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-primary/95 transition-all shadow-sm">
-            <Plus size={16} />
+          <Button onClick={handleOpenAdd} className="shadow-sm">
+            <Plus className="w-4 h-4" />
             <span>Add Loan</span>
-          </button>
+          </Button>
         </div>
+      </PageHeader>
+
+      {/* KPI Stats */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+        <KpiCard
+          title="Active Loans"
+          value={loading ? <Skeleton className="h-8 w-16" /> : String(activeLoans.length)}
+          subtitle="Currently active notes"
+          icon={Landmark}
+          iconColor="text-blue-600 dark:text-blue-400"
+          iconBg="bg-blue-50 dark:bg-blue-950/40 border-blue-100 dark:border-blue-900/40"
+        />
+        <KpiCard
+          title="Total Principal Disbursed"
+          value={loading ? <Skeleton className="h-8 w-32" /> : `₹${fmt(totalPrincipal)}`}
+          subtitle="All recorded borrowings"
+          icon={Coins}
+          iconColor="text-slate-600 dark:text-slate-300"
+          iconBg="bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700"
+        />
+        <KpiCard
+          title="Total Outstanding Exposure"
+          value={loading ? <Skeleton className="h-8 w-32" /> : `₹${fmt(totalExposure)}`}
+          subtitle="Principal + accrued interest"
+          icon={Coins}
+          iconColor="text-rose-600 dark:text-rose-400"
+          iconBg="bg-rose-50 dark:bg-rose-950/40 border-rose-100 dark:border-rose-900/40"
+        />
       </div>
 
       {error ? (
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <Card className="p-8">
           <EmptyState icon="search" title="Error Loading Loans" description={error} />
-        </div>
+        </Card>
       ) : loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           {Array.from({ length: 4 }).map((_, idx) => (
-            <SkeletonCard key={idx} className="h-44" />
+            <SkeletonCard key={idx} className="h-48" />
           ))}
         </div>
       ) : loans.length === 0 ? (
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <Card className="p-8">
           <EmptyState 
             icon="loan" 
             title="No Loans Found" 
-            description="Record a loan from settings or financier profile to begin tracking" 
+            description="Record a loan from financiers or add a new facility to begin tracking." 
             action={{ label: "Add Loan", onClick: handleOpenAdd }} 
           />
-        </div>
+        </Card>
       ) : (
-        <div className="space-y-4" ref={cardContainerRef}>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-5" ref={cardContainerRef}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {pagination.paginatedItems.map((loan, i) => (
               <motion.div 
                 key={loan._id || loan.id} 
                 onClick={() => handleOpenPreview(loan)} 
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: Math.min(i * 0.04, 0.3), duration: 0.2 }}
-                className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-5 hover:scale-[1.02] hover:shadow-md transition-all relative group cursor-pointer"
+                transition={{ delay: Math.min(i * 0.03, 0.3), duration: 0.2 }}
+                className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200/80 dark:border-slate-700 p-6 hover:shadow-md hover:border-slate-300 dark:hover:border-slate-600 transition-all relative group cursor-pointer flex flex-col justify-between"
               >
-                <div className="flex justify-between items-start mb-3">
-                  <div>
-                    <p className="text-[11px] font-mono text-gray-400">Note #: {loan.noteNo || '—'}</p>
-                    <h3 className={`text-base font-semibold mt-0.5 ${loan.isOrphaned ? 'text-gray-400 italic' : 'text-gray-900'}`}>
-                      {loan.isOrphaned ? 'Deleted Financier' : toTitleCase(loan.financier)}
-                    </h3>
-                    <p className="text-xs text-gray-400 mt-0.5">{loan.rate}% p.a. · Issued: {loan.loanDate}</p>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Badge variant={loan.status === 'Overdue' ? 'warning' : 'success'}>
+                <div>
+                  <div className="flex justify-between items-start mb-4">
+                    <div>
+                      <p className="text-xs font-bold font-mono uppercase tracking-wider text-slate-400">Note #{loan.noteNo || '—'}</p>
+                      <h3 className={`text-lg font-bold mt-1 ${loan.isOrphaned ? 'text-slate-400 italic' : 'text-slate-900 dark:text-slate-100'}`}>
+                        {loan.isOrphaned ? 'Deleted Financier' : toTitleCase(loan.financier)}
+                      </h3>
+                      <p className="text-xs text-slate-400 mt-1">{loan.rate}% p.a. · Issued: {loan.loanDate}</p>
+                    </div>
+                    <Badge variant={loan.status === 'Overdue' ? 'danger' : loan.status === 'Closed' ? 'success' : 'purple'} dot>
                       {toTitleCase(loan.status)}
                     </Badge>
                   </div>
-                </div>
 
-                <div className="grid grid-cols-3 gap-3 mb-4">
-                  <div>
-                    <p className="text-[11px] text-gray-400 mb-0.5">Principal</p>
-                    <p className="text-sm font-semibold text-gray-900 tabular-nums">₹{fmt(loan.amount)}</p>
-                  </div>
-                  <div>
-                    <p className="text-[11px] text-gray-400 mb-0.5">Repaid</p>
-                    <p className="text-sm font-semibold text-green-600 tabular-nums">₹{fmt(loan.repaid)}</p>
-                  </div>
-                  <div>
-                    <p className="text-[11px] text-gray-400 mb-0.5">Pending</p>
-                    <p className={`text-sm font-semibold tabular-nums ${loan.pending > 0 ? 'text-red-500' : 'text-green-600'}`}>
-                      {loan.pending > 0 ? `₹${fmt(loan.pending)}` : 'Nil'}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Progress Bar */}
-                <div className="mb-3">
-                  <div className="flex justify-between text-xs text-gray-400 mb-1">
-                    <span>Repayment Progress</span>
-                    <span className="font-medium text-gray-700">{loan.progress}%</span>
-                  </div>
-                  <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                    <div className="h-full bg-brand-primary rounded-full transition-all" style={{ width: `${loan.progress}%` }} />
-                  </div>
-                </div>
-
-                <div className="flex justify-between items-center pt-2 border-t border-gray-50">
-                  <span className="text-xs text-gray-400 truncate max-w-[200px]" title={loan.remarks}>{loan.remarks || '—'}</span>
-                    <div className="flex items-center space-x-2">
-                      <button onClick={(e) => { e.stopPropagation(); handleOpenPreview(loan); }} className="text-xs text-gray-500 hover:text-brand-primary font-medium px-1.5 py-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors">
-                        View
-                      </button>
-
-                      <button onClick={(e) => { e.stopPropagation(); handleOpenEdit(loan); }} className="text-xs text-gray-500 hover:text-brand-primary font-medium px-1.5 py-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors">
-                        Edit
-                      </button>
-                      <button onClick={(e) => { e.stopPropagation(); handleDelete(loan.id); }} className="text-xs text-red-500 hover:text-red-700 font-medium px-1.5 py-0.5 rounded hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors">
-                        Delete
-                      </button>
+                  <div className="grid grid-cols-3 gap-3 p-3.5 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-700/60 mb-4 text-xs">
+                    <div>
+                      <p className="text-xs text-slate-400 font-bold uppercase mb-1">Principal</p>
+                      <p className="text-sm font-bold text-slate-900 dark:text-slate-100 tabular-nums">₹{fmt(loan.amount)}</p>
                     </div>
+                    <div>
+                      <p className="text-xs text-slate-400 font-bold uppercase mb-1">Repaid</p>
+                      <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">₹{fmt(loan.repaid)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-400 font-bold uppercase mb-1">Pending</p>
+                      <p className={`text-sm font-bold tabular-nums ${loan.pending > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600'}`}>
+                        {loan.pending > 0 ? `₹${fmt(loan.pending)}` : 'Nil'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Progress Bar */}
+                  <div className="mb-4">
+                    <div className="flex justify-between text-xs text-slate-400 mb-1.5">
+                      <span className="text-xs font-semibold">Repayment Progress</span>
+                      <span className="font-bold text-slate-700 dark:text-slate-300">{loan.progress}%</span>
+                    </div>
+                    <div className="h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                      <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${loan.progress}%` }} />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-between items-center pt-3.5 border-t border-slate-100 dark:border-slate-700/60">
+                  <span className="text-xs text-slate-400 truncate max-w-[240px]" title={loan.remarks}>{loan.remarks || '—'}</span>
+                  <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+                    <button
+                      onClick={() => handleOpenPreview(loan)}
+                      className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                      title="View Details"
+                    >
+                      <Eye className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleOpenEdit(loan)}
+                      className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                      title="Edit Loan"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(loan.id)}
+                      className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors"
+                      title="Delete Loan"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               </motion.div>
             ))}
           </div>
-          <div className="bg-white rounded-xl border border-gray-200">
-            <Pagination {...pagination} isLoading={loading} />
-          </div>
+          <Pagination {...pagination} isLoading={loading} />
         </div>
       )}
-      </div>
 
-      {/* Add Loan Modal */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={closeModal}>
-          <div className="bg-white dark:bg-slate-800 w-[500px] rounded-xl border border-gray-200 dark:border-slate-700 shadow-xl p-6" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-4 border-b border-gray-100 dark:border-slate-700 pb-3">
-              <h2 className="text-base font-semibold text-gray-900 dark:text-white uppercase tracking-wide">
-                {modalMode === 'add' ? 'Add Loan' : modalMode === 'edit' ? 'Edit Loan Details' : 'Loan Preview'}
-              </h2>
-              <button onClick={closeModal} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"><X size={18} /></button>
-            </div>
-
-            {modalMode === 'preview' ? (
-              <div className="space-y-4 text-sm text-gray-600">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-xs text-gray-400 uppercase font-semibold">Financier</label>
-                    <p className="font-bold text-gray-900">{toTitleCase(selectedLoan?.financier)}</p>
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-400 uppercase font-semibold">Note Number</label>
-                    <p className="font-mono text-gray-900 font-semibold">{selectedLoan?.noteNo || '—'}</p>
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-400 uppercase font-semibold">Loan Date</label>
-                    <p className="text-gray-900">{selectedLoan?.loanDate}</p>
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-400 uppercase font-semibold">Amount</label>
-                    <p className="text-gray-900 font-bold tabular-nums">₹{fmt(selectedLoan?.amount || 0)}</p>
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-400 uppercase font-semibold">Interest Rate (%)</label>
-                    <p className="text-gray-900">{selectedLoan?.rate}% p.a.</p>
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-400 uppercase font-semibold">Maturity Date</label>
-                    <p className="text-gray-900">{selectedLoan?.maturityDate || '—'}</p>
-                  </div>
-                  {/* Pending Balance + Interest Accrued — computed together */}
-                  {(() => {
-                    const outstanding = selectedLoan?.pending || 0
-                    const rate = parseFloat(selectedLoan?.rate) || 0
-                    const loanDateRaw = selectedLoan?.loanDate
-
-                    let interest = 0
-                    let daysElapsed = 0
-
-                    if (outstanding && rate && loanDateRaw) {
-                      let loanDateObj = null
-                      const parts = loanDateRaw.split(/[-\s]/)
-                      if (parts.length === 3) {
-                        const months = { Jan:0, Feb:1, Mar:2, Apr:3, May:4, Jun:5, Jul:6, Aug:7, Sep:8, Oct:9, Nov:10, Dec:11 }
-                        const month = isNaN(Number(parts[1])) ? months[parts[1]] : Number(parts[1]) - 1
-                        loanDateObj = new Date(Number(parts[2]), month, Number(parts[0]))
-                      }
-                      if (loanDateObj && !isNaN(loanDateObj.getTime())) {
-                        daysElapsed = Math.max(0, Math.floor((new Date() - loanDateObj) / (1000 * 60 * 60 * 24)))
-                        interest = (outstanding * rate * daysElapsed) / (100 * 365)
-                      }
-                    }
-
-                    const fmtFull = (v) => new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v)
-                    const totalDue = outstanding + interest
-
-                    return (
-                      <>
-                        {/* Principal outstanding */}
-                        <div>
-                          <label className="text-xs text-gray-400 uppercase font-semibold">Principal Outstanding</label>
-                          <p className="text-red-500 font-bold tabular-nums">₹{fmtFull(outstanding)}</p>
-                        </div>
-
-                        {/* Interest accrued */}
-                        {interest > 0 && (
-                          <div>
-                            <label className="text-xs text-gray-400 uppercase font-semibold">Interest Accrued</label>
-                            <p className="text-orange-500 font-bold tabular-nums">₹{fmtFull(interest)}</p>
-                            <p className="text-[10px] text-gray-400 mt-0.5">{daysElapsed} days × {rate}% p.a.</p>
-                          </div>
-                        )}
-
-                        {/* Total due — col-span-2 highlighted row */}
-                        {interest > 0 && (
-                          <div className="col-span-2 rounded-lg px-3 py-2.5 border border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-700/50 flex items-center justify-between">
-                            <label className="text-xs text-gray-500 dark:text-gray-300 uppercase font-bold">Total Outstanding (Principal + Interest)</label>
-                            <p className="text-red-500 dark:text-red-400 font-extrabold tabular-nums text-base">₹{fmtFull(totalDue)}</p>
-                          </div>
-                        )}
-                      </>
-                    )
-                  })()}
-
-                  <div className="col-span-2">
-                    <label className="text-xs text-gray-400 uppercase font-semibold">Remarks</label>
-                    <p className="text-gray-900 dark:text-gray-100 bg-gray-50 dark:bg-slate-700/50 p-2.5 rounded-lg border border-gray-100 dark:border-slate-600">{selectedLoan?.remarks || '—'}</p>
-                  </div>
+      {/* Modal Dialog */}
+      <AnimatePresence>
+        {showModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={closeModal}>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="fixed inset-0 bg-black/40 backdrop-blur-xs"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+              className="bg-white dark:bg-slate-800 w-full max-w-xl rounded-2xl border border-slate-200 dark:border-slate-700 shadow-2xl overflow-hidden relative z-10 flex flex-col max-h-[90vh]"
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/80">
+                <div>
+                  <h2 className="text-base font-bold text-slate-900 dark:text-slate-100" style={{ fontFamily: 'var(--font-display)' }}>
+                    {modalMode === 'add' ? 'Add Loan Facility' : modalMode === 'edit' ? 'Edit Loan Facility' : 'Loan Facility Details'}
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {modalMode === 'preview' ? `Note #${selectedLoan?.noteNo}` : 'Specify borrower terms and principal balance'}
+                  </p>
                 </div>
-                <div className="flex justify-end pt-4 border-t border-gray-100 mt-6 space-x-2">
-                  <button 
-                    type="button"
-                    onClick={() => {
-                      setShowModal(false);
-                      setPrintDoc({ type: 'loan', id: selectedLoan?.id || selectedLoan?._id });
-                    }}
-                    className="px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors"
-                    style={{ background: 'var(--color-primary)' }}
-                  >
-                    Print Advice
-                  </button>
-                  <button 
-                    type="button"
-                    onClick={() => setShowModal(false)}
-                    className="px-4 py-2 text-sm font-medium rounded-lg border transition-colors"
-                    style={{
-                      background: 'var(--color-bg-elevated)',
-                      borderColor: 'var(--color-border)',
-                      color: 'var(--color-text-primary)'
-                    }}
-                  >
-                    Close
-                  </button>
-                </div>
+                <button
+                  onClick={closeModal}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
               </div>
-            ) : (
-              <form onSubmit={handleSave} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">Financier *</label>
-                  <DropdownSelect
-                    value={form.financier}
-                    onChange={val => setForm({...form, financier: val})}
-                    placeholder="Select Financier"
-                    options={financiers.map(f => ({ value: f.name, label: toTitleCase(f.name) }))}
-                  />
-                </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">Note Number</label>
-                    <input type="text" value={form.noteNo} onChange={e => setForm({...form, noteNo: e.target.value})}
-                      className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary font-mono" />
+              {/* Body */}
+              <div className="p-6 overflow-y-auto flex-1 space-y-4">
+                {modalMode === 'preview' ? (
+                  <div className="space-y-4 text-xs">
+                    <div className="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200/80 dark:border-slate-700/80 flex items-center justify-between">
+                      <div>
+                        <span className="text-slate-400 block text-[10px] uppercase font-bold">Financier</span>
+                        <p className="font-bold text-sm text-slate-900 dark:text-slate-100 mt-0.5">{toTitleCase(selectedLoan?.financier)}</p>
+                      </div>
+                      <Badge variant={selectedLoan?.status === 'Closed' ? 'success' : 'info'} dot>
+                        {toTitleCase(selectedLoan?.status)}
+                      </Badge>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 p-4 bg-white dark:bg-slate-800 rounded-xl border border-slate-200/80 dark:border-slate-700/80">
+                      <div>
+                        <span className="text-slate-400 block mb-0.5">Note Number</span>
+                        <span className="font-mono font-bold text-slate-900 dark:text-slate-100">{selectedLoan?.noteNo || '—'}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block mb-0.5">Interest Rate</span>
+                        <span className="font-bold text-slate-900 dark:text-slate-100">{selectedLoan?.rate}% p.a.</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block mb-0.5">Loan Date</span>
+                        <span className="font-medium text-slate-800 dark:text-slate-200">{selectedLoan?.loanDate}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block mb-0.5">Principal Amount</span>
+                        <span className="font-bold text-slate-900 dark:text-slate-100 tabular-nums">₹{fmt(selectedLoan?.amount || 0)}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block mb-0.5">Principal Repaid</span>
+                        <span className="font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">₹{fmt(selectedLoan?.repaid || 0)}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block mb-0.5">Total Pending</span>
+                        <span className="font-bold text-rose-600 dark:text-rose-400 tabular-nums">₹{fmt(selectedLoan?.pending || 0)}</span>
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">Loan Date *</label>
-                    <CustomDatePicker
-                      value={form.loanDate}
-                      onChange={val => setForm({...form, loanDate: val})}
-                    />
-                  </div>
-                </div>
+                ) : (
+                  <form id="loan-form-dialog" onSubmit={handleSave} className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Financier <span className="text-rose-500">*</span>
+                      </label>
+                      <DropdownSelect
+                        value={form.financier}
+                        onChange={val => setForm({...form, financier: val})}
+                        placeholder="Select Financier"
+                        options={financiers.map(f => ({ value: f._id, label: toTitleCase(f.name) }))}
+                      />
+                    </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">Maturity Date *</label>
-                    <CustomDatePicker
-                      value={form.maturityDate}
-                      onChange={val => setForm({...form, maturityDate: val})}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">Amount *</label>
-                    <input type="number" required value={form.amount} onChange={e => setForm({...form, amount: e.target.value})}
-                      className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary" />
-                  </div>
-                </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          Note Number <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={form.noteNo}
+                          onChange={e => setForm({...form, noteNo: e.target.value})}
+                          placeholder="e.g. LN-2026-001"
+                          className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 font-mono outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          Principal Amount (₹) <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="number"
+                          required
+                          value={form.amount}
+                          onChange={e => setForm({...form, amount: e.target.value})}
+                          placeholder="500000"
+                          className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 tabular-nums outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                        />
+                      </div>
+                    </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">Interest Rate (%)</label>
-                  <input type="number" step="0.01" value={form.rate} onChange={e => setForm({...form, rate: e.target.value})}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary" />
-                </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          Loan Date *
+                        </label>
+                        <CustomDatePicker
+                          value={form.loanDate}
+                          onChange={d => setForm({...form, loanDate: d})}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          Interest Rate (% p.a.) *
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          required
+                          value={form.rate}
+                          onChange={e => setForm({...form, rate: e.target.value})}
+                          placeholder="12.00"
+                          className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                        />
+                      </div>
+                    </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">Remarks</label>
-                  <textarea rows={2} value={form.remarks} onChange={e => setForm({...form, remarks: e.target.value})}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary" />
-                </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Remarks</label>
+                      <textarea
+                        rows={2}
+                        value={form.remarks}
+                        onChange={e => setForm({...form, remarks: e.target.value})}
+                        placeholder="Additional notes or payment schedule..."
+                        className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 resize-none"
+                      />
+                    </div>
+                  </form>
+                )}
+              </div>
 
-                <div className="flex justify-end space-x-3 pt-4 border-t border-gray-100 dark:border-slate-700 mt-6">
-                  <button type="button" onClick={closeModal} className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 dark:text-gray-300 dark:border-slate-600 dark:hover:bg-slate-700">Cancel</button>
-                  <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-brand-primary rounded-lg hover:bg-brand-primary/90">
-                    {modalMode === 'add' ? 'Save Loan' : 'Update Loan'}
-                  </button>
-                </div>
-              </form>
-            )}
+              {/* Footer */}
+              <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-700 flex justify-end gap-3 bg-slate-50/50 dark:bg-slate-800/80">
+                {modalMode === 'preview' ? (
+                  <Button variant="secondary" onClick={() => setShowModal(false)}>Close</Button>
+                ) : (
+                  <>
+                    <Button variant="secondary" onClick={closeModal}>Cancel</Button>
+                    <Button type="submit" form="loan-form-dialog" loading={isSaving}>
+                      {modalMode === 'add' ? 'Save Loan' : 'Update Loan'}
+                    </Button>
+                  </>
+                )}
+              </div>
+            </motion.div>
           </div>
-        </div>
-      )}
-      <SaveConfirmationModal {...confirmConfig} isSaving={isSaving} />
+        )}
+      </AnimatePresence>
 
-      {printDoc && (
-        <PrintPreviewModal
-          type={printDoc.type}
-          id={printDoc.id}
-          onClose={() => setPrintDoc(null)}
-        />
-      )}
-    </>
+      <SaveConfirmationModal {...confirmConfig} isSaving={isSaving} />
+    </div>
   )
 }
 

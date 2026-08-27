@@ -15,6 +15,7 @@ const DEFAULTS = {
   showGSTTable: false,
   showHSNColumn: false,
   showQuantityColumn: false,
+  swapRecipientSupplier: false,
   showSignatory: true,
   showBankDetails: true,
   signatoryText: 'Authorised Signatory',
@@ -150,6 +151,7 @@ export function InvoiceTemplateCustomizer() {
             showGSTTable:          d.showGSTTable           ?? DEFAULTS.showGSTTable,
             showHSNColumn:         d.showHSNColumn          ?? DEFAULTS.showHSNColumn,
             showQuantityColumn:    d.showQuantityColumn      ?? DEFAULTS.showQuantityColumn,
+            swapRecipientSupplier: d.swapRecipientSupplier   ?? DEFAULTS.swapRecipientSupplier,
             showSignatory:         d.showSignatory          ?? DEFAULTS.showSignatory,
             showBankDetails:       d.showBankDetails        ?? DEFAULTS.showBankDetails,
             signatoryText:         d.signatoryText          ?? DEFAULTS.signatoryText,
@@ -319,12 +321,13 @@ export function InvoiceTemplateCustomizer() {
             <SectionHead icon={Eye} label="Section and Column Visibility" />
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
               {[
-                { key: 'showQRCode',        label: 'Show e-Invoice QR Code' },
-                { key: 'showGSTTable',       label: 'Show GST Tax Breakdown Table' },
-                { key: 'showHSNColumn',      label: 'Show HSN/SAC Column' },
-                { key: 'showQuantityColumn', label: 'Show Quantity Column' },
-                { key: 'showSignatory',      label: 'Show Authorised Signatory' },
-                { key: 'showBankDetails',    label: 'Show Bank Details Box' },
+                { key: 'showQRCode',            label: 'Show e-Invoice QR Code' },
+                { key: 'showGSTTable',          label: 'Show GST Tax Breakdown Table' },
+                { key: 'showHSNColumn',         label: 'Show HSN/SAC Column' },
+                { key: 'showQuantityColumn',     label: 'Show Quantity Column' },
+                { key: 'swapRecipientSupplier', label: 'Swap Recipient / Supplier' },
+                { key: 'showSignatory',          label: 'Show Authorised Signatory' },
+                { key: 'showBankDetails',        label: 'Show Bank Details Box' },
               ].map(({ key, label }) => (
                 <label key={key} className="flex items-center gap-2 cursor-pointer select-none">
                   <input type="checkbox" checked={template[key]} onChange={toggleProp(key)} className="rounded" />
@@ -412,18 +415,37 @@ export function InvoiceTemplateCustomizer() {
 
               {/* Parties */}
               <div className="grid grid-cols-2" style={{ borderBottom: borders.cell }}>
-                <div className="p-3 space-y-0.5" style={{ borderRight: borders.cell }}>
-                  <p className="font-bold uppercase text-slate-400" style={{ fontSize: '9px' }}>Supplier (From)</p>
-                  <p className="font-bold text-slate-900">{SAMPLE.supplierName}</p>
-                  <p className="text-slate-600">{SAMPLE.supplierAddress}</p>
-                  <p className="font-mono text-slate-700" style={{ fontSize: '10px' }}>GSTIN: {SAMPLE.supplierGstin}</p>
-                </div>
-                <div className="p-3 space-y-0.5">
-                  <p className="font-bold uppercase text-slate-400" style={{ fontSize: '9px' }}>Recipient (To)</p>
-                  <p className="font-bold text-slate-900">{SAMPLE.recipientName}</p>
-                  <p className="text-slate-600">{SAMPLE.recipientAddress}</p>
-                  <p className="font-mono text-slate-700" style={{ fontSize: '10px' }}>GSTIN: {SAMPLE.recipientGstin}</p>
-                </div>
+                {template.swapRecipientSupplier ? (
+                  <>
+                    <div className="p-3 space-y-0.5" style={{ borderRight: borders.cell }}>
+                      <p className="font-bold uppercase text-slate-400" style={{ fontSize: '9px' }}>Supplier (From)</p>
+                      <p className="font-bold text-slate-900">{SAMPLE.supplierName}</p>
+                      <p className="text-slate-600">{SAMPLE.supplierAddress}</p>
+                      <p className="font-mono text-slate-700" style={{ fontSize: '10px' }}>GSTIN: {SAMPLE.supplierGstin}</p>
+                    </div>
+                    <div className="p-3 space-y-0.5">
+                      <p className="font-bold uppercase text-slate-400" style={{ fontSize: '9px' }}>Recipient (Bill To)</p>
+                      <p className="font-bold text-slate-900">{SAMPLE.recipientName}</p>
+                      <p className="text-slate-600">{SAMPLE.recipientAddress}</p>
+                      <p className="font-mono text-slate-700" style={{ fontSize: '10px' }}>GSTIN: {SAMPLE.recipientGstin}</p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="p-3 space-y-0.5" style={{ borderRight: borders.cell }}>
+                      <p className="font-bold uppercase text-slate-400" style={{ fontSize: '9px' }}>Recipient (Bill To)</p>
+                      <p className="font-bold text-slate-900">{SAMPLE.recipientName}</p>
+                      <p className="text-slate-600">{SAMPLE.recipientAddress}</p>
+                      <p className="font-mono text-slate-700" style={{ fontSize: '10px' }}>GSTIN: {SAMPLE.recipientGstin}</p>
+                    </div>
+                    <div className="p-3 space-y-0.5">
+                      <p className="font-bold uppercase text-slate-400" style={{ fontSize: '9px' }}>Supplier (From)</p>
+                      <p className="font-bold text-slate-900">{SAMPLE.supplierName}</p>
+                      <p className="text-slate-600">{SAMPLE.supplierAddress}</p>
+                      <p className="font-mono text-slate-700" style={{ fontSize: '10px' }}>GSTIN: {SAMPLE.supplierGstin}</p>
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* Line Items */}

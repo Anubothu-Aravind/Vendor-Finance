@@ -1,11 +1,11 @@
 const express = require('express')
 const router = express.Router()
 const loanController = require('../controllers/loan.controller')
-const { authenticateJWT, requireRole } = require('../middleware/auth.middleware')
+const { authenticateJWT, requireRole, requirePermission } = require('../middleware/auth.middleware')
 const { validateLoan } = require('../validators/loan.validator')
 const { validateRepayment } = require('../validators/repayment.validator')
 
-router.use(authenticateJWT)
+router.use(authenticateJWT, requirePermission(['loans', 'finance', 'financial_repayments']))
 
 router.route('/')
   .post(requireRole(['Admin']), validateLoan, loanController.createLoan)

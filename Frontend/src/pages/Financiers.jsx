@@ -1,10 +1,14 @@
 import React, { useState, useEffect, useReducer, useCallback, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Plus, Search, Trash2, Edit2, Eye, X, Building2 } from 'lucide-react'
+import { Plus, Search, Trash2, Edit2, Eye, X, Landmark, Percent, DollarSign } from 'lucide-react'
 import DropdownSelect from '../components/ui/DropdownSelect'
 import { toTitleCase } from '../utils/text'
 import EmptyState from '../components/ui/EmptyState'
 import Badge from '../components/ui/Badge'
+import Button from '../components/ui/Button'
+import PageHeader from '../components/ui/PageHeader'
+import { Card, KpiCard } from '../components/ui/Card'
+import FilterToolbar from '../components/ui/FilterToolbar'
 import api from '../utils/api'
 import { useToast } from '../hooks/useToast'
 import { useConfirm } from '../hooks/useConfirm'
@@ -19,7 +23,12 @@ import Pagination from '../components/ui/Pagination'
 
 const fmt = (v) => new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(v)
 const initials = (name) => (name || '').split(' ').slice(0,2).map(w => w[0]).join('').toUpperCase()
-const colors = ['bg-indigo-100 text-indigo-700', 'bg-blue-100 text-blue-700', 'bg-purple-100 text-purple-700', 'bg-emerald-100 text-emerald-700']
+const avatarColors = [
+  'bg-indigo-50 text-indigo-700 border-indigo-200',
+  'bg-blue-50 text-blue-700 border-blue-200',
+  'bg-purple-50 text-purple-700 border-purple-200',
+  'bg-emerald-50 text-emerald-700 border-emerald-200'
+]
 
 export function Financiers() {
   const toast = useToast()
@@ -29,6 +38,7 @@ export function Financiers() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('ALL')
   const [showModal, setShowModal] = useState(false)
   const [modalMode, setModalMode] = useState('add') // 'add' | 'edit' | 'preview'
   const [selectedFin, setSelectedFin] = useState(null)
@@ -37,7 +47,7 @@ export function Financiers() {
     name: '',
     phone: '',
     address: '',
-    status: '',
+    status: 'Active',
     notes: '',
     defaultInterestRate: 12
   }
@@ -179,6 +189,7 @@ export function Financiers() {
       try {
         await api.delete(`/financiers/${id}`)
         await fetchFinanciers()
+        toast('Financier deleted successfully', 'success')
       } catch (err) {
         toast(err.message || 'Failed to delete financier', 'error')
       }
@@ -187,158 +198,213 @@ export function Financiers() {
 
   const tableContainerRef = React.useRef(null)
 
-  const filtered = financiers.filter(f =>
-    (f.name || '').toLowerCase().includes(search.toLowerCase()) ||
-    (f.notes && f.notes.toLowerCase().includes(search.toLowerCase()))
-  )
+  const filtered = useMemo(() => {
+    return financiers.filter(f => {
+      const matchSearch =
+        (f.name || '').toLowerCase().includes(search.toLowerCase()) ||
+        (f.notes && f.notes.toLowerCase().includes(search.toLowerCase())) ||
+        (f.phone && f.phone.includes(search))
+
+      const matchStatus =
+        statusFilter === 'ALL' ||
+        String(f.status).toUpperCase() === statusFilter.toUpperCase()
+
+      return matchSearch && matchStatus
+    })
+  }, [financiers, search, statusFilter])
 
   const pagination = usePagination({
     items: filtered,
     moduleKey: 'financiers',
     initialPageSize: 20,
-    filterDependencies: [search],
+    filterDependencies: [search, statusFilter],
     containerRef: tableContainerRef
   })
 
+  const totalOutstanding = useMemo(() => financiers.reduce((s, f) => s + (f.outstanding || 0), 0), [financiers])
+  const activeLoansTotal = useMemo(() => financiers.reduce((s, f) => s + (f.loansCount || 0), 0), [financiers])
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-[1600px] mx-auto">
       {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="page-header-title">Finance</h1>
-          <p className="page-header-sub">{financiers.length} financiers registered &middot; Manage lender accounts and exposure</p>
-        </div>
-        <button onClick={handleOpenAdd} className="btn-cta">
-          + Add Finance
-        </button>
-      </div>
+      <PageHeader
+        title="Finance"
+        description="Manage financiers, credit facilities, interest terms, and loan liabilities"
+        breadcrumbs={[{ label: 'Finance' }]}
+      >
+        <Button onClick={handleOpenAdd} className="shadow-sm">
+          <Plus className="w-4 h-4" />
+          <span>Add Finance</span>
+        </Button>
+      </PageHeader>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="stat-card">
-          <p className="label">Total Financiers</p>
-          {loading ? <Skeleton className="h-8 w-16" /> : <p className="value">{financiers.length}</p>}
-        </div>
-        <div className="stat-card">
-          <p className="label">Active Accounts</p>
-          {loading ? <Skeleton className="h-8 w-16" /> : <p className="value">{financiers.filter(f => f.status === 'Active').length}</p>}
-        </div>
-        <div className="stat-card">
-          <p className="label" style={{ color: 'var(--color-danger)' }}>Outstanding Exposure</p>
-          {loading ? <Skeleton className="h-8 w-24" /> : <p className="value" style={{ color: 'var(--color-danger)' }}>₹{fmt(financiers.reduce((s,f) => s + f.outstanding, 0))}</p>}
-        </div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+        <KpiCard
+          title="Total Financiers"
+          value={loading ? <Skeleton className="h-8 w-16" /> : String(financiers.length)}
+          subtitle="Registered capital partners"
+          icon={Landmark}
+          iconColor="text-indigo-600 dark:text-indigo-400"
+          iconBg="bg-indigo-50 dark:bg-indigo-950/40 border-indigo-100 dark:border-indigo-900/40"
+        />
+        <KpiCard
+          title="Active Loan Accounts"
+          value={loading ? <Skeleton className="h-8 w-16" /> : String(activeLoansTotal)}
+          subtitle="Ongoing facilities"
+          icon={Landmark}
+          iconColor="text-emerald-600 dark:text-emerald-400"
+          iconBg="bg-emerald-50 dark:bg-emerald-950/40 border-emerald-100 dark:border-emerald-900/40"
+        />
+        <KpiCard
+          title="Total Loan Exposure"
+          value={loading ? <Skeleton className="h-8 w-32" /> : `₹${fmt(totalOutstanding)}`}
+          subtitle="Remaining loan balance"
+          icon={DollarSign}
+          iconColor="text-rose-600 dark:text-rose-400"
+          iconBg="bg-rose-50 dark:bg-rose-950/40 border-rose-100 dark:border-rose-900/40"
+        />
       </div>
 
-      {/* Table Card */}
-      <div className="table-card">
-        <div className="px-6 py-4" style={{ borderBottom: '1px solid var(--color-border)' }}>
-          <div className="relative">
-            <input type="text" placeholder="Search financiers..." value={search} onChange={e => setSearch(e.target.value)}
-              className="search-input" />
-          </div>
+      {/* Filter Toolbar */}
+      <FilterToolbar
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search financiers by name, phone, notes..."
+        isFiltered={search !== '' || statusFilter !== 'ALL'}
+        onReset={() => { setSearch(''); setStatusFilter('ALL') }}
+      >
+        <div className="w-48">
+          <DropdownSelect
+            value={statusFilter}
+            onChange={setStatusFilter}
+            options={[
+              { value: 'ALL', label: 'All Statuses' },
+              { value: 'Active', label: 'Active' },
+              { value: 'Inactive', label: 'Inactive' }
+            ]}
+          />
         </div>
+      </FilterToolbar>
 
+      {/* Table Card */}
+      <Card className="overflow-hidden">
         {error ? (
-          <div className="p-6">
+          <div className="p-8">
             <EmptyState icon="search" title="Error Loading Financiers" description={error} />
           </div>
         ) : loading ? (
           <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider border-b border-gray-100">
-                  <th className="text-left px-5 py-3">NAME</th>
-                  <th className="text-left px-5 py-3">PHONE</th>
-                  <th className="text-left px-5 py-3">ADDRESS</th>
-                  <th className="text-right px-5 py-3">ACTIVE LOANS</th>
-                  <th className="text-right px-5 py-3">OUTSTANDING</th>
-                  <th className="text-left px-5 py-3">STATUS</th>
-                  <th className="px-5 py-3"></th>
+            <table className="w-full text-left text-sm">
+              <thead className="bg-slate-50/90 dark:bg-slate-800/60 border-b border-slate-200/80 dark:border-slate-700 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                <tr>
+                  <th className="px-6 py-3.5">Financier Name</th>
+                  <th className="px-6 py-3.5">Phone</th>
+                  <th className="px-6 py-3.5">Address</th>
+                  <th className="px-6 py-3.5 text-right">Active Loans</th>
+                  <th className="px-6 py-3.5 text-right">Outstanding</th>
+                  <th className="px-6 py-3.5">Status</th>
+                  <th className="px-6 py-3.5 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
                 {Array.from({ length: 5 }).map((_, idx) => (
-                  <SkeletonTableRow key={idx} cols={7} widths={["w-32", "w-24", "w-40", "w-16", "w-16", "w-12", "w-8"]} />
+                  <SkeletonTableRow key={idx} cols={7} widths={["w-36", "w-28", "w-44", "w-16", "w-20", "w-16", "w-20"]} />
                 ))}
               </tbody>
             </table>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="p-6">
+          <div className="p-8">
             {financiers.length === 0 ? (
               <EmptyState 
                 icon="bank" 
                 title="No Financiers Found" 
-                description="Add your first financier to start managing loans" 
-                action={{ label: "Add Financier", onClick: handleOpenAdd }} 
+                description="Add your first financier to start managing loans." 
+                action={{ label: "Add Finance", onClick: handleOpenAdd }} 
               />
             ) : (
               <EmptyState 
                 icon="search" 
-                title="No Results" 
-                description="No financiers match your search. Try different keywords." 
+                title="No Matching Financiers" 
+                description="No financiers match your search filters. Try clearing filters." 
               />
             )}
           </div>
         ) : (
           <>
             <div ref={tableContainerRef} className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider border-b border-gray-100">
-                    <th className="text-left px-5 py-3">NAME</th>
-                    <th className="text-left px-5 py-3">PHONE</th>
-                    <th className="text-left px-5 py-3">ADDRESS</th>
-                    <th className="text-right px-5 py-3">ACTIVE LOANS</th>
-                    <th className="text-right px-5 py-3">OUTSTANDING</th>
-                    <th className="text-left px-5 py-3">STATUS</th>
-                    <th className="px-5 py-3"></th>
+              <table className="w-full text-left text-sm">
+                <thead className="bg-slate-50/90 dark:bg-slate-800/60 border-b border-slate-200/80 dark:border-slate-700 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  <tr>
+                    <th className="px-6 py-3.5">Financier Name</th>
+                    <th className="px-6 py-3.5">Phone</th>
+                    <th className="px-6 py-3.5">Address</th>
+                    <th className="px-6 py-3.5 text-right">Active Loans</th>
+                    <th className="px-6 py-3.5 text-right">Outstanding</th>
+                    <th className="px-6 py-3.5">Status</th>
+                    <th className="px-6 py-3.5 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-50">
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
                   {pagination.paginatedItems.map((f, i) => (
-                    <motion.tr 
+                    <tr 
                       key={f._id || f.id} 
                       onClick={() => navigate(`/financiers/${f.id}`)} 
-                      initial={{ opacity: 0, y: 4 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: Math.min(i * 0.03, 0.3), duration: 0.2 }}
-                      className="hover:bg-gray-50 dark:hover:bg-slate-700/20 transition-colors cursor-pointer"
+                      className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors cursor-pointer h-16"
                     >
-                      <td className="px-5 py-3.5">
-                        <div className="flex items-center space-x-3">
-                          <div className={`h-8 w-8 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 ${colors[i % colors.length]}`}>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className={`h-9 w-9 rounded-xl border flex items-center justify-center text-xs font-bold shrink-0 shadow-2xs ${avatarColors[i % avatarColors.length]}`}>
                             {initials(f.name)}
                           </div>
-                          <div>
-                            <span className="text-sm font-semibold text-brand-primary block hover:opacity-80 transition-opacity">{toTitleCase(f.name)}</span>
-                            {f.notes && <p className="text-xs text-gray-400 truncate max-w-[180px]">{f.notes}</p>}
+                          <div className="min-w-0">
+                            <span className="text-sm font-semibold text-slate-900 dark:text-slate-100 block hover:text-emerald-600 transition-colors">
+                              {toTitleCase(f.name)}
+                            </span>
+                            {f.notes && <p className="text-xs text-slate-400 dark:text-slate-500 truncate max-w-[220px]">{f.notes}</p>}
                           </div>
                         </div>
                       </td>
-                      <td className="px-5 py-3.5 text-sm text-gray-600 font-mono">{f.phone || '—'}</td>
-                      <td className="px-5 py-3.5 text-sm text-gray-500 truncate max-w-[200px]">{f.address || '—'}</td>
-                      <td className="px-5 py-3.5 text-sm text-gray-900 text-right tabular-nums font-semibold">{f.loansCount}</td>
-                      <td className="px-5 py-3.5 text-sm text-red-500 text-right font-bold tabular-nums">₹{fmt(f.outstanding)}</td>
-                      <td className="px-5 py-3.5">
-                        <Badge variant={String(f.status).toLowerCase() === 'active' ? 'success' : 'danger'}>
-                          {toTitleCase(f.status)}
+                      <td className="px-6 py-4 text-slate-600 dark:text-slate-300 font-mono font-medium whitespace-nowrap">{f.phone || '—'}</td>
+                      <td className="px-6 py-4 text-slate-500 dark:text-slate-400 truncate max-w-[240px]">{f.address || '—'}</td>
+                      <td className="px-6 py-4 text-slate-900 dark:text-slate-100 text-right tabular-nums font-semibold whitespace-nowrap">
+                        {f.loansCount || 0}
+                      </td>
+                      <td className="px-6 py-4 text-right font-bold text-rose-600 dark:text-rose-400 tabular-nums whitespace-nowrap">
+                        ₹{fmt(f.outstanding)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <Badge variant={String(f.status).toLowerCase() === 'active' ? 'success' : 'neutral'} dot>
+                          {toTitleCase(f.status || 'Active')}
                         </Badge>
                       </td>
-                      <td className="px-5 py-3.5">
-                        <div className="flex items-center justify-end space-x-2">
-                          <button onClick={(e) => { e.stopPropagation(); navigate(`/financiers/${f.id}`); }} className="text-xs text-gray-500 hover:text-brand-primary font-medium px-1.5 py-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors">
-                            View
+                      <td className="px-6 py-4 text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-1" onClick={e => e.stopPropagation()}>
+                          <button
+                            onClick={() => navigate(`/financiers/${f.id}`)}
+                            className="p-2 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                            title="View Profile & Loans"
+                          >
+                            <Eye className="w-4 h-4" />
                           </button>
-                          <button onClick={(e) => { e.stopPropagation(); handleOpenEdit(f); }} className="text-xs text-gray-500 hover:text-brand-primary font-medium px-1.5 py-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors">
-                            Edit
+                          <button
+                            onClick={() => handleOpenEdit(f)}
+                            className="p-2 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                            title="Edit Financier"
+                          >
+                            <Edit2 className="w-4 h-4" />
                           </button>
-                          <button onClick={(e) => { e.stopPropagation(); handleDelete(f.id); }} className="text-xs text-red-500 hover:text-red-700 font-medium px-1.5 py-0.5 rounded hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors">
-                            Delete
+                          <button
+                            onClick={() => handleDelete(f.id)}
+                            className="p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                            title="Delete Financier"
+                          >
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
                       </td>
-                    </motion.tr>
+                    </tr>
                   ))}
                 </tbody>
               </table>
@@ -346,94 +412,124 @@ export function Financiers() {
             <Pagination {...pagination} isLoading={loading} />
           </>
         )}
-      </div>
+      </Card>
 
-      {/* Modal */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={closeModal}>
-          <div className="bg-white dark:bg-slate-800 w-[480px] rounded-xl border border-gray-200 dark:border-slate-700 shadow-xl p-6" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-4 border-b border-gray-100 dark:border-slate-700 pb-3">
-              <h2 className="text-base font-semibold text-gray-900 dark:text-white uppercase tracking-wide">
-                {modalMode === 'add' ? 'Add Finance' : modalMode === 'edit' ? 'Edit Finance' : 'Finance Details'}
-              </h2>
-              <button onClick={closeModal} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"><X size={18} /></button>
-            </div>
-
-            {modalMode === 'preview' ? (
-              <div className="space-y-4 text-sm text-gray-600">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-xs text-gray-400 uppercase font-semibold">Name</label>
-                    <p className="font-bold text-gray-900 text-base">{toTitleCase(selectedFin?.name)}</p>
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-400 uppercase font-semibold">Phone</label>
-                    <p className="text-gray-900">{selectedFin?.phone || '—'}</p>
-                  </div>
-                  <div className="col-span-2">
-                    <label className="text-xs text-gray-400 uppercase font-semibold">Address</label>
-                    <p className="text-gray-900">{selectedFin?.address || '—'}</p>
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-400 uppercase font-semibold block mb-1">Status</label>
-                    <Badge variant={String(selectedFin?.status).toLowerCase() === 'active' ? 'success' : 'danger'}>
-                      {toTitleCase(selectedFin?.status)}
-                    </Badge>
-                  </div>
-                  <div className="col-span-2">
-                    <label className="text-xs text-gray-400 uppercase font-semibold">Notes</label>
-                    <p className="text-gray-900 bg-gray-50 p-2.5 rounded-lg border border-gray-100">{selectedFin?.notes || '—'}</p>
-                  </div>
+      {/* Modal Dialog */}
+      <AnimatePresence>
+        {showModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={closeModal}>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="fixed inset-0 bg-black/40 backdrop-blur-xs"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+              className="bg-white dark:bg-slate-800 w-full max-w-lg rounded-2xl border border-slate-200 dark:border-slate-700 shadow-2xl overflow-hidden relative z-10 flex flex-col max-h-[90vh]"
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/80">
+                <div>
+                  <h2 className="text-base font-bold text-slate-900 dark:text-slate-100" style={{ fontFamily: 'var(--font-display)' }}>
+                    {modalMode === 'add' ? 'Add Finance Provider' : modalMode === 'edit' ? 'Edit Financier Details' : 'Financier Details'}
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {modalMode === 'preview' ? 'Financier overview' : 'Enter financier contact and terms'}
+                  </p>
                 </div>
-                <div className="flex justify-end pt-4 border-t border-gray-100 mt-6">
-                  <button onClick={() => setShowModal(false)} className="px-4 py-2 bg-brand-primary text-white text-sm rounded-lg hover:bg-brand-primary/95">Close</button>
-                </div>
+                <button
+                  onClick={closeModal}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
               </div>
-            ) : (
-              <form onSubmit={handleSave} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Name *</label>
-                  <input type="text" required value={form.name} onChange={e => setForm({...form, name: e.target.value})}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Phone</label>
-                  <input type="text" value={form.phone} onChange={e => setForm({...form, phone: e.target.value})}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Address</label>
-                  <textarea rows={2} value={form.address} onChange={e => setForm({...form, address: e.target.value})}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Status</label>
-                  <DropdownSelect
-                    value={form.status}
-                    onChange={val => setForm({...form, status: val})}
-                    placeholder="Select Status"
-                    options={[
-                      { value: 'Active', label: 'Active' },
-                      { value: 'Inactive', label: 'Inactive' }
-                    ]}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Notes</label>
-                  <textarea rows={3} value={form.notes} onChange={e => setForm({...form, notes: e.target.value})}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none" />
-                </div>
-                <div className="flex justify-end space-x-3 pt-4 border-t border-gray-100 dark:border-slate-700 mt-6">
-                  <button type="button" onClick={closeModal} className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 dark:text-gray-300 dark:border-slate-600 dark:hover:bg-slate-700">Cancel</button>
-                  <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-brand-primary rounded-lg hover:bg-brand-primary/90">
-                    {modalMode === 'add' ? 'Save Financier' : 'Update Financier'}
-                  </button>
-                </div>
-              </form>
-            )}
+
+              {/* Body */}
+              <div className="p-6 overflow-y-auto flex-1 space-y-4">
+                <form id="financier-form" onSubmit={handleSave} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Financier Name <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={form.name}
+                      onChange={e => setForm({...form, name: e.target.value})}
+                      placeholder="e.g. Bajaj Finance Ltd"
+                      className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Phone Number</label>
+                      <input
+                        type="text"
+                        value={form.phone}
+                        onChange={e => setForm({...form, phone: e.target.value})}
+                        placeholder="9876543210"
+                        className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 font-mono outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Status</label>
+                      <DropdownSelect
+                        value={form.status}
+                        onChange={val => setForm({...form, status: val})}
+                        options={[
+                          { value: 'Active', label: 'Active' },
+                          { value: 'Inactive', label: 'Inactive' }
+                        ]}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Office Address</label>
+                    <textarea
+                      rows={2}
+                      value={form.address}
+                      onChange={e => setForm({...form, address: e.target.value})}
+                      placeholder="Address..."
+                      className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 resize-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Notes / Remarks</label>
+                    <textarea
+                      rows={2}
+                      value={form.notes}
+                      onChange={e => setForm({...form, notes: e.target.value})}
+                      placeholder="Notes regarding interest settlement, credit line..."
+                      className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 resize-none"
+                    />
+                  </div>
+                </form>
+              </div>
+
+              {/* Footer */}
+              <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-700 flex justify-end gap-3 bg-slate-50/50 dark:bg-slate-800/80">
+                <Button variant="secondary" onClick={closeModal}>
+                  Cancel
+                </Button>
+                <Button type="submit" form="financier-form" loading={isSaving}>
+                  {modalMode === 'add' ? 'Save Financier' : 'Update Financier'}
+                </Button>
+              </div>
+            </motion.div>
           </div>
-        </div>
-      )}
+        )}
+      </AnimatePresence>
+
       <SaveConfirmationModal {...confirmConfig} isSaving={isSaving} />
     </div>
   )

@@ -131,14 +131,9 @@ export function CustomDatePicker({ value, onChange, placeholder = "Pick a date",
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center px-3 py-2 text-sm rounded-lg shadow-sm focus:outline-none focus:ring-1 focus:ring-brand-primary text-left"
-        style={{
-          background: 'var(--color-bg-surface)',
-          border: '1px solid var(--color-border)',
-          color: 'var(--color-text-primary)'
-        }}
+        className="w-full flex items-center h-10 px-3 text-sm rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 hover:border-slate-300 dark:hover:border-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-left font-medium transition-all"
       >
-        <CalendarIcon size={16} className="text-gray-400 shrink-0 mr-2" />
+        <CalendarIcon size={16} className="text-slate-400 shrink-0 mr-2" />
         <span className="truncate flex-1">{value || placeholder}</span>
       </button>
       {isOpen && (

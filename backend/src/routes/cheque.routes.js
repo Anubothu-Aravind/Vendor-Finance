@@ -1,10 +1,10 @@
 const express = require('express')
 const router = express.Router()
 const chequeController = require('../controllers/cheque.controller')
-const { authenticateJWT, requireRole } = require('../middleware/auth.middleware')
+const { authenticateJWT, requireRole, requirePermission } = require('../middleware/auth.middleware')
 const { validateCheque } = require('../validators/cheque.validator')
 
-router.use(authenticateJWT)
+router.use(authenticateJWT, requirePermission('cheques'))
 
 router.route('/')
   .post(requireRole(['Admin']), validateCheque, chequeController.createCheque)

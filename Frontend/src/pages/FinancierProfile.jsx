@@ -1,17 +1,21 @@
 import React, { useState, useMemo, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Edit2, Plus, ArrowLeft, Building2, X } from 'lucide-react'
+import { Edit2, Plus, ArrowLeft, Building2, X, Landmark, DollarSign, CheckCircle2, Clock } from 'lucide-react'
 import { toInputDate, fromInputDate, getTodayFormatted } from '../utils/date'
 import DropdownSelect from '../components/ui/DropdownSelect'
 import CustomDatePicker from '../components/ui/CustomDatePicker'
 import { toTitleCase } from '../utils/text'
 import EmptyState from '../components/ui/EmptyState'
 import Badge from '../components/ui/Badge'
+import Button from '../components/ui/Button'
+import PageHeader from '../components/ui/PageHeader'
+import { Card, CardHeader, CardTitle, CardContent, KpiCard } from '../components/ui/Card'
 import api from '../utils/api'
 import { useToast } from '../hooks/useToast'
 import Skeleton from '../components/ui/Skeleton'
+import { AnimatePresence, motion } from 'framer-motion'
 
-const fmt = (v) => new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, minimumIntegerDigits: 1 }).format(v)
+const fmt = (v) => new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(v)
 
 export function FinancierProfile() {
   const toast = useToast()
@@ -34,7 +38,7 @@ export function FinancierProfile() {
     name: '',
     phone: '',
     address: '',
-    status: '',
+    status: 'Active',
     notes: ''
   })
 
@@ -43,7 +47,7 @@ export function FinancierProfile() {
   const [repayForm, setRepayForm] = useState({
     date: getTodayFormatted(),
     amount: '',
-    mode: '',
+    mode: 'Bank Transfer',
     remarks: '',
     chequeNo: ''
   })
@@ -112,7 +116,6 @@ export function FinancierProfile() {
     return () => controller.abort()
   }, [id])
 
-  // Totals calculations
   const totals = useMemo(() => {
     const totalLoans = loans.length
     const active = loans.filter(l => String(l.status).toLowerCase() === 'active').length
@@ -123,7 +126,6 @@ export function FinancierProfile() {
     return { totalLoans, active, closed, totalLoaned, totalPaid, outstanding }
   }, [loans])
 
-  // Handle Edit Save
   const handleSaveEdit = async (e) => {
     e.preventDefault()
     try {
@@ -137,12 +139,12 @@ export function FinancierProfile() {
       })
       await fetchProfileAndLoans()
       setShowEditModal(false)
+      toast('Financier updated successfully', 'success')
     } catch (err) {
       toast(err.message || 'Failed to update financier', 'error')
     }
   }
 
-  // Handle Add Loan Save
   const handleSaveLoan = async (e) => {
     e.preventDefault()
     const amt = Number(loanForm.amount) || 0
@@ -160,12 +162,12 @@ export function FinancierProfile() {
       await fetchProfileAndLoans()
       setShowAddLoanModal(false)
       setLoanForm({ noteNo: '', date: getTodayFormatted(), amount: '', interestRate: '', remarks: '' })
+      toast('Loan account created successfully', 'success')
     } catch (err) {
       toast(err.message || 'Failed to save loan', 'error')
     }
   }
 
-  // FIFO Allocation calculations in real time for Repayment Preview
   const fifoAllocations = useMemo(() => {
     const amt = Number(repayForm.amount) || 0
     let remaining = amt
@@ -201,7 +203,6 @@ export function FinancierProfile() {
     setRepayForm(prev => ({ ...prev, amount: val }))
   }
 
-  // Confirm Repayment Save
   const handleConfirmRepayment = async () => {
     if (repayForm.mode === 'Cheque') {
       if (!repayForm.chequeNo || repayForm.chequeNo.length !== 6) {
@@ -241,7 +242,8 @@ export function FinancierProfile() {
       await fetchProfileAndLoans()
       setShowRepayModal(false)
       setRepayStep('input')
-      setRepayForm({ date: getTodayFormatted(), amount: '', mode: '', remarks: '', chequeNo: '' })
+      setRepayForm({ date: getTodayFormatted(), amount: '', mode: 'Bank Transfer', remarks: '', chequeNo: '' })
+      toast('Repayment recorded successfully', 'success')
     } catch (err) {
       toast(err.message || 'Failed to confirm repayments', 'error')
     }
@@ -257,7 +259,7 @@ export function FinancierProfile() {
 
   if (loading || !profile) {
     return (
-      <div className="p-6 space-y-6">
+      <div className="p-6 space-y-6 max-w-[1600px] mx-auto">
         <Skeleton className="h-10 w-48" />
         <Skeleton className="h-32 w-full" />
         <Skeleton className="h-24 w-full" />
@@ -266,402 +268,438 @@ export function FinancierProfile() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Back button */}
-      <div>
-        <button onClick={() => navigate('/financiers')} className="flex items-center space-x-1 text-gray-500 hover:text-gray-900 transition-colors text-sm">
-          <ArrowLeft size={16} />
-          <span>Financiers</span>
-        </button>
-      </div>
-
-      {/* Profile Header */}
-      <div className="flex justify-between items-start bg-white p-6 rounded-xl border border-gray-200">
-        <div className="flex items-center space-x-4">
-          <div className="h-12 w-12 rounded-xl bg-brand-primary/10 text-brand-primary flex items-center justify-center flex-shrink-0">
-            <Building2 size={24} />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">{toTitleCase(profile.name)}</h1>
-            <p className="text-sm text-gray-500 font-medium font-sans">Financier profile</p>
-          </div>
-        </div>
-        <div className="flex items-center space-x-3">
-          <button onClick={() => {
-            setEditForm({ name: profile.name, phone: profile.phone, address: profile.address, status: profile.status, notes: profile.notes })
-            setShowEditModal(true)
-          }} className="flex items-center space-x-1.5 border border-gray-200 hover:bg-gray-50 px-3 py-1.5 rounded-lg text-sm font-medium text-gray-700 bg-white transition-colors">
-            <Edit2 size={14} />
+    <div className="space-y-6 max-w-[1600px] mx-auto">
+      {/* Header */}
+      <PageHeader
+        title={toTitleCase(profile.name)}
+        description={`Financier profile · ${totals.totalLoans} loan notes recorded`}
+        breadcrumbs={[
+          { label: 'Finance', href: '/financiers' },
+          { label: toTitleCase(profile.name) }
+        ]}
+      >
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setShowEditModal(true)}>
+            <Edit2 className="w-4 h-4" />
             <span>Edit</span>
-          </button>
-          <button onClick={() => {
-            setRepayStep('input')
-            setShowRepayModal(true)
-          }} className="bg-brand-primary hover:bg-brand-primary/95 text-white px-4 py-1.5 rounded-lg text-sm font-medium transition-colors shadow-sm">
-            Record Repayment
-          </button>
+          </Button>
+          <Button onClick={() => { setRepayStep('input'); setShowRepayModal(true); }}>
+            <span>Record Repayment</span>
+          </Button>
         </div>
+      </PageHeader>
+
+      {/* KPI Stats Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-5">
+        <KpiCard
+          title="Total Loans"
+          value={String(totals.totalLoans)}
+          subtitle="All facilities"
+          icon={Landmark}
+          iconColor="text-slate-600 dark:text-slate-300"
+          iconBg="bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700"
+        />
+        <KpiCard
+          title="Active Loans"
+          value={String(totals.active)}
+          subtitle="Unsettled"
+          icon={Clock}
+          iconColor="text-blue-600 dark:text-blue-400"
+          iconBg="bg-blue-50 dark:bg-blue-950/40 border-blue-100 dark:border-blue-900/40"
+        />
+        <KpiCard
+          title="Closed Loans"
+          value={String(totals.closed)}
+          subtitle="Fully repaid"
+          icon={CheckCircle2}
+          iconColor="text-emerald-600 dark:text-emerald-400"
+          iconBg="bg-emerald-50 dark:bg-emerald-950/40 border-emerald-100 dark:border-emerald-900/40"
+        />
+        <KpiCard
+          title="Total Loaned"
+          value={`₹${fmt(totals.totalLoaned)}`}
+          subtitle="Disbursed"
+          icon={DollarSign}
+          iconColor="text-slate-600 dark:text-slate-300"
+          iconBg="bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700"
+        />
+        <KpiCard
+          title="Total Paid"
+          value={`₹${fmt(totals.totalPaid)}`}
+          subtitle="Principal settled"
+          icon={DollarSign}
+          iconColor="text-emerald-600 dark:text-emerald-400"
+          iconBg="bg-emerald-50 dark:bg-emerald-950/40 border-emerald-100 dark:border-emerald-900/40"
+        />
+        <KpiCard
+          title="Pending Exposure"
+          value={`₹${fmt(totals.totalPending)}`}
+          subtitle="Remaining principal"
+          icon={AlertCircle}
+          iconColor="text-rose-600 dark:text-rose-400"
+          iconBg="bg-rose-50 dark:bg-rose-950/40 border-rose-100 dark:border-rose-900/40"
+        />
       </div>
 
-      {/* Stats row */}
-      <div className="flex flex-wrap w-full gap-4" style={{ boxSizing: 'border-box' }}>
-        <div className="bg-white rounded-xl border border-gray-200 p-4 min-w-0 overflow-hidden" style={{ flex: '1 1 0%', minWidth: 0, overflow: 'hidden', padding: '1rem', boxSizing: 'border-box' }}>
-          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Total Loans</p>
-          <p className="text-2xl font-bold text-gray-900 break-all" style={{ fontSize: 'clamp(0.85rem, 1.4vw, 1.2rem)', wordBreak: 'break-all' }}>{totals.totalLoans}</p>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-4 min-w-0 overflow-hidden" style={{ flex: '1 1 0%', minWidth: 0, overflow: 'hidden', padding: '1rem', boxSizing: 'border-box' }}>
-          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Active</p>
-          <p className="text-2xl font-bold text-blue-600 break-all" style={{ fontSize: 'clamp(0.85rem, 1.4vw, 1.2rem)', wordBreak: 'break-all' }}>{totals.active}</p>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-4 min-w-0 overflow-hidden" style={{ flex: '1 1 0%', minWidth: 0, overflow: 'hidden', padding: '1rem', boxSizing: 'border-box' }}>
-          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Closed</p>
-          <p className="text-2xl font-bold text-gray-500 break-all" style={{ fontSize: 'clamp(0.85rem, 1.4vw, 1.2rem)', wordBreak: 'break-all' }}>{totals.closed}</p>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-4 min-w-0 overflow-hidden" style={{ flex: '1 1 0%', minWidth: 0, overflow: 'hidden', padding: '1rem', boxSizing: 'border-box' }}>
-          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Total Loaned</p>
-          <p className="text-2xl font-bold text-gray-900 tabular-nums break-all" style={{ fontSize: 'clamp(0.85rem, 1.4vw, 1.2rem)', wordBreak: 'break-all' }}>₹{fmt(totals.totalLoaned)}</p>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-4 min-w-0 overflow-hidden" style={{ flex: '1 1 0%', minWidth: 0, overflow: 'hidden', padding: '1rem', boxSizing: 'border-box' }}>
-          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Total Paid</p>
-          <p className="text-2xl font-bold text-green-600 tabular-nums break-all" style={{ fontSize: 'clamp(0.85rem, 1.4vw, 1.2rem)', wordBreak: 'break-all' }}>₹{fmt(totals.totalPaid)}</p>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-4 min-w-0 overflow-hidden" style={{ flex: '1 1 0%', minWidth: 0, overflow: 'hidden', padding: '1rem', boxSizing: 'border-box' }}>
-          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Outstanding</p>
-          <p className="text-2xl font-bold text-orange-500 tabular-nums break-all" style={{ fontSize: 'clamp(0.85rem, 1.4vw, 1.2rem)', wordBreak: 'break-all' }}>₹{fmt(totals.outstanding)}</p>
-        </div>
-      </div>
-
-      {/* Contact Details & Notes */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <h3 className="text-sm font-semibold text-gray-900 mb-4 uppercase tracking-wider">Details</h3>
-        <div className="grid grid-cols-2 gap-x-12 gap-y-3 max-w-xl text-sm">
-          <div className="flex justify-between border-b border-gray-50 pb-2">
-            <span className="text-gray-400">Phone</span>
-            <span className="font-semibold text-gray-900">{profile.phone || '—'}</span>
-          </div>
-          <div className="flex justify-between border-b border-gray-50 pb-2">
-            <span className="text-gray-400">Address</span>
-            <span className="font-semibold text-gray-900">{profile.address || '—'}</span>
-          </div>
-          <div className="flex justify-between border-b border-gray-50 pb-2">
-            <span className="text-gray-400">Status</span>
-            <span className="font-semibold text-gray-900">{toTitleCase(profile.status)}</span>
-          </div>
-          {profile.notes && (
-            <div className="col-span-2 mt-2">
-              <span className="text-gray-400 block mb-1">Notes</span>
-              <p className="text-gray-700 bg-gray-50 p-3 rounded-lg border border-gray-100 italic">{profile.notes}</p>
+      {/* Details Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Financier Details</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 text-sm">
+            <div>
+              <span className="text-xs text-slate-400 font-semibold block mb-1">Phone Number</span>
+              <span className="font-semibold text-slate-900 dark:text-slate-100 font-mono text-sm">{profile.phone || '—'}</span>
             </div>
-          )}
-        </div>
-      </div>
-
-      {/* Loans Table Section */}
-      <div className="bg-white rounded-xl border border-gray-200">
-        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-          <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider">Loans</h3>
-          <button onClick={() => setShowAddLoanModal(true)} className="flex items-center space-x-1 border border-gray-200 hover:bg-gray-50 px-3 py-1.5 rounded-lg text-xs font-semibold text-gray-700">
-            <Plus size={14} />
-            <span>Add Loan</span>
-          </button>
-        </div>
-        {!loans || loans.length === 0 ? (
-          <div className="p-6">
-            <EmptyState 
-              icon="loan" 
-              title="No Loans Found" 
-              description="Add a loan from this financier to get started" 
-              action={{ label: "Add Loan", onClick: () => setShowAddLoanModal(true) }} 
-            />
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider border-b border-gray-100">
-                <th className="text-left px-5 py-3">NOTE #</th>
-                <th className="text-left px-5 py-3">DATE</th>
-                <th className="text-right px-5 py-3">LOAN AMOUNT</th>
-                <th className="text-right px-5 py-3">PAID</th>
-                <th className="text-right px-5 py-3">OUTSTANDING</th>
-                <th className="text-left px-5 py-3">STATUS</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {loans.map((l, i) => (
-                <tr key={l._id || l.id || i} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-5 py-3.5 text-sm font-mono font-semibold text-gray-700">{l.noteNo}</td>
-                  <td className="px-5 py-3.5 text-sm text-gray-500 font-mono">{l.date}</td>
-                  <td className="px-5 py-3.5 text-sm font-semibold text-gray-900 text-right tabular-nums">₹{fmt(l.amount)}</td>
-                  <td className="px-5 py-3.5 text-sm font-semibold text-green-600 text-right tabular-nums">₹{fmt(l.paid)}</td>
-                  <td className="px-5 py-3.5 text-sm font-bold text-orange-500 text-right tabular-nums">₹{fmt(l.outstanding)}</td>
-                  <td className="px-5 py-3.5">
-                    <Badge variant={String(l.status).toLowerCase() === 'active' ? 'success' : 'success'}>
-                      {toTitleCase(l.status)}
-                    </Badge>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          </div>
-        )}
-      </div>
-
-      {/* Edit Financier Modal */}
-      {showEditModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="bg-white w-[480px] rounded-xl border border-gray-200 shadow-xl p-6">
-            <div className="flex justify-between items-center mb-4 border-b border-gray-100 pb-3">
-              <h2 className="text-base font-semibold text-gray-900">Edit Financier</h2>
-              <button onClick={() => setShowEditModal(false)} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
+            <div>
+              <span className="text-xs text-slate-400 font-semibold block mb-1">Office Address</span>
+              <span className="font-semibold text-slate-900 dark:text-slate-100 text-sm">{profile.address || '—'}</span>
             </div>
-            <form onSubmit={handleSaveEdit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">Name *</label>
-                <input type="text" required value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})}
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none" />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">Phone</label>
-                <input type="text" value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})}
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none" />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">Address</label>
-                <textarea rows={2} value={editForm.address} onChange={e => setEditForm({...editForm, address: e.target.value})}
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none" />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">Status</label>
-                <DropdownSelect
-                  value={editForm.status}
-                  onChange={val => setEditForm({...editForm, status: val})}
-                  placeholder="Select Status"
-                  options={[
-                    { value: 'Active', label: 'Active' },
-                    { value: 'Inactive', label: 'Inactive' }
-                  ]}
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">Notes</label>
-                <textarea rows={2} value={editForm.notes} onChange={e => setEditForm({...editForm, notes: e.target.value})}
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none" />
-              </div>
-              <div className="flex justify-end space-x-3 pt-4 border-t border-gray-100 mt-6">
-                <button type="button" onClick={() => setShowEditModal(false)} className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">Cancel</button>
-                <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-brand-primary rounded-lg hover:bg-brand-primary/90">Save Changes</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Record Repayment Modal */}
-      {showRepayModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="bg-white w-[500px] rounded-xl border border-gray-200 shadow-xl p-6">
-            <div className="flex justify-between items-center mb-4 border-b border-gray-100 pb-3">
-              <h2 className="text-base font-semibold text-gray-900">
-                {repayStep === 'input' ? 'Record Financier Repayment' : 'Confirm Repayment'}
-              </h2>
-              <button onClick={() => setShowRepayModal(false)} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
+            <div>
+              <span className="text-xs text-slate-400 font-semibold block mb-1">Account Status</span>
+              <Badge variant={String(profile.status).toLowerCase() === 'active' ? 'success' : 'danger'} dot>
+                {toTitleCase(profile.status)}
+              </Badge>
             </div>
-
-            {repayStep === 'input' ? (
-              <div className="space-y-4">
-                <p className="text-xs text-gray-400 italic mb-2">Enter repayment details — preview FIFO loan allocation before saving</p>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Financier *</label>
-                  <input type="text" disabled value={toTitleCase(profile.name)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none bg-gray-50 text-gray-500 font-semibold" />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-600 mb-1">Repayment Date *</label>
-                    <CustomDatePicker
-                      value={repayForm.date}
-                      onChange={val => setRepayForm({...repayForm, date: val})}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-600 mb-1">Payment Mode *</label>
-                    <DropdownSelect
-                      value={repayForm.mode}
-                      onChange={val => setRepayForm({...repayForm, mode: val})}
-                      placeholder="Select Mode"
-                      options={paymentModes.length > 0 ? paymentModes.map(m => ({ value: m.name, label: m.name })) : [
-                        { value: 'Bank Transfer', label: 'Bank Transfer' },
-                        { value: 'Cheque', label: 'Cheque' },
-                        { value: 'Cash', label: 'Cash' },
-                        { value: 'UPI', label: 'UPI' },
-                        { value: 'NEFT / RTGS', label: 'NEFT / RTGS' }
-                      ]}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Amount *</label>
-                  <input type="text" required value={repayForm.amount} onChange={handleAmountChange}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none font-bold" />
-                  {isOverBalance && (
-                    <p className="text-red-500 text-xs mt-1">Amount cannot exceed the total outstanding balance of ₹{fmt(totals.outstanding)}.</p>
-                  )}
-                </div>
-                {repayForm.mode === 'Cheque' && (
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-600 mb-1">Cheque Number *</label>
-                      <input type="text" required placeholder="e.g. 123456" value={repayForm.chequeNo || ''} onChange={e => setRepayForm({...repayForm, chequeNo: e.target.value.slice(0, 6).replace(/[^0-9]/g, '')})}
-                        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none font-mono" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-600 mb-1">Cheque Date *</label>
-                      <CustomDatePicker
-                        value={repayForm.chequeDate || repayForm.date}
-                        onChange={val => setRepayForm({ ...repayForm, chequeDate: val })}
-                      />
-                    </div>
-                  </div>
-                )}
-                {(repayForm.mode === 'Bank Transfer' || repayForm.mode === 'NEFT' || repayForm.mode === 'RTGS' || repayForm.mode === 'UPI' || repayForm.mode === 'NEFT / RTGS') && (
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-600 mb-1">Transaction Ref / UTR Number *</label>
-                    <input type="text" required placeholder="e.g. UTRN987654321 / TXN Ref" value={repayForm.refNum || repayForm.referenceNumber || ''} onChange={e => setRepayForm({...repayForm, refNum: e.target.value, referenceNumber: e.target.value})}
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none font-mono" />
-                  </div>
-                )}
-                {repayForm.mode === 'Cash' && (
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-600 mb-1">Cash Memo / Reference (Optional)</label>
-                    <input type="text" placeholder="e.g. Memo #101" value={repayForm.refNum || repayForm.referenceNumber || ''} onChange={e => setRepayForm({...repayForm, refNum: e.target.value, referenceNumber: e.target.value})}
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none font-mono" />
-                  </div>
-                )}
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Remarks</label>
-                  <textarea rows={2} value={repayForm.remarks} onChange={e => setRepayForm({...repayForm, remarks: e.target.value})}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none" />
-                </div>
-                <div className="flex justify-end space-x-3 pt-4 border-t border-gray-100 mt-6">
-                  <button type="button" onClick={() => setShowRepayModal(false)} className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">Cancel</button>
-                  <button type="button" onClick={() => {
-                    if (repayForm.mode === 'Cheque' && (!repayForm.chequeNo || repayForm.chequeNo.length !== 6)) {
-                      toast('Cheque number must be exactly 6 digits', 'error')
-                      return
-                    }
-                    setRepayStep('preview')
-                  }} disabled={!repayForm.amount || isOverBalance}
-                    className="px-4 py-2 text-sm font-medium text-white bg-brand-primary rounded-lg hover:bg-brand-primary/90 disabled:opacity-50">
-                    Preview Allocation
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <p className="text-xs text-gray-400 italic mb-3">Review FIFO allocation before confirming</p>
-                
-                <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
-                  <p className="text-xs text-gray-400 font-semibold mb-0.5">Repayment Amount</p>
-                  <p className="text-2xl font-extrabold text-brand-primary tabular-nums">₹{fmt(Number(repayForm.amount) || 0)}</p>
-                </div>
-
-                <div>
-                  <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">FIFO Loan Allocation</h4>
-                  <div className="border border-gray-200 rounded-lg overflow-hidden bg-white">
-                    <div className="overflow-x-auto">
-                    <table className="w-full text-xs">
-                      <thead>
-                        <tr className="bg-gray-50 text-gray-500 uppercase tracking-wider border-b border-gray-200">
-                          <th className="px-3 py-2 text-left">Note #</th>
-                          <th className="px-3 py-2 text-right">Previous Balance</th>
-                          <th className="px-3 py-2 text-right text-brand-primary">Adjusted</th>
-                          <th className="px-3 py-2 text-right">New Balance</th>
-                          <th className="px-3 py-2 text-left pl-2">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {fifoAllocations.map((a, idx) => (
-                          <tr key={idx} className="border-b border-gray-100 last:border-0">
-                            <td className="px-3 py-2 font-mono text-gray-700">{a.noteNo}</td>
-                            <td className="px-3 py-2 text-right font-medium text-gray-600 tabular-nums">₹{fmt(a.prev)}</td>
-                            <td className="px-3 py-2 text-right font-bold text-red-500 tabular-nums">-₹{fmt(a.adjusted)}</td>
-                            <td className="px-3 py-2 text-right font-medium text-gray-600 tabular-nums">₹{fmt(a.next)}</td>
-                            <td className="px-3 py-2 pl-2">
-                              <Badge variant={String(a.status).toLowerCase() === 'closed' ? 'success' : 'success'} className="text-[10px] px-1.5 py-0.5">
-                                {toTitleCase(a.status)}
-                              </Badge>
-                            </td>
-                          </tr>
-                        ))}
-                        {fifoAllocations.length === 0 && (
-                          <tr>
-                            <td colSpan={5} className="text-center py-4 text-gray-400 italic">No outstanding loans found to allocate. Amount will register as advance balance.</td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>            </div>
-                  </div>
-                </div>
-
-                <div className="flex justify-end space-x-3 pt-4 border-t border-gray-100 mt-6">
-                  <button type="button" onClick={() => setRepayStep('input')} className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">Edit</button>
-                  <button type="button" onClick={handleConfirmRepayment} className="px-4 py-2 text-sm font-semibold text-white bg-brand-primary rounded-lg hover:bg-brand-primary/95 shadow-sm">
-                    Confirm Repayment
-                  </button>
-                </div>
+            {profile.notes && (
+              <div className="col-span-full pt-4 border-t border-slate-100 dark:border-slate-700/60">
+                <span className="text-xs text-slate-400 font-semibold block mb-1">Notes</span>
+                <p className="text-slate-700 dark:text-slate-300 italic text-sm">{profile.notes}</p>
               </div>
             )}
           </div>
-        </div>
-      )}
+        </CardContent>
+      </Card>
 
-      {/* Add Loan Modal */}
-      {showAddLoanModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="bg-white w-[480px] rounded-xl border border-gray-200 shadow-xl p-6">
-            <div className="flex justify-between items-center mb-4 border-b border-gray-100 pb-3">
-              <h2 className="text-base font-semibold text-gray-900">Add Loan</h2>
-              <button onClick={() => setShowAddLoanModal(false)} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
+      {/* Loans Table Card */}
+      <Card className="overflow-hidden">
+        <CardHeader>
+          <CardTitle>Loan Facilities</CardTitle>
+          <Button size="sm" onClick={() => setShowAddLoanModal(true)}>
+            <Plus className="w-4 h-4" />
+            <span>Add Loan</span>
+          </Button>
+        </CardHeader>
+        <CardContent className="p-0">
+          {!loans || loans.length === 0 ? (
+            <div className="p-8">
+              <EmptyState 
+                icon="loan" 
+                title="No Loans Found" 
+                description="Add a loan facility from this financier to get started" 
+                action={{ label: "Add Loan", onClick: () => setShowAddLoanModal(true) }} 
+              />
             </div>
-            <form onSubmit={handleSaveLoan} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">Note Number *</label>
-                <input type="text" required value={loanForm.noteNo} onChange={e => setLoanForm({...loanForm, noteNo: e.target.value})}
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none font-mono" />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-slate-50/90 dark:bg-slate-800/60 border-b border-slate-200/80 dark:border-slate-700 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  <tr>
+                    <th className="px-6 py-3.5">Note #</th>
+                    <th className="px-6 py-3.5">Date</th>
+                    <th className="px-6 py-3.5 text-right">Loan Amount</th>
+                    <th className="px-6 py-3.5 text-right">Principal Paid</th>
+                    <th className="px-6 py-3.5 text-right">Outstanding</th>
+                    <th className="px-6 py-3.5">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
+                  {loans.map((l, i) => (
+                    <tr key={l.id || i} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors h-16">
+                      <td className="px-6 py-4 font-mono font-bold text-slate-900 dark:text-slate-100 whitespace-nowrap">{l.noteNo}</td>
+                      <td className="px-6 py-4 text-slate-500 dark:text-slate-400 font-medium whitespace-nowrap">{l.date}</td>
+                      <td className="px-6 py-4 text-slate-900 dark:text-slate-100 text-right font-bold tabular-nums whitespace-nowrap">₹{fmt(l.amount)}</td>
+                      <td className="px-6 py-4 text-emerald-600 dark:text-emerald-400 text-right font-bold tabular-nums whitespace-nowrap">₹{fmt(l.paid)}</td>
+                      <td className={`px-6 py-4 text-right font-bold tabular-nums whitespace-nowrap ${l.outstanding > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-400 dark:text-slate-500'}`}>
+                        ₹{fmt(l.outstanding)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <Badge variant={String(l.status).toLowerCase() === 'active' ? 'warning' : 'success'} dot>
+                          {toTitleCase(l.status)}
+                        </Badge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Edit Financier Modal */}
+      <AnimatePresence>
+        {showEditModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs" onClick={() => setShowEditModal(false)}>
+            <div className="bg-white dark:bg-slate-800 w-full max-w-lg rounded-2xl border border-slate-200 dark:border-slate-700 shadow-2xl p-6" onClick={e => e.stopPropagation()}>
+              <div className="flex justify-between items-center pb-3 border-b border-slate-100 dark:border-slate-700 mb-4">
+                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Edit Financier Details</h3>
+                <button onClick={() => setShowEditModal(false)} className="text-slate-400 hover:text-slate-600">
+                  <X className="w-5 h-5" />
+                </button>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <form onSubmit={handleSaveEdit} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Loan Date *</label>
-                  <CustomDatePicker
-                    value={loanForm.date}
-                    onChange={val => setLoanForm({...loanForm, date: val})}
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={editForm.name}
+                    onChange={e => setEditForm({...editForm, name: e.target.value})}
+                    className="w-full px-3 py-2 text-xs border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:border-emerald-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Interest Rate (%)</label>
-                  <input type="number" step="0.01" value={loanForm.interestRate} onChange={e => setLoanForm({...loanForm, interestRate: e.target.value})}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none text-right" />
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Phone</label>
+                  <input
+                    type="text"
+                    value={editForm.phone}
+                    onChange={e => setEditForm({...editForm, phone: e.target.value})}
+                    className="w-full px-3 py-2 text-xs border border-slate-200 dark:border-slate-700 rounded-lg outline-none font-mono focus:border-emerald-500"
+                  />
                 </div>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">Amount *</label>
-                <input type="number" required value={loanForm.amount} onChange={e => setLoanForm({...loanForm, amount: e.target.value})}
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none" />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">Remarks</label>
-                <textarea rows={2} value={loanForm.remarks} onChange={e => setLoanForm({...loanForm, remarks: e.target.value})}
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none" />
-              </div>
-              <div className="flex justify-end space-x-3 pt-4 border-t border-gray-100 mt-6">
-                <button type="button" onClick={() => setShowAddLoanModal(false)} className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">Cancel</button>
-                <button type="submit" className="px-4 py-2 text-sm font-semibold text-white bg-brand-primary rounded-lg hover:bg-brand-primary/95 shadow-sm">Save Loan</button>
-              </div>
-            </form>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Address</label>
+                  <textarea
+                    rows={2}
+                    value={editForm.address}
+                    onChange={e => setEditForm({...editForm, address: e.target.value})}
+                    className="w-full px-3 py-2 text-xs border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:border-emerald-500 resize-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Status</label>
+                  <DropdownSelect
+                    value={editForm.status}
+                    onChange={val => setEditForm({...editForm, status: val})}
+                    options={[
+                      { value: 'Active', label: 'Active' },
+                      { value: 'Inactive', label: 'Inactive' }
+                    ]}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Notes</label>
+                  <textarea
+                    rows={2}
+                    value={editForm.notes}
+                    onChange={e => setEditForm({...editForm, notes: e.target.value})}
+                    className="w-full px-3 py-2 text-xs border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:border-emerald-500 resize-none"
+                  />
+                </div>
+                <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-700 mt-4">
+                  <Button variant="secondary" onClick={() => setShowEditModal(false)}>Cancel</Button>
+                  <Button type="submit">Save Changes</Button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </AnimatePresence>
+
+      {/* Record Repayment Modal */}
+      <AnimatePresence>
+        {showRepayModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs" onClick={() => setShowRepayModal(false)}>
+            <div className="bg-white dark:bg-slate-800 w-full max-w-lg rounded-2xl border border-slate-200 dark:border-slate-700 shadow-2xl p-6" onClick={e => e.stopPropagation()}>
+              <div className="flex justify-between items-center pb-3 border-b border-slate-100 dark:border-slate-700 mb-4">
+                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                  {repayStep === 'input' ? 'Record Financier Repayment' : 'Confirm Repayment Allocation'}
+                </h3>
+                <button onClick={() => setShowRepayModal(false)} className="text-slate-400 hover:text-slate-600">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {repayStep === 'input' ? (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Repayment Date *</label>
+                      <CustomDatePicker
+                        value={repayForm.date}
+                        onChange={val => setRepayForm({...repayForm, date: val})}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Payment Mode *</label>
+                      <DropdownSelect
+                        value={repayForm.mode}
+                        onChange={val => setRepayForm({...repayForm, mode: val})}
+                        options={paymentModes.length > 0 ? paymentModes.map(m => ({ value: m.name, label: m.name })) : [
+                          { value: 'Bank Transfer', label: 'Bank Transfer' },
+                          { value: 'Cheque', label: 'Cheque' },
+                          { value: 'Cash', label: 'Cash' },
+                          { value: 'UPI', label: 'UPI' }
+                        ]}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Amount (₹) *</label>
+                    <input
+                      type="text"
+                      required
+                      value={repayForm.amount}
+                      onChange={handleAmountChange}
+                      placeholder="50000"
+                      className="w-full px-3 py-2 text-xs border border-slate-200 dark:border-slate-700 rounded-lg outline-none font-bold tabular-nums focus:border-emerald-500"
+                    />
+                    {isOverBalance && (
+                      <p className="text-rose-500 text-xs mt-1">Amount cannot exceed total outstanding balance of ₹{fmt(totals.outstanding)}.</p>
+                    )}
+                  </div>
+
+                  {repayForm.mode === 'Cheque' && (
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Cheque Number *</label>
+                      <input
+                        type="text"
+                        placeholder="123456"
+                        value={repayForm.chequeNo || ''}
+                        onChange={e => setRepayForm({...repayForm, chequeNo: e.target.value.slice(0, 6).replace(/[^0-9]/g, '')})}
+                        className="w-full px-3 py-2 text-xs border border-slate-200 dark:border-slate-700 rounded-lg outline-none font-mono focus:border-emerald-500"
+                      />
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Remarks</label>
+                    <textarea
+                      rows={2}
+                      value={repayForm.remarks}
+                      onChange={e => setRepayForm({...repayForm, remarks: e.target.value})}
+                      placeholder="Notes..."
+                      className="w-full px-3 py-2 text-xs border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:border-emerald-500 resize-none"
+                    />
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-700 mt-4">
+                    <Button variant="secondary" onClick={() => setShowRepayModal(false)}>Cancel</Button>
+                    <Button
+                      onClick={() => setRepayStep('preview')}
+                      disabled={!repayForm.amount || isOverBalance}
+                    >
+                      Preview Allocation
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="p-3.5 bg-emerald-50/50 dark:bg-emerald-950/20 rounded-xl border border-emerald-100 dark:border-emerald-900/40">
+                    <span className="text-[10px] uppercase font-bold text-emerald-800 dark:text-emerald-300 block mb-0.5">Repayment Amount</span>
+                    <span className="text-xl font-bold text-emerald-700 dark:text-emerald-300 tabular-nums">₹{fmt(Number(repayForm.amount) || 0)}</span>
+                  </div>
+
+                  <div className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-50 dark:bg-slate-900/60 border-b border-slate-100 dark:border-slate-700 text-[10px] font-bold uppercase text-slate-400">
+                        <tr>
+                          <th className="px-3 py-2">Note #</th>
+                          <th className="px-3 py-2 text-right">Prev Balance</th>
+                          <th className="px-3 py-2 text-right text-emerald-600">Adjusted</th>
+                          <th className="px-3 py-2 text-right">New Balance</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
+                        {fifoAllocations.map((a, idx) => (
+                          <tr key={idx}>
+                            <td className="px-3 py-2 font-mono">{a.noteNo}</td>
+                            <td className="px-3 py-2 text-right text-slate-500 tabular-nums">₹{fmt(a.prev)}</td>
+                            <td className="px-3 py-2 text-right font-bold text-emerald-600 tabular-nums">₹{fmt(a.adjusted)}</td>
+                            <td className="px-3 py-2 text-right text-slate-500 tabular-nums">₹{fmt(a.next)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-700 mt-4">
+                    <Button variant="secondary" onClick={() => setRepayStep('input')}>Back</Button>
+                    <Button onClick={handleConfirmRepayment}>Confirm Repayment</Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Add Loan Modal */}
+      <AnimatePresence>
+        {showAddLoanModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs" onClick={() => setShowAddLoanModal(false)}>
+            <div className="bg-white dark:bg-slate-800 w-full max-w-lg rounded-2xl border border-slate-200 dark:border-slate-700 shadow-2xl p-6" onClick={e => e.stopPropagation()}>
+              <div className="flex justify-between items-center pb-3 border-b border-slate-100 dark:border-slate-700 mb-4">
+                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Add Loan Facility</h3>
+                <button onClick={() => setShowAddLoanModal(false)} className="text-slate-400 hover:text-slate-600">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <form onSubmit={handleSaveLoan} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Note / Reference Number *</label>
+                  <input
+                    type="text"
+                    required
+                    value={loanForm.noteNo}
+                    onChange={e => setLoanForm({...loanForm, noteNo: e.target.value})}
+                    placeholder="e.g. LN-2026-001"
+                    className="w-full px-3 py-2 text-xs border border-slate-200 dark:border-slate-700 rounded-lg outline-none font-mono focus:border-emerald-500"
+                  />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Loan Date *</label>
+                    <CustomDatePicker
+                      value={loanForm.date}
+                      onChange={val => setLoanForm({...loanForm, date: val})}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Interest Rate (%)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="12.00"
+                      value={loanForm.interestRate}
+                      onChange={e => setLoanForm({...loanForm, interestRate: e.target.value})}
+                      className="w-full px-3 py-2 text-xs border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Principal Amount (₹) *</label>
+                  <input
+                    type="number"
+                    required
+                    value={loanForm.amount}
+                    onChange={e => setLoanForm({...loanForm, amount: e.target.value})}
+                    placeholder="500000"
+                    className="w-full px-3 py-2 text-xs border border-slate-200 dark:border-slate-700 rounded-lg outline-none tabular-nums focus:border-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Remarks</label>
+                  <textarea
+                    rows={2}
+                    value={loanForm.remarks}
+                    onChange={e => setLoanForm({...loanForm, remarks: e.target.value})}
+                    placeholder="Additional terms or notes..."
+                    className="w-full px-3 py-2 text-xs border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:border-emerald-500 resize-none"
+                  />
+                </div>
+                <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-700 mt-4">
+                  <Button variant="secondary" onClick={() => setShowAddLoanModal(false)}>Cancel</Button>
+                  <Button type="submit">Create Loan</Button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

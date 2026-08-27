@@ -53,7 +53,7 @@ const SettingsSchema = new mongoose.Schema({
   theme: {
     type: String,
     enum: ['light', 'dark', 'system'],
-    default: 'dark'
+    default: 'light'
   },
   gradientValue: {
     type: String,
@@ -110,6 +110,7 @@ const SettingsSchema = new mongoose.Schema({
     showHsn: { type: Boolean, default: false },
     showQty: { type: Boolean, default: false },
     showTaxTable: { type: Boolean, default: false },
+    swapRecipientSupplier: { type: Boolean, default: false },
     declarationText: { 
       type: String, 
       default: 'We declare that this invoice shows the actual price of the goods / services described and that all particulars are true and correct.' 

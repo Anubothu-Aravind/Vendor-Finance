@@ -2,7 +2,9 @@ import React from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../hooks/AuthContext'
 
-export function ProtectedRoute({ children }) {
+import { hasPermission } from '../utils/permissions'
+
+export function ProtectedRoute({ children, permission }) {
   const { user, loading } = useAuth()
   const location = useLocation()
 
@@ -20,6 +22,10 @@ export function ProtectedRoute({ children }) {
   if (!user) {
     // Redirect to login, retaining current location for post-login redirect
     return <Navigate to="/login" state={{ from: location }} replace />
+  }
+
+  if (permission && !hasPermission(user, permission)) {
+    return <Navigate to="/error/403" replace />
   }
 
   return children

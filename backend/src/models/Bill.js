@@ -11,6 +11,14 @@ const BillSchema = new mongoose.Schema({
     ref: 'Vendor',
     required: true
   },
+  paymentType: {
+    type: String,
+    default: 'Credit'
+  },
+  remarks: {
+    type: String,
+    default: ''
+  },
   amount: {
     type: Number,
     required: true,

@@ -5,7 +5,23 @@ import { DotLottieReact } from '@lottiefiles/dotlottie-react'
 import lonely404Lottie from './assets/Lonely 404.lottie?url'
 
 export function ErrorPage({ code = 'Oops', headline = 'Something went wrong', subtext = 'An unexpected error occurred.', onRetry }) {
-  const navigate = useNavigate()
+  let navigate = null
+  try {
+    navigate = useNavigate()
+  } catch {
+    navigate = null
+  }
+
+  const safeNavigate = (dest, opts) => {
+    if (navigate) {
+      navigate(dest, opts)
+    } else if (typeof dest === 'number') {
+      window.history.go(dest)
+    } else {
+      window.location.href = dest
+    }
+  }
+
   let queryClient = null
   try { queryClient = useQueryClient() } catch { queryClient = null }
 
@@ -30,10 +46,10 @@ export function ErrorPage({ code = 'Oops', headline = 'Something went wrong', su
     const currentPath = window.location.pathname
     if (currentPath.startsWith('/error/')) {
       // Return to Dashboard or previous page if on explicit error route
-      navigate('/', { replace: true })
+      safeNavigate('/', { replace: true })
     } else {
       // Revalidate active route
-      navigate(0)
+      safeNavigate(0)
     }
   }
 
@@ -168,7 +184,7 @@ export function ErrorPage({ code = 'Oops', headline = 'Something went wrong', su
           </button>
 
           <button
-            onClick={() => navigate('/')}
+            onClick={() => safeNavigate('/')}
             style={{
               padding: '11px 18px',
               borderRadius: '10px',

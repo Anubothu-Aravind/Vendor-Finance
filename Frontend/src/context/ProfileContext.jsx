@@ -1,9 +1,11 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import api from '../utils/api'
+import { useAuth } from '../hooks/AuthContext'
 
 const ProfileContext = createContext(null)
 
 export function ProfileProvider({ children }) {
+  const { user } = useAuth()
   const [companyProfile, setCompanyProfile] = useState({
     businessName: 'Vastrams',
     logo: '',
@@ -17,6 +19,10 @@ export function ProfileProvider({ children }) {
   const [loadingProfile, setLoadingProfile] = useState(true)
 
   const fetchCompanyProfile = useCallback(async () => {
+    if (!user) {
+      setLoadingProfile(false)
+      return
+    }
     try {
       const res = await api.get('/settings/profile')
       if (res.success && res.data) {
@@ -32,7 +38,7 @@ export function ProfileProvider({ children }) {
     } finally {
       setLoadingProfile(false)
     }
-  }, [])
+  }, [user])
 
   useEffect(() => {
     fetchCompanyProfile()

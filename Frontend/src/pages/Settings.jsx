@@ -3,7 +3,8 @@ import { useNavigate, useBlocker, useBeforeUnload } from 'react-router-dom'
 import { 
   User, Store, Building2, Coins, CreditCard, Database, Palette, Info, 
   Search, Plus, Trash2, Edit2, X, Check, Upload, RefreshCw,
-  Sun, Moon, Monitor, Leaf, Waves, Flame, Sparkles, QrCode, FileText
+  Sun, Moon, Monitor, Leaf, Waves, Flame, Sparkles, QrCode, FileText,
+  KeyRound, Eye, EyeOff, Lock, ShieldCheck
 } from 'lucide-react'
 import api from '../utils/api'
 import DropdownSelect from '../components/ui/DropdownSelect'
@@ -16,6 +17,8 @@ import { useDirtyStateContext } from '../context/DirtyStateContext'
 import { useSaveConfirmation } from '../hooks/useSaveConfirmation'
 import { SaveConfirmationModal } from '../components/ui/SaveConfirmationModal'
 import Badge from '../components/ui/Badge'
+import PageHeader from '../components/ui/PageHeader'
+import { Card } from '../components/ui/Card'
 import { usePreferences } from '../hooks/usePreferences'
 import { toInputDate, fromInputDate } from '../utils/date'
 import * as XLSX from 'xlsx'
@@ -29,6 +32,8 @@ import analytics from '../utils/analytics'
 import featureFlags from '../utils/featureFlags'
 import { getFormDiff } from '../utils/formDiff'
 import { useCompanyProfile } from '../context/ProfileContext'
+import { useAuth } from '../hooks/AuthContext'
+import { AVAILABLE_PERMISSIONS, ALL_PERMISSIONS } from '../utils/permissions'
 
 // ── Appearance Tab (extracted to keep Settings component lean) ────────────────
 function AppearanceTab({ preferences, setPreferences, confirm, showToast }) {
@@ -161,6 +166,7 @@ function AppearanceTab({ preferences, setPreferences, confirm, showToast }) {
 export function Settings() {
   const { preferences, setPreferences, applyGradient, formatCurrency, formatDate } = usePreferences()
   const { updateCompanyProfile } = useCompanyProfile()
+  const { silentRefresh, user: currentUser } = useAuth()
   const [activeTab, setActiveTab] = useState('profile')
   const toast = useToast()
   const confirm = useConfirm()
@@ -252,6 +258,7 @@ export function Settings() {
               showHsn: false,
               showQty: false,
               showTaxTable: false,
+              swapRecipientSupplier: false,
               declarationText: 'We declare that this invoice shows the actual price of the goods / services described and that all particulars are true and correct.'
             }
           }
@@ -946,11 +953,33 @@ export function Settings() {
   const [showInviteModal, setShowInviteModal] = useState(false)
   const [inviteForm, setInviteForm] = useState({ name: '', email: '', password: '', role: 'Viewer' })
 
-  useEffect(() => {
-    if (profile && profile.usersList) {
-      setUsers(profile.usersList)
+  // Reset Password State
+  const [showResetPasswordModal, setShowResetPasswordModal] = useState(false)
+  const [selectedUserForPasswordReset, setSelectedUserForPasswordReset] = useState(null)
+  const [resetPasswordForm, setResetPasswordForm] = useState({ password: '', confirmPassword: '' })
+  const [showNewPassword, setShowNewPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [resetPasswordError, setResetPasswordError] = useState('')
+  const [resetPasswordLoading, setResetPasswordLoading] = useState(false)
+
+  const fetchUsers = useCallback(async () => {
+    try {
+      const res = await api.get('/auth/users')
+      if (res?.success && res?.users) {
+        setUsers(res.users)
+      } else if (Array.isArray(res)) {
+        setUsers(res)
+      }
+    } catch {
+      if (profile && profile.usersList) {
+        setUsers(profile.usersList)
+      }
     }
   }, [profile])
+
+  useEffect(() => {
+    fetchUsers()
+  }, [fetchUsers])
 
   const saveUsersToStorage = async (newUsers) => {
     setUsers(newUsers)
@@ -986,23 +1015,13 @@ export function Settings() {
         role: inviteForm.role || 'Viewer'
       })
 
-      const registeredUser = res.user || res.data?.user || {}
-      const newUser = {
-        id: registeredUser.id || String(Date.now()),
-        name: registeredUser.name || name,
-        email: registeredUser.email || email,
-        role: registeredUser.role || inviteForm.role || 'Viewer',
-        status: 'Active'
-      }
-
-      const updated = [...users.filter(u => u.email !== email), newUser]
-      saveUsersToStorage(updated)
       setShowInviteModal(false)
       setInviteForm({ name: '', email: '', password: '', role: 'Viewer' })
 
       const emailSent = res.emailSent || res.data?.emailSent
       const emailNote = emailSent ? 'Invitation email sent' : 'Account created'
       showToast(`User ${name} invited successfully (${emailNote})`)
+      fetchUsers()
       fetchProfile()
     } catch (err) {
       const msg = err.message || err.response?.data?.message || 'Failed to create user account'
@@ -1014,6 +1033,7 @@ export function Settings() {
     try {
       await api.patch(`/auth/users/${id}/role`, { role: newRole })
       showToast('User role updated')
+      fetchUsers()
       fetchProfile()
     } catch (err) {
       showToast(err.message || 'Failed to update user role', 'error')
@@ -1031,10 +1051,135 @@ export function Settings() {
       try {
         await api.delete(`/auth/users/${u.id}`)
         showToast('User removed successfully')
+        fetchUsers()
         fetchProfile()
       } catch (err) {
         showToast(err.message || 'Failed to remove user', 'error')
       }
+    }
+  }
+
+  const handleOpenResetPassword = (user) => {
+    setSelectedUserForPasswordReset(user)
+    setResetPasswordForm({ password: '', confirmPassword: '' })
+    setResetPasswordError('')
+    setShowNewPassword(false)
+    setShowConfirmPassword(false)
+    setShowResetPasswordModal(true)
+  }
+
+  const handleCloseResetPassword = () => {
+    setShowResetPasswordModal(false)
+    setSelectedUserForPasswordReset(null)
+    setResetPasswordForm({ password: '', confirmPassword: '' })
+    setResetPasswordError('')
+  }
+
+  const handleSaveResetPassword = async (e) => {
+    e.preventDefault()
+    if (!selectedUserForPasswordReset) return
+
+    const { password, confirmPassword } = resetPasswordForm
+
+    if (!password) {
+      setResetPasswordError('New password is required')
+      return
+    }
+
+    if (password.length < 8) {
+      setResetPasswordError('Password must be at least 8 characters long')
+      return
+    }
+
+    if (password !== confirmPassword) {
+      setResetPasswordError('Passwords do not match')
+      return
+    }
+
+    setResetPasswordLoading(true)
+    setResetPasswordError('')
+
+    try {
+      await api.put(`/auth/users/${selectedUserForPasswordReset.id}/password`, { password })
+      showToast(`Password reset successfully for ${selectedUserForPasswordReset.name || selectedUserForPasswordReset.email}`, 'success')
+      handleCloseResetPassword()
+    } catch (err) {
+      const msg = err.response?.data?.message || err.message || 'Failed to reset password'
+      setResetPasswordError(msg)
+      showToast(msg, 'error')
+    } finally {
+      setResetPasswordLoading(false)
+    }
+  }
+
+  // --- Permissions / Page Access State ---
+  const [showPermissionsModal, setShowPermissionsModal] = useState(false)
+  const [selectedUserForPermissions, setSelectedUserForPermissions] = useState(null)
+  const [userPermissions, setUserPermissions] = useState([])
+  const [permissionsLoading, setPermissionsLoading] = useState(false)
+  const [permissionsError, setPermissionsError] = useState('')
+
+  const handleOpenPermissions = (user) => {
+    setSelectedUserForPermissions(user)
+    let initialPerms = []
+    if (Array.isArray(user.permissions)) {
+      initialPerms = [...user.permissions]
+    } else if (user.permissions && typeof user.permissions === 'object') {
+      initialPerms = Object.keys(user.permissions).filter(k => user.permissions[k])
+    } else if (user.role === 'Admin') {
+      initialPerms = [...ALL_PERMISSIONS]
+    }
+    setUserPermissions(initialPerms)
+    setPermissionsError('')
+    setShowPermissionsModal(true)
+  }
+
+  const handleClosePermissions = () => {
+    setShowPermissionsModal(false)
+    setSelectedUserForPermissions(null)
+    setUserPermissions([])
+    setPermissionsError('')
+  }
+
+  const handleTogglePermission = (permId) => {
+    setUserPermissions(prev =>
+      prev.includes(permId)
+        ? prev.filter(p => p !== permId)
+        : [...prev, permId]
+    )
+  }
+
+  const handleSelectAllPermissions = () => {
+    setUserPermissions([...ALL_PERMISSIONS])
+  }
+
+  const handleClearAllPermissions = () => {
+    setUserPermissions([])
+  }
+
+  const handleSavePermissions = async (e) => {
+    e.preventDefault()
+    if (!selectedUserForPermissions) return
+
+    setPermissionsLoading(true)
+    setPermissionsError('')
+
+    try {
+      await api.put(`/auth/users/${selectedUserForPermissions.id}/permissions`, {
+        permissions: userPermissions
+      })
+      showToast(`Permissions updated successfully for ${selectedUserForPermissions.name || selectedUserForPermissions.email}`, 'success')
+      handleClosePermissions()
+      fetchUsers()
+      if (currentUser?.id === selectedUserForPermissions.id) {
+        silentRefresh()
+      }
+    } catch (err) {
+      const msg = err.response?.data?.message || err.message || 'Failed to update permissions'
+      setPermissionsError(msg)
+      showToast(msg, 'error')
+    } finally {
+      setPermissionsLoading(false)
     }
   }
 
@@ -2056,9 +2201,29 @@ export function Settings() {
                           </Badge>
                         </td>
                         <td className="px-4 py-3 text-right">
-                          <button onClick={() => handleDeleteUser(u)} className="p-1 hover:text-red-500 text-gray-400 transition-colors" title="Delete User">
-                            <Trash2 size={14} />
-                          </button>
+                          <div className="inline-flex items-center space-x-1.5 justify-end">
+                            <button
+                              onClick={() => handleOpenPermissions(u)}
+                              className="p-1 hover:text-brand-primary text-gray-400 transition-colors"
+                              title="Configure Page Access"
+                            >
+                              <ShieldCheck size={14} />
+                            </button>
+                            <button
+                              onClick={() => handleOpenResetPassword(u)}
+                              className="p-1 hover:text-brand-primary text-gray-400 transition-colors"
+                              title="Reset Password"
+                            >
+                              <KeyRound size={14} />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteUser(u)}
+                              className="p-1 hover:text-red-500 text-gray-400 transition-colors"
+                              title="Delete User"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -2326,36 +2491,39 @@ export function Settings() {
   ]
 
   return (
-    <div className="space-y-6 pt-2 pb-24">
+    <div className="space-y-6 max-w-[1600px] mx-auto pb-24">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight" style={{ fontFamily: 'var(--font-display)' }}>Settings</h1>
-        <p className="text-xs text-gray-400 mt-0.5">Configure system parameters, manage profile details, and maintain backups</p>
-      </div>
+      <PageHeader
+        title="Settings"
+        description="Configure system parameters, manage company profile credentials, users, and backup archives"
+        breadcrumbs={[{ label: 'Settings' }]}
+      />
 
       {/* Main Two-Column Layout */}
       <div className="flex flex-col md:flex-row gap-8 items-start relative">
         {/* Left Column Tab Bar (Sticky) */}
-        <aside className="w-full md:w-48 shrink-0 md:sticky md:top-14 space-y-6 flex md:flex-col flex-row overflow-x-auto md:overflow-x-visible whitespace-nowrap">
+        <aside className="w-full md:w-56 shrink-0 md:sticky md:top-20 space-y-6 flex md:flex-col flex-row overflow-x-auto md:overflow-x-visible whitespace-nowrap bg-white dark:bg-slate-800/80 p-3 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 shadow-xs">
           {groups.map((group, gIdx) => (
-            <div key={gIdx} className="space-y-1.5 flex flex-col w-full">
-              <h3 className="hidden md:block text-[10px] font-bold tracking-wider text-slate-400 dark:text-slate-500 uppercase px-2 mb-1">
+            <div key={gIdx} className="space-y-1 flex flex-col w-full">
+              <h3 className="hidden md:block text-[10px] font-bold tracking-wider text-slate-400 uppercase px-2 mb-1">
                 {group.title}
               </h3>
-              <div className="flex md:flex-col flex-row gap-0.5">
+              <div className="flex md:flex-col flex-row gap-1">
                 {group.items.map(tab => {
                   const isActive = activeTab === tab.id
+                  const TabIcon = tab.icon
                   return (
                     <button
                       key={tab.id}
                       onClick={() => handleTabClick(tab.id)}
-                      className={`flex items-center space-x-2 px-2.5 py-1.5 rounded-lg text-xs font-semibold w-full transition-all text-left ${
+                      className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold w-full transition-all text-left ${
                         isActive
-                          ? 'bg-brand-primary text-white shadow-sm'
-                          : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-800'
+                          ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-bold border border-emerald-200/70 dark:border-emerald-800/50 shadow-xs'
+                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-700/50 border border-transparent'
                       }`}
                     >
-                      <span>{tab.label}</span>
+                      {TabIcon && <TabIcon className={`w-4 h-4 shrink-0 ${isActive ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}`} />}
+                      <span className="truncate">{tab.label}</span>
                     </button>
                   )
                 })}
@@ -2365,7 +2533,7 @@ export function Settings() {
         </aside>
 
         {/* Right Column Tab Content (Scrolls independently) */}
-        <div className="flex-1 w-full min-w-0 min-h-[450px]">
+        <div className="flex-1 w-full min-w-0 min-h-[450px] bg-white dark:bg-slate-800/80 p-6 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 shadow-xs">
           {renderActiveTabContent()}
         </div>
       </div>
@@ -2630,6 +2798,243 @@ export function Settings() {
                   style={{ background: 'var(--color-primary)' }}
                 >
                   Send Invite
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- RESET PASSWORD MODAL --- */}
+      {showResetPasswordModal && selectedUserForPasswordReset && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div
+            className="rounded-xl border max-w-md w-full p-6 space-y-4 shadow-2xl"
+            style={{ background: 'var(--color-bg-surface)', borderColor: 'var(--color-border)' }}
+          >
+            <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: 'var(--color-border)' }}>
+              <div className="flex items-center space-x-2.5">
+                <div className="w-8 h-8 rounded-lg bg-brand-primary/10 flex items-center justify-center text-brand-primary">
+                  <KeyRound size={16} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold tracking-tight" style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>
+                    Reset User Password
+                  </h3>
+                  <p className="text-xs text-gray-400">
+                    User: <span className="font-mono text-brand-primary">{selectedUserForPasswordReset.email}</span>
+                  </p>
+                </div>
+              </div>
+              <button onClick={handleCloseResetPassword} className="text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors">
+                <X size={16} />
+              </button>
+            </div>
+
+            {resetPasswordError && (
+              <div className="p-3 text-xs bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 rounded-lg border border-red-200 dark:border-red-800/40">
+                {resetPasswordError}
+              </div>
+            )}
+
+            <form onSubmit={handleSaveResetPassword} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--color-text-secondary)' }}>
+                  New Password *
+                </label>
+                <div className="relative">
+                  <input
+                    type={showNewPassword ? 'text' : 'password'}
+                    value={resetPasswordForm.password}
+                    onChange={e => {
+                      setResetPasswordForm({ ...resetPasswordForm, password: e.target.value })
+                      if (resetPasswordError) setResetPasswordError('')
+                    }}
+                    placeholder="Minimum 8 characters"
+                    className="w-full px-3 py-2 pr-10 text-sm rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary"
+                    style={{ background: 'var(--color-bg-elevated)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }}
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPassword(v => !v)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1"
+                  >
+                    {showNewPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--color-text-secondary)' }}>
+                  Confirm Password *
+                </label>
+                <div className="relative">
+                  <input
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    value={resetPasswordForm.confirmPassword}
+                    onChange={e => {
+                      setResetPasswordForm({ ...resetPasswordForm, confirmPassword: e.target.value })
+                      if (resetPasswordError) setResetPasswordError('')
+                    }}
+                    placeholder="Re-enter new password"
+                    className="w-full px-3 py-2 pr-10 text-sm rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary"
+                    style={{ background: 'var(--color-bg-elevated)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(v => !v)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1"
+                  >
+                    {showConfirmPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-2 pt-2 border-t" style={{ borderColor: 'var(--color-border)' }}>
+                <button
+                  type="button"
+                  onClick={handleCloseResetPassword}
+                  className="px-3.5 py-2 text-xs font-semibold text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={resetPasswordLoading}
+                  className="px-4 py-2 text-xs font-semibold bg-brand-primary text-white rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center space-x-1.5 shadow-sm"
+                >
+                  {resetPasswordLoading ? (
+                    <span>Resetting...</span>
+                  ) : (
+                    <>
+                      <KeyRound size={13} />
+                      <span>Reset Password</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- PERMISSIONS / PAGE ACCESS MODAL --- */}
+      {showPermissionsModal && selectedUserForPermissions && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div
+            className="rounded-xl border max-w-xl w-full p-6 space-y-4 shadow-2xl max-h-[90vh] flex flex-col"
+            style={{ background: 'var(--color-bg-surface)', borderColor: 'var(--color-border)' }}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b pb-3 shrink-0" style={{ borderColor: 'var(--color-border)' }}>
+              <div className="flex items-center space-x-2.5">
+                <div className="w-8 h-8 rounded-lg bg-brand-primary/10 flex items-center justify-center text-brand-primary">
+                  <ShieldCheck size={16} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold tracking-tight" style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>
+                    Page Access Permissions
+                  </h3>
+                  <p className="text-xs text-gray-400">
+                    User: <strong className="text-gray-900 dark:text-gray-200">{selectedUserForPermissions.name}</strong> ({selectedUserForPermissions.email}) · Role: <span className="font-semibold text-brand-primary">{selectedUserForPermissions.role}</span>
+                  </p>
+                </div>
+              </div>
+              <button onClick={handleClosePermissions} className="text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors">
+                <X size={16} />
+              </button>
+            </div>
+
+            {permissionsError && (
+              <div className="p-3 text-xs bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 rounded-lg border border-red-200 dark:border-red-800/40 shrink-0">
+                {permissionsError}
+              </div>
+            )}
+
+            {/* Quick Actions */}
+            <div className="flex items-center justify-between text-xs py-1 px-1 shrink-0">
+              <span className="text-gray-500 text-[11px]">
+                {userPermissions.length} of {AVAILABLE_PERMISSIONS.length} pages enabled
+              </span>
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={handleSelectAllPermissions}
+                  className="px-2.5 py-1 text-[11px] font-semibold text-brand-primary hover:bg-brand-primary/10 rounded transition-colors"
+                >
+                  Select All
+                </button>
+                <button
+                  type="button"
+                  onClick={handleClearAllPermissions}
+                  className="px-2.5 py-1 text-[11px] font-semibold text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded transition-colors"
+                >
+                  Clear All
+                </button>
+              </div>
+            </div>
+
+            {/* Checkboxes grouped by category */}
+            <form onSubmit={handleSavePermissions} className="flex-1 overflow-y-auto space-y-4 pr-1">
+              {['Overview', 'Vendors', 'Finance', 'Payments', 'Reporting', 'System'].map(groupName => {
+                const groupItems = AVAILABLE_PERMISSIONS.filter(p => p.group === groupName)
+                if (groupItems.length === 0) return null
+
+                return (
+                  <div key={groupName} className="p-3 rounded-lg border" style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg-elevated)' }}>
+                    <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2.5 px-0.5">
+                      {groupName}
+                    </h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {groupItems.map(item => {
+                        const isChecked = userPermissions.includes(item.id)
+                        return (
+                          <label
+                            key={item.id}
+                            className={`flex items-center space-x-2.5 p-2 rounded-lg cursor-pointer transition-all border ${
+                              isChecked
+                                ? 'bg-brand-primary/5 border-brand-primary/30 text-brand-primary font-semibold'
+                                : 'border-transparent hover:bg-gray-100/50 dark:hover:bg-slate-800/50 text-gray-700 dark:text-gray-300'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => handleTogglePermission(item.id)}
+                              className="rounded border-gray-300 text-brand-primary focus:ring-brand-primary h-4 w-4"
+                            />
+                            <span className="text-xs">{item.label}</span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })}
+
+              {/* Modal Footer */}
+              <div className="flex justify-end space-x-2 pt-3 border-t sticky bottom-0 bg-inherit" style={{ borderColor: 'var(--color-border)' }}>
+                <button
+                  type="button"
+                  onClick={handleClosePermissions}
+                  className="px-3.5 py-2 text-xs font-semibold text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={permissionsLoading}
+                  className="px-4 py-2 text-xs font-semibold bg-brand-primary text-white rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center space-x-1.5 shadow-sm"
+                >
+                  {permissionsLoading ? (
+                    <span>Saving...</span>
+                  ) : (
+                    <>
+                      <ShieldCheck size={14} />
+                      <span>Save Permissions</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>

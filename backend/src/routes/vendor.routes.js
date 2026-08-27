@@ -1,10 +1,10 @@
 const express = require('express')
 const router = express.Router()
 const vendorController = require('../controllers/vendor.controller')
-const { authenticateJWT, requireRole } = require('../middleware/auth.middleware')
+const { authenticateJWT, requireRole, requirePermission } = require('../middleware/auth.middleware')
 const { validateVendor } = require('../validators/vendor.validator')
 
-router.use(authenticateJWT)
+router.use(authenticateJWT, requirePermission('vendors'))
 
 router.route('/')
   .post(requireRole(['Admin']), validateVendor, vendorController.createVendor)

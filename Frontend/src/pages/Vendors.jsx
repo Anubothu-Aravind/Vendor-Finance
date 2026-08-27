@@ -1,9 +1,13 @@
 import React, { useState, useEffect, useReducer, useCallback, useMemo } from 'react'
-import { Plus, Search, Trash2, Edit2, Eye, X } from 'lucide-react'
+import { Plus, Search, Trash2, Edit2, Eye, X, Building2, Phone, Mail, MapPin, Landmark, DollarSign } from 'lucide-react'
 import DropdownSelect from '../components/ui/DropdownSelect'
 import { toTitleCase } from '../utils/text'
 import EmptyState from '../components/ui/EmptyState'
 import Badge from '../components/ui/Badge'
+import Button from '../components/ui/Button'
+import PageHeader from '../components/ui/PageHeader'
+import { Card, CardHeader, CardTitle, CardContent, KpiCard } from '../components/ui/Card'
+import FilterToolbar from '../components/ui/FilterToolbar'
 import api from '../utils/api'
 import { useToast } from '../hooks/useToast'
 import { useConfirm } from '../hooks/useConfirm'
@@ -17,20 +21,17 @@ import { usePagination } from '../hooks/usePagination'
 import Pagination from '../components/ui/Pagination'
 
 const initials = (name) => name.split(' ').slice(0,2).map(w => w[0]).join('').toUpperCase()
-const colors = ['bg-red-100 text-red-700', 'bg-blue-100 text-blue-700', 'bg-green-100 text-green-700',
-  'bg-purple-100 text-purple-700', 'bg-yellow-100 text-yellow-700', 'bg-pink-100 text-pink-700']
+const avatarColors = [
+  'bg-emerald-50 text-emerald-700 border-emerald-200',
+  'bg-blue-50 text-blue-700 border-blue-200',
+  'bg-purple-50 text-purple-700 border-purple-200',
+  'bg-amber-50 text-amber-700 border-amber-200',
+  'bg-slate-100 text-slate-700 border-slate-200'
+]
 
 const fmt = (v) => new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(v)
 
-const toCamelCase = (str) => {
-  return str
-    .replace(/(?:^\w|[A-Z]|\b\w)/g, (word, index) => {
-      return index === 0 ? word.toLowerCase() : word.toUpperCase()
-    })
-    .replace(/\s+/g, '')
-}
-
-// ── Fetch state reducer (defined at module scope for stable reference) ────────
+// ── Fetch state reducer ───────────────────────────────────────────────────────
 const fetchInitial = { status: 'idle', vendors: [], error: null }
 function fetchReducer(state, action) {
   switch (action.type) {
@@ -45,22 +46,23 @@ export function Vendors() {
   const toast = useToast()
   const confirm = useConfirm()
 
-  // ── Fetch state: consolidated into one reducer to avoid impossible states ──
   const [fetchState, fetchDispatch] = useReducer(fetchReducer, fetchInitial)
   const { vendors, status: fetchStatus, error } = fetchState
   const loading = fetchStatus === 'idle' || fetchStatus === 'loading'
 
   const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('ALL')
   const [showModal, setShowModal] = useState(false)
   const [modalMode, setModalMode] = useState('add') // 'add' | 'edit' | 'preview'
   const [selectedVendor, setSelectedVendor] = useState(null)
 
   const emptyForm = {
     name: '',
-    type: '',
+    type: 'largeVendor',
     customType: '',
     gstin: '',
     phone: '',
+    email: '',
     address: '',
     bankName: '',
     accountNo: '',
@@ -69,7 +71,7 @@ export function Vendors() {
     confirmIfsc: '',
     category: '',
     openingBalance: 0,
-    status: ''
+    status: 'Active'
   }
   const [form, setForm] = useState(emptyForm)
   const [formErrors, setFormErrors] = useState({})
@@ -81,6 +83,7 @@ export function Vendors() {
     return (
       (form.name || '') !== (initialFormSnapshot.name || '') ||
       (form.phone || '') !== (initialFormSnapshot.phone || '') ||
+      (form.email || '') !== (initialFormSnapshot.email || '') ||
       (form.gstin || '') !== (initialFormSnapshot.gstin || '') ||
       (form.address || '') !== (initialFormSnapshot.address || '') ||
       (form.bankName || '') !== (initialFormSnapshot.bankName || '') ||
@@ -98,53 +101,34 @@ export function Vendors() {
   }, [confirmNavigation])
 
   useDirtyForm({
-    id: 'vendor-form',
-    title: modalMode === 'add' ? 'Add Vendor Form' : 'Edit Vendor Form',
     isDirty: isFormDirty,
     onSave: () => handleSave(),
     onDiscard: () => {
+      setShowModal(false)
       setForm(emptyForm)
     }
   })
 
-  // ── Fetch vendors ─────────────────────────────────────────────────────────
-  // Wrapped in useCallback so the reference is stable across renders.
-  // This allows both useEffect hooks below to correctly list it as a dependency
-  // without triggering re-registration of the event listener on every render.
-  const fetchVendors = useCallback(async (signal) => {
+  const { confirmConfig, isSaving, requestSaveConfirmation } = useSaveConfirmation()
+
+  const fetchVendors = useCallback(async () => {
     fetchDispatch({ type: 'FETCH_START' })
     try {
-      const data = await api.get('/vendors', signal ? { signal } : {})
-      if (!signal || !signal.aborted) {
-        fetchDispatch({
-          type: 'FETCH_SUCCESS',
-          payload: data.map(v => ({
-            ...v,
-            id: v._id,
-            outstanding: v.outstandingBalance
-          }))
-        })
-      }
+      const data = await api.get('/vendors')
+      const normalized = (Array.isArray(data) ? data : []).map(v => ({
+        ...v,
+        id: v._id || v.id,
+        outstanding: v.outstandingBalance ?? v.outstanding ?? 0
+      }))
+      fetchDispatch({ type: 'FETCH_SUCCESS', payload: normalized })
     } catch (err) {
-      if (!signal || !signal.aborted) {
-        fetchDispatch({ type: 'FETCH_ERROR', payload: err.message || 'Failed to fetch vendors' })
-      }
+      fetchDispatch({ type: 'FETCH_ERROR', payload: err.message || 'Failed to load vendors' })
     }
   }, [])
 
   useEffect(() => {
-    const controller = new AbortController()
-    fetchVendors(controller.signal)
-    return () => controller.abort()
+    fetchVendors()
   }, [fetchVendors])
-
-  useEffect(() => {
-    const handleDataChanged = () => fetchVendors()
-    window.addEventListener('api-data-changed', handleDataChanged)
-    return () => window.removeEventListener('api-data-changed', handleDataChanged)
-  }, [fetchVendors])
-
-  const { confirmConfig, isSaving, requestSaveConfirmation } = useSaveConfirmation()
 
   const handleOpenAdd = () => {
     setForm(emptyForm)
@@ -177,7 +161,6 @@ export function Vendors() {
 
   const handleSave = (e) => {
     if (e) e.preventDefault()
-    // Validate confirm fields
     const errors = {}
     if (form.accountNo && form.accountNo !== form.confirmAccountNo) {
       errors.confirmAccountNo = 'Account numbers do not match'
@@ -216,6 +199,7 @@ export function Vendors() {
           type: form.type || 'largeVendor',
           gstin: form.gstin,
           phone: form.phone,
+          email: form.email,
           address: form.address,
           bankName: form.bankName,
           accountNo: form.accountNo,
@@ -250,6 +234,7 @@ export function Vendors() {
       try {
         await api.delete(`/vendors/${id}`)
         await fetchVendors()
+        toast('Vendor deleted successfully', 'success')
       } catch (err) {
         toast(err.message || 'Failed to delete vendor', 'error')
       }
@@ -258,174 +243,210 @@ export function Vendors() {
 
   const tableContainerRef = React.useRef(null)
 
-  const filtered = vendors.filter(v =>
-    (v.name || '').toLowerCase().includes(search.toLowerCase()) ||
-    (v.category || '').toLowerCase().includes(search.toLowerCase()) ||
-    (v.gstin || '').toLowerCase().includes(search.toLowerCase())
-  )
+  const filtered = useMemo(() => {
+    return vendors.filter(v => {
+      const matchSearch =
+        (v.name || '').toLowerCase().includes(search.toLowerCase()) ||
+        (v.category || '').toLowerCase().includes(search.toLowerCase()) ||
+        (v.gstin || '').toLowerCase().includes(search.toLowerCase()) ||
+        (v.phone || '').toLowerCase().includes(search.toLowerCase())
+
+      const matchStatus =
+        statusFilter === 'ALL' ||
+        String(v.status).toUpperCase() === statusFilter.toUpperCase()
+
+      return matchSearch && matchStatus
+    })
+  }, [vendors, search, statusFilter])
 
   const pagination = usePagination({
     items: filtered,
     moduleKey: 'vendors',
     initialPageSize: 20,
-    filterDependencies: [search],
+    filterDependencies: [search, statusFilter],
     containerRef: tableContainerRef
   })
 
+  const totalOutstanding = useMemo(() => vendors.reduce((s, v) => s + (v.outstanding || 0), 0), [vendors])
+  const activeCount = useMemo(() => vendors.filter(v => String(v.status).toLowerCase() === 'active').length, [vendors])
+
   return (
-    <>
-      <div className="space-y-6">
+    <div className="space-y-6 max-w-[1600px] mx-auto">
       {/* Page Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Vendors</h1>
-          <p className="text-sm text-gray-400 mt-0.5">{vendors.length} vendors in system</p>
-        </div>
-        <button onClick={handleOpenAdd} className="flex items-center space-x-1.5 bg-brand-primary text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-primary/95 transition-all shadow-sm">
-          <Plus size={16} />
+      <PageHeader
+        title="Vendors"
+        description="Manage supplier profiles, payment terms, and outstanding balances"
+        breadcrumbs={[{ label: 'Vendors' }]}
+      >
+        <Button onClick={handleOpenAdd} className="shadow-sm">
+          <Plus className="w-4 h-4" />
           <span>Add Vendor</span>
-        </button>
+        </Button>
+      </PageHeader>
+
+      {/* KPI Stats */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+        <KpiCard
+          title="Total Vendors"
+          value={loading ? <Skeleton className="h-8 w-16" /> : String(vendors.length)}
+          subtitle="Registered suppliers"
+          icon={Building2}
+          iconColor="text-slate-600 dark:text-slate-300"
+          iconBg="bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700"
+        />
+        <KpiCard
+          title="Active Accounts"
+          value={loading ? <Skeleton className="h-8 w-16" /> : String(activeCount)}
+          subtitle="Currently active"
+          icon={Building2}
+          iconColor="text-emerald-600 dark:text-emerald-400"
+          iconBg="bg-emerald-50 dark:bg-emerald-950/40 border-emerald-100 dark:border-emerald-900/40"
+        />
+        <KpiCard
+          title="Total Payables Outstanding"
+          value={loading ? <Skeleton className="h-8 w-28" /> : `₹${fmt(totalOutstanding)}`}
+          subtitle="Unsettled vendor balances"
+          icon={DollarSign}
+          iconColor="text-rose-600 dark:text-rose-400"
+          iconBg="bg-rose-50 dark:bg-rose-950/40 border-rose-100 dark:border-rose-900/40"
+        />
       </div>
 
-      {/* Stats */}
-      <div className="flex flex-wrap w-full gap-4" style={{ boxSizing: 'border-box' }}>
-        <div className="bg-white rounded-xl border border-gray-200 px-5 py-4 min-w-0" style={{ flex: '1 1 0%', boxSizing: 'border-box' }}>
-          <p className="text-xs text-gray-400 mb-1">Total Vendors</p>
-          {loading ? <Skeleton className="h-7 w-12" /> : <p className="text-2xl font-bold text-gray-900">{vendors.length}</p>}
+      {/* Filter Toolbar */}
+      <FilterToolbar
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search by name, GSTIN, phone, category..."
+        isFiltered={search !== '' || statusFilter !== 'ALL'}
+        onReset={() => { setSearch(''); setStatusFilter('ALL') }}
+      >
+        <div className="w-48">
+          <DropdownSelect
+            value={statusFilter}
+            onChange={setStatusFilter}
+            options={[
+              { value: 'ALL', label: 'All Statuses' },
+              { value: 'Active', label: 'Active' },
+              { value: 'Inactive', label: 'Inactive' }
+            ]}
+          />
         </div>
-        <div className="bg-white rounded-xl border border-gray-200 px-5 py-4 min-w-0" style={{ flex: '1 1 0%', boxSizing: 'border-box' }}>
-          <p className="text-xs text-gray-400 mb-1">Active Accounts</p>
-          {loading ? <Skeleton className="h-7 w-12" /> : <p className="text-2xl font-bold text-gray-900">{vendors.filter(v => v.status === 'Active').length}</p>}
-        </div>
-        <div className="bg-white rounded-xl border border-gray-200 px-5 py-4 min-w-0" style={{ flex: '1 1 0%', boxSizing: 'border-box' }}>
-          <p className="text-xs text-gray-400 mb-1">Total Payables Outstanding</p>
-          {loading ? <Skeleton className="h-7 w-24" /> : <p className="text-2xl font-bold text-red-500">₹{fmt(vendors.reduce((s,v) => s + v.outstanding, 0))}</p>}
-        </div>
-      </div>
+      </FilterToolbar>
 
-      {/* Table Card */}
-      <div className="bg-white rounded-xl border border-gray-200">
-        <div className="px-5 py-3 border-b border-gray-100">
-          <div className="relative w-64">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input type="text" placeholder="Search vendors..." value={search} onChange={e => setSearch(e.target.value)}
-              className="w-full pl-9 pr-8 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary" />
-            {search && (
-              <button
-                type="button"
-                onClick={() => setSearch('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors p-0.5"
-                title="Clear search"
-              >
-                <X size={14} />
-              </button>
-            )}
-          </div>
-        </div>
-
+      {/* Data Table Card */}
+      <Card className="overflow-hidden">
         {error ? (
-          <div className="p-6">
+          <div className="p-8">
             <EmptyState icon="search" title="Error Loading Vendors" description={error} />
           </div>
         ) : loading ? (
           <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider border-b border-gray-100">
-                  <th className="text-left px-5 py-3">VENDOR NAME</th>
-                  <th className="text-left px-5 py-3">TYPE</th>
-                  <th className="text-left px-5 py-3">PHONE</th>
-                  <th className="text-left px-5 py-3">CATEGORY</th>
-                  <th className="text-right px-5 py-3">OUTSTANDING</th>
-                  <th className="text-left px-5 py-3">STATUS</th>
-                  <th className="px-5 py-3"></th>
+            <table className="w-full text-left text-sm">
+              <thead className="bg-slate-50/90 dark:bg-slate-800/60 border-b border-slate-200/80 dark:border-slate-700 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                <tr>
+                  <th className="px-6 py-3.5">Vendor Name</th>
+                  <th className="px-6 py-3.5">Type</th>
+                  <th className="px-6 py-3.5">Contact</th>
+                  <th className="px-6 py-3.5">Category</th>
+                  <th className="px-6 py-3.5 text-right">Outstanding</th>
+                  <th className="px-6 py-3.5">Status</th>
+                  <th className="px-6 py-3.5 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
                 {Array.from({ length: 5 }).map((_, idx) => (
-                  <SkeletonTableRow key={idx} cols={7} widths={["w-32", "w-16", "w-24", "w-20", "w-16", "w-12", "w-8"]} />
+                  <SkeletonTableRow key={idx} cols={7} widths={["w-36", "w-20", "w-28", "w-24", "w-20", "w-16", "w-20"]} />
                 ))}
               </tbody>
             </table>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="p-6">
+          <div className="p-8">
             {vendors.length === 0 ? (
               <EmptyState 
                 icon="store" 
                 title="No Vendors Found" 
-                description="Add your first vendor to get started" 
+                description="Get started by registering your first vendor." 
                 action={{ label: "Add Vendor", onClick: handleOpenAdd }} 
               />
             ) : (
               <EmptyState 
                 icon="search" 
-                title="No Results" 
-                description="No vendors match your search. Try different keywords." 
+                title="No Matching Vendors" 
+                description="No vendors match your search filters. Try clearing filters." 
               />
             )}
           </div>
         ) : (
           <>
             <div ref={tableContainerRef} className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider border-b border-gray-100">
-                    <th className="text-left px-5 py-3">VENDOR NAME</th>
-                    <th className="text-left px-5 py-3">TYPE</th>
-                    <th className="text-left px-5 py-3">PHONE</th>
-                    <th className="text-left px-5 py-3">CATEGORY</th>
-                    <th className="text-right px-5 py-3">OUTSTANDING</th>
-                    <th className="text-left px-5 py-3">STATUS</th>
-                    <th className="px-5 py-3"></th>
+              <table className="w-full text-left text-sm">
+                <thead className="bg-slate-50/90 dark:bg-slate-800/60 border-b border-slate-200/80 dark:border-slate-700 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  <tr>
+                    <th className="px-6 py-3.5">Vendor Name</th>
+                    <th className="px-6 py-3.5">Type</th>
+                    <th className="px-6 py-3.5">Contact</th>
+                    <th className="px-6 py-3.5">Category</th>
+                    <th className="px-6 py-3.5 text-right">Outstanding</th>
+                    <th className="px-6 py-3.5">Status</th>
+                    <th className="px-6 py-3.5 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-50">
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
                   {pagination.paginatedItems.map((v, i) => (
-                    <motion.tr 
+                    <tr 
                       key={v._id || v.id} 
                       onClick={() => handleOpenPreview(v)} 
-                      initial={{ opacity: 0, y: 4 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: Math.min(i * 0.03, 0.3), duration: 0.2 }}
-                      className="hover:bg-gray-50 dark:hover:bg-slate-700/20 transition-colors cursor-pointer"
+                      className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors cursor-pointer h-16"
                     >
-                      <td className="px-5 py-3.5">
-                        <div className="flex items-center space-x-3">
-                          <div className={`h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${colors[i % colors.length]}`}>
-                            {initials(v.name)}
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className={`h-9 w-9 rounded-xl border flex items-center justify-center text-xs font-bold shrink-0 shadow-2xs ${avatarColors[i % avatarColors.length]}`}>
+                            {initials(v.name || 'V')}
                           </div>
-                          <div>
-                            <p className="text-sm font-medium text-gray-900">{toTitleCase(v.name)}</p>
-                            <p className="text-xs text-gray-400">GST: {v.gstin || '—'}</p>
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">{toTitleCase(v.name)}</p>
+                            <p className="text-xs text-slate-400 dark:text-slate-500 font-mono">GST: {v.gstin || '—'}</p>
                           </div>
                         </div>
                       </td>
-                      <td className="px-5 py-3.5 text-xs">
-                        <Badge variant="neutral">{toTitleCase(v.type)}</Badge>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <Badge variant="neutral">{toTitleCase(v.type || 'Vendor')}</Badge>
                       </td>
-                      <td className="px-5 py-3.5 text-sm text-gray-600">{v.phone || '—'}</td>
-                      <td className="px-5 py-3.5 text-sm text-gray-600">{toTitleCase(v.category)}</td>
-                      <td className="px-5 py-3.5 text-right font-semibold text-gray-900 tabular-nums">₹{fmt(v.outstanding)}</td>
-                      <td className="px-5 py-3.5">
-                        <Badge variant={String(v.status).toLowerCase() === 'active' ? 'success' : 'danger'}>
-                          {toTitleCase(v.status)}
+                      <td className="px-6 py-4 text-slate-600 dark:text-slate-300">
+                        <p className="text-sm font-mono font-medium">{v.phone || '—'}</p>
+                        {v.email && <p className="text-xs text-slate-400">{v.email}</p>}
+                      </td>
+                      <td className="px-6 py-4 text-slate-600 dark:text-slate-300 font-medium whitespace-nowrap">{toTitleCase(v.category || 'General')}</td>
+                      <td className="px-6 py-4 text-right whitespace-nowrap">
+                        <span className={`text-sm font-bold tabular-nums ${v.outstanding > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-400 dark:text-slate-500'}`}>
+                          {v.outstanding > 0 ? `₹${fmt(v.outstanding)}` : 'Clear'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <Badge variant={String(v.status).toLowerCase() === 'active' ? 'success' : 'neutral'} dot>
+                          {toTitleCase(v.status || 'Active')}
                         </Badge>
                       </td>
-                      <td className="px-5 py-3.5">
-                        <div className="flex items-center justify-end space-x-2">
-                          <button onClick={(e) => { e.stopPropagation(); handleOpenPreview(v); }} className="text-xs text-gray-500 hover:text-brand-primary font-medium px-1.5 py-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors">
-                            View
+                      <td className="px-6 py-4 text-right whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => handleOpenEdit(v)}
+                            className="p-2 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                            title="Edit Vendor"
+                          >
+                            <Edit2 className="w-4 h-4" />
                           </button>
-                          <button onClick={(e) => { e.stopPropagation(); handleOpenEdit(v); }} className="text-xs text-gray-500 hover:text-brand-primary font-medium px-1.5 py-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors">
-                            Edit
-                          </button>
-                          <button onClick={(e) => { e.stopPropagation(); handleDelete(v.id); }} className="text-xs text-red-500 hover:text-red-700 font-medium px-1.5 py-0.5 rounded hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors">
-                            Delete
+                          <button
+                            onClick={() => handleDelete(v.id)}
+                            className="p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                            title="Delete Vendor"
+                          >
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
                       </td>
-                    </motion.tr>
+                    </tr>
                   ))}
                 </tbody>
               </table>
@@ -433,10 +454,9 @@ export function Vendors() {
             <Pagination {...pagination} isLoading={loading} />
           </>
         )}
-      </div>
-      </div>
+      </Card>
 
-      {/* Modal */}
+      {/* Modal Dialog */}
       <AnimatePresence>
         {showModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={closeModal}>
@@ -445,211 +465,323 @@ export function Vendors() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.15 }}
-              className="fixed inset-0 bg-black/40 backdrop-blur-sm"
+              className="fixed inset-0 bg-black/40 backdrop-blur-xs"
             />
             <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
               transition={{ type: 'spring', damping: 25, stiffness: 350 }}
-              className="bg-white dark:bg-slate-800 w-[540px] rounded-xl border border-gray-200 dark:border-slate-700 shadow-xl p-6 overflow-y-auto max-h-[90vh] relative z-10"
+              className="bg-white dark:bg-slate-800 w-full max-w-2xl rounded-2xl border border-slate-200 dark:border-slate-700 shadow-2xl overflow-hidden relative z-10 flex flex-col max-h-[90vh]"
               onClick={e => e.stopPropagation()}
             >
-              <div className="flex justify-between items-center mb-4 border-b border-gray-100 dark:border-slate-700 pb-3">
-                <h2 className="text-base font-semibold text-gray-900 dark:text-white uppercase tracking-wide">
-                  {modalMode === 'add' ? 'Add Vendor' : modalMode === 'edit' ? 'Edit Vendor' : 'Vendor Preview'}
-                </h2>
-                <button onClick={closeModal} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"><X size={18} /></button>
+              {/* Modal Header */}
+              <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/80">
+                <div>
+                  <h2 className="text-base font-bold text-slate-900 dark:text-slate-100" style={{ fontFamily: 'var(--font-display)' }}>
+                    {modalMode === 'add' ? 'Register New Vendor' : modalMode === 'edit' ? 'Edit Vendor Details' : 'Vendor Overview'}
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {modalMode === 'preview' ? 'Vendor profile and financial balance' : 'Enter supplier details and banking information'}
+                  </p>
+                </div>
+                <button
+                  onClick={closeModal}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
               </div>
 
-              {modalMode === 'preview' ? (
-                <div className="space-y-4 text-sm text-gray-600 dark:text-gray-300">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-xs text-gray-400 uppercase font-semibold">Vendor Name</label>
-                      <p className="font-bold text-gray-900 dark:text-white text-base">{toTitleCase(selectedVendor?.name)}</p>
+              {/* Modal Body */}
+              <div className="p-6 overflow-y-auto flex-1 space-y-6">
+                {modalMode === 'preview' ? (
+                  <div className="space-y-6 text-sm">
+                    {/* Header profile card */}
+                    <div className="flex items-center gap-4 p-4 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200/80 dark:border-slate-700/80">
+                      <div className="w-12 h-12 rounded-xl bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 font-bold text-lg flex items-center justify-center border border-emerald-200 dark:border-emerald-800 shrink-0">
+                        {initials(selectedVendor?.name || 'V')}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 truncate">{toTitleCase(selectedVendor?.name)}</h3>
+                        <div className="flex items-center gap-2 mt-1">
+                          <Badge variant="neutral">{toTitleCase(selectedVendor?.type || 'Vendor')}</Badge>
+                          <Badge variant={String(selectedVendor?.status).toLowerCase() === 'active' ? 'success' : 'danger'} dot>
+                            {toTitleCase(selectedVendor?.status || 'Active')}
+                          </Badge>
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <label className="text-xs text-gray-400 uppercase font-semibold block mb-1">Type</label>
-                      <Badge variant="neutral">{toTitleCase(selectedVendor?.type)}</Badge>
-                    </div>
-                  </div>
 
-                  <div className="grid grid-cols-2 gap-4 pt-2 border-t border-gray-50 dark:border-slate-700/50">
-                    <div>
-                      <label className="text-xs text-gray-400 uppercase font-semibold">Phone</label>
-                      <p className="font-medium text-gray-950 dark:text-white font-mono">{selectedVendor?.phone || '—'}</p>
+                    {/* Contact & Tax Info */}
+                    <div className="space-y-2">
+                      <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Contact & Tax Details</h4>
+                      <div className="grid grid-cols-2 gap-4 p-4 bg-white dark:bg-slate-800 rounded-xl border border-slate-200/80 dark:border-slate-700/80 text-xs">
+                        <div>
+                          <span className="text-slate-400 block mb-0.5">Phone Number</span>
+                          <span className="font-semibold text-slate-800 dark:text-slate-200 font-mono">{selectedVendor?.phone || '—'}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block mb-0.5">Email Address</span>
+                          <span className="font-semibold text-slate-800 dark:text-slate-200">{selectedVendor?.email || '—'}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block mb-0.5">GSTIN</span>
+                          <span className="font-semibold text-slate-800 dark:text-slate-200 font-mono">{selectedVendor?.gstin || '—'}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block mb-0.5">Item Category</span>
+                          <span className="font-semibold text-slate-800 dark:text-slate-200">{toTitleCase(selectedVendor?.category || '—')}</span>
+                        </div>
+                        <div className="col-span-2 pt-2 border-t border-slate-100 dark:border-slate-700/60">
+                          <span className="text-slate-400 block mb-0.5">Address</span>
+                          <span className="font-medium text-slate-800 dark:text-slate-200">{selectedVendor?.address || '—'}</span>
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <label className="text-xs text-gray-400 uppercase font-semibold">Email</label>
-                      <p className="font-medium text-gray-950 dark:text-white truncate">{selectedVendor?.email || '—'}</p>
-                    </div>
-                  </div>
 
-                  <div className="pt-2 border-t border-gray-50 dark:border-slate-700/50">
-                    <label className="text-xs text-gray-400 uppercase font-semibold">Address</label>
-                    <p className="font-medium text-gray-950 dark:text-white">{selectedVendor?.address || '—'}</p>
-                  </div>
+                    {/* Banking Details */}
+                    <div className="space-y-2">
+                      <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Banking Information</h4>
+                      <div className="grid grid-cols-3 gap-4 p-4 bg-white dark:bg-slate-800 rounded-xl border border-slate-200/80 dark:border-slate-700/80 text-xs">
+                        <div>
+                          <span className="text-slate-400 block mb-0.5">Bank Name</span>
+                          <span className="font-semibold text-slate-800 dark:text-slate-200">{selectedVendor?.bankName || '—'}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block mb-0.5">Account Number</span>
+                          <span className="font-semibold text-slate-800 dark:text-slate-200 font-mono">{selectedVendor?.accountNo || '—'}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block mb-0.5">IFSC Code</span>
+                          <span className="font-semibold text-slate-800 dark:text-slate-200 font-mono">{selectedVendor?.ifsc || '—'}</span>
+                        </div>
+                      </div>
+                    </div>
 
-                  <div className="grid grid-cols-2 gap-4 pt-2 border-t border-gray-50 dark:border-slate-700/50">
-                    <div>
-                      <label className="text-xs text-gray-400 uppercase font-semibold">GSTIN</label>
-                      <p className="font-medium text-gray-950 dark:text-white font-mono">{selectedVendor?.gstin || '—'}</p>
-                    </div>
-                    <div>
-                      <label className="text-xs text-gray-400 uppercase font-semibold">Item Category</label>
-                      <p className="font-medium text-gray-950 dark:text-white">{toTitleCase(selectedVendor?.category)}</p>
+                    {/* Financial Balances */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="p-4 bg-slate-50 dark:bg-slate-900/40 rounded-xl border border-slate-200/80 dark:border-slate-700/80">
+                        <span className="text-xs text-slate-500 block mb-1">Opening Balance</span>
+                        <span className="text-lg font-bold text-slate-900 dark:text-slate-100 tabular-nums">₹{fmt(selectedVendor?.openingBalance || 0)}</span>
+                      </div>
+                      <div className="p-4 bg-rose-50/50 dark:bg-rose-950/20 rounded-xl border border-rose-200/80 dark:border-rose-900/40">
+                        <span className="text-xs text-rose-600 dark:text-rose-400 block mb-1 font-semibold">Current Outstanding</span>
+                        <span className="text-lg font-black text-rose-600 dark:text-rose-400 tabular-nums">₹{fmt(selectedVendor?.outstanding || 0)}</span>
+                      </div>
                     </div>
                   </div>
+                ) : (
+                  <form id="vendor-form" onSubmit={handleSave} className="space-y-6">
+                    {/* Section 1: Basic Information */}
+                    <div className="space-y-3">
+                      <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-400 pb-1 border-b border-slate-100 dark:border-slate-700">
+                        1. Basic Information
+                      </h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                            Vendor Name <span className="text-rose-500">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={form.name}
+                            onChange={e => setForm({...form, name: e.target.value})}
+                            placeholder="e.g. Adani Enterprises"
+                            className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                            Vendor Type <span className="text-rose-500">*</span>
+                          </label>
+                          <DropdownSelect
+                            value={form.type}
+                            onChange={val => setForm({...form, type: val})}
+                            options={[
+                              { value: 'smallVendor', label: 'Small Vendor' },
+                              { value: 'largeVendor', label: 'Big Vendor' }
+                            ]}
+                          />
+                        </div>
+                      </div>
 
-                  <div className="grid grid-cols-3 gap-4 pt-2 border-t border-gray-50 dark:border-slate-700/50">
-                    <div>
-                      <label className="text-xs text-gray-400 uppercase font-semibold">Bank Name</label>
-                      <p className="font-medium text-gray-950 dark:text-white">{selectedVendor?.bankName || '—'}</p>
-                    </div>
-                    <div>
-                      <label className="text-xs text-gray-400 uppercase font-semibold">Account Number</label>
-                      <p className="font-medium text-gray-950 dark:text-white font-mono">{selectedVendor?.accountNo || '—'}</p>
-                    </div>
-                    <div>
-                      <label className="text-xs text-gray-400 uppercase font-semibold">IFSC Code</label>
-                      <p className="font-medium text-gray-950 dark:text-white font-mono">{selectedVendor?.ifsc || '—'}</p>
-                    </div>
-                  </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Phone Number</label>
+                          <input
+                            type="text"
+                            value={form.phone}
+                            onChange={e => setForm({...form, phone: e.target.value})}
+                            placeholder="9876543210"
+                            className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 font-mono outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Email Address</label>
+                          <input
+                            type="email"
+                            value={form.email}
+                            onChange={e => setForm({...form, email: e.target.value})}
+                            placeholder="vendor@company.com"
+                            className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">GSTIN</label>
+                          <input
+                            type="text"
+                            value={form.gstin}
+                            onChange={e => setForm({...form, gstin: e.target.value.toUpperCase()})}
+                            placeholder="24AAAAA0000A1Z5"
+                            className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 font-mono outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 uppercase"
+                          />
+                        </div>
+                      </div>
 
-                  <div className="grid grid-cols-2 gap-4 pt-2 border-t border-gray-50 dark:border-slate-700/50">
-                    <div>
-                      <label className="text-xs text-gray-400 uppercase font-semibold">Opening Balance</label>
-                      <p className="font-medium text-gray-950 dark:text-white tabular-nums">₹{fmt(selectedVendor?.openingBalance || 0)}</p>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Business Address</label>
+                        <textarea
+                          rows={2}
+                          value={form.address}
+                          onChange={e => setForm({...form, address: e.target.value})}
+                          placeholder="Complete billing & shipping address"
+                          className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 resize-none"
+                        />
+                      </div>
                     </div>
-                    <div>
-                      <label className="text-xs text-gray-400 uppercase font-semibold">Current Outstanding</label>
-                      <p className="font-bold text-red-500 tabular-nums">₹{fmt(selectedVendor?.outstanding || 0)}</p>
-                    </div>
-                  </div>
 
-                  <div className="flex justify-end pt-4 border-t border-gray-100 dark:border-slate-700 mt-6">
-                    <button onClick={() => setShowModal(false)} className="px-4 py-2 text-sm font-medium text-white bg-brand-primary rounded-lg hover:bg-brand-primary/95">Close Preview</button>
-                  </div>
-                </div>
-              ) : (
-                <form onSubmit={handleSave} className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Vendor Name *</label>
-                      <input type="text" required value={form.name} onChange={e => setForm({...form, name: e.target.value})}
-                        className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg focus:outline-none" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Vendor Type *</label>
-                      <DropdownSelect
-                        value={form.type}
-                        onChange={val => setForm({...form, type: val})}
-                        placeholder="Select Vendor Type"
-                        options={[
-                          { value: 'smallVendor', label: 'Small Vendor' },
-                          { value: 'largeVendor', label: 'Big Vendor' }
-                        ]}
-                      />
-                    </div>
-                  </div>
+                    {/* Section 2: Banking & Financials */}
+                    <div className="space-y-3">
+                      <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-400 pb-1 border-b border-slate-100 dark:border-slate-700">
+                        2. Banking & Account Details
+                      </h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Bank Name</label>
+                          <input
+                            type="text"
+                            value={form.bankName}
+                            onChange={e => setForm({...form, bankName: e.target.value})}
+                            placeholder="HDFC Bank"
+                            className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Account Number</label>
+                          <input
+                            type="text"
+                            value={form.accountNo}
+                            onChange={e => setForm({...form, accountNo: e.target.value})}
+                            placeholder="Account number"
+                            className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 font-mono outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Confirm Account No.</label>
+                          <input
+                            type="text"
+                            value={form.confirmAccountNo}
+                            onChange={e => { setForm({...form, confirmAccountNo: e.target.value}); setFormErrors({...formErrors, confirmAccountNo: undefined}) }}
+                            placeholder="Re-enter account"
+                            className={`w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 dark:bg-slate-900/60 border rounded-lg text-slate-900 dark:text-slate-100 font-mono outline-none ${formErrors.confirmAccountNo ? 'border-rose-400 focus:ring-2 focus:ring-rose-500/20' : 'border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500'}`}
+                          />
+                          {formErrors.confirmAccountNo && <p className="text-[11px] text-rose-500 mt-1">{formErrors.confirmAccountNo}</p>}
+                        </div>
+                      </div>
 
-                  <div className="grid grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Phone</label>
-                      <input type="text" autoComplete="off" data-lpignore="true" data-form-type="other" value={form.phone} onChange={e => setForm({...form, phone: e.target.value})}
-                        className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg focus:outline-none font-mono" />
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">IFSC Code</label>
+                          <input
+                            type="text"
+                            value={form.ifsc}
+                            onChange={e => setForm({...form, ifsc: e.target.value.toUpperCase()})}
+                            placeholder="HDFC0001234"
+                            className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 font-mono outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 uppercase"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Confirm IFSC Code</label>
+                          <input
+                            type="text"
+                            value={form.confirmIfsc}
+                            onChange={e => { setForm({...form, confirmIfsc: e.target.value.toUpperCase()}); setFormErrors({...formErrors, confirmIfsc: undefined}) }}
+                            placeholder="Re-enter IFSC"
+                            className={`w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 dark:bg-slate-900/60 border rounded-lg text-slate-900 dark:text-slate-100 font-mono outline-none uppercase ${formErrors.confirmIfsc ? 'border-rose-400 focus:ring-2 focus:ring-rose-500/20' : 'border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500'}`}
+                          />
+                          {formErrors.confirmIfsc && <p className="text-[11px] text-rose-500 mt-1">{formErrors.confirmIfsc}</p>}
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Email</label>
-                      <input type="email" autoComplete="off" data-lpignore="true" data-form-type="other" value={form.email} onChange={e => setForm({...form, email: e.target.value})}
-                        className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg focus:outline-none" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">GSTIN</label>
-                      <input type="text" value={form.gstin} onChange={e => setForm({...form, gstin: e.target.value})}
-                        className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg focus:outline-none font-mono" />
-                    </div>
-                  </div>
 
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Address</label>
-                    <textarea rows={2} value={form.address} onChange={e => setForm({...form, address: e.target.value})}
-                      className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg focus:outline-none" />
-                  </div>
+                    {/* Section 3: Status & Category */}
+                    <div className="space-y-3">
+                      <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-400 pb-1 border-b border-slate-100 dark:border-slate-700">
+                        3. Classification & Balance
+                      </h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Item Category</label>
+                          <input
+                            type="text"
+                            value={form.category}
+                            onChange={e => setForm({...form, category: e.target.value})}
+                            placeholder="Textiles / Yarn"
+                            className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Opening Balance (₹)</label>
+                          <input
+                            type="number"
+                            value={form.openingBalance}
+                            onChange={e => setForm({...form, openingBalance: e.target.value})}
+                            className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 tabular-nums outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Account Status</label>
+                          <DropdownSelect
+                            value={form.status}
+                            onChange={val => setForm({...form, status: val})}
+                            options={[
+                              { value: 'Active', label: 'Active' },
+                              { value: 'Inactive', label: 'Inactive' }
+                            ]}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </form>
+                )}
+              </div>
 
-                  <div className="grid grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Bank Name</label>
-                      <input type="text" value={form.bankName} onChange={e => setForm({...form, bankName: e.target.value})}
-                        className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg focus:outline-none" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Account Number</label>
-                      <input type="text" value={form.accountNo} onChange={e => setForm({...form, accountNo: e.target.value, confirmAccountNo: form.confirmAccountNo})}
-                        className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg focus:outline-none font-mono" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Confirm Account No.</label>
-                      <input type="text" value={form.confirmAccountNo} onChange={e => { setForm({...form, confirmAccountNo: e.target.value}); setFormErrors({...formErrors, confirmAccountNo: undefined}) }}
-                        className={`w-full px-3 py-2 text-sm border rounded-lg focus:outline-none font-mono ${formErrors.confirmAccountNo ? 'border-red-400' : 'border-gray-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white'}`} />
-                      {formErrors.confirmAccountNo && <p className="text-xs text-red-500 mt-1">{formErrors.confirmAccountNo}</p>}
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">IFSC Code</label>
-                      <input type="text" value={form.ifsc} onChange={e => setForm({...form, ifsc: e.target.value})}
-                        className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg focus:outline-none font-mono" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Confirm IFSC Code</label>
-                      <input type="text" value={form.confirmIfsc} onChange={e => { setForm({...form, confirmIfsc: e.target.value}); setFormErrors({...formErrors, confirmIfsc: undefined}) }}
-                        className={`w-full px-3 py-2 text-sm border rounded-lg focus:outline-none font-mono ${formErrors.confirmIfsc ? 'border-red-400' : 'border-gray-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white'}`} />
-                      {formErrors.confirmIfsc && <p className="text-xs text-red-500 mt-1">{formErrors.confirmIfsc}</p>}
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Item Category</label>
-                      <input type="text" value={form.category} onChange={e => setForm({...form, category: e.target.value})}
-                        className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg focus:outline-none" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Opening Balance</label>
-                      <input type="number" value={form.openingBalance} onChange={e => setForm({...form, openingBalance: e.target.value})}
-                        className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg focus:outline-none" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Status</label>
-                      <DropdownSelect
-                        value={form.status}
-                        onChange={val => setForm({...form, status: val})}
-                        placeholder="Select Status"
-                        options={[
-                          { value: 'Active', label: 'Active' },
-                          { value: 'Inactive', label: 'Inactive' }
-                        ]}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex justify-end space-x-3 pt-4 border-t border-gray-100 dark:border-slate-700 mt-6">
-                    <button type="button" onClick={closeModal} className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 dark:text-gray-300 dark:border-slate-600 dark:hover:bg-slate-700">Cancel</button>
-                    <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-brand-primary rounded-lg hover:bg-brand-primary/90">
+              {/* Modal Footer */}
+              <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-700 flex justify-end gap-3 bg-slate-50/50 dark:bg-slate-800/80">
+                {modalMode === 'preview' ? (
+                  <Button variant="secondary" onClick={() => setShowModal(false)}>
+                    Close Preview
+                  </Button>
+                ) : (
+                  <>
+                    <Button variant="secondary" onClick={closeModal}>
+                      Cancel
+                    </Button>
+                    <Button type="submit" form="vendor-form" loading={isSaving}>
                       {modalMode === 'add' ? 'Save Vendor' : 'Update Vendor'}
-                    </button>
-                  </div>
-                </form>
-              )}
+                    </Button>
+                  </>
+                )}
+              </div>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
+
       <SaveConfirmationModal {...confirmConfig} isSaving={isSaving} />
-    </>
+    </div>
   )
 }
 

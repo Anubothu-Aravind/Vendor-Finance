@@ -4,6 +4,8 @@ import { motion } from 'framer-motion'
 import { Skeleton, SkeletonTableRow } from '../components/ui/Skeleton'
 import EmptyState from '../components/ui/EmptyState'
 import Badge from '../components/ui/Badge'
+import PageHeader from '../components/ui/PageHeader'
+import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card'
 import { Link } from 'react-router-dom'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -14,15 +16,6 @@ import CustomDatePicker from '../components/ui/CustomDatePicker'
 import PrintPreviewModal from '../components/PrintPreviewModal'
 
 const fmt = (v) => new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(v)
-const initials = (n) => (n || '').split(' ').slice(0, 2).map(w => w[0] || '').join('').toUpperCase() || '?'
-
-const avatarColors = [
-  'bg-red-100 text-red-700', 
-  'bg-blue-100 text-blue-700', 
-  'bg-green-100 text-green-700',
-  'bg-purple-100 text-purple-700', 
-  'bg-yellow-100 text-yellow-700'
-]
 
 const tabs = [
   'Outstanding Aging', 
@@ -32,7 +25,6 @@ const tabs = [
   'Monthly Transactions'
 ]
 
-// Helper for title case conversion
 const toTitleCase = (str) => {
   if (!str) return ''
   return str.replace(/\w\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase())
@@ -40,11 +32,10 @@ const toTitleCase = (str) => {
 
 export function Reports() {
   const [activeTab, setActiveTab] = useState('Outstanding Aging')
-  const [fromDate, setFromDate] = useState('')  // DD-MM-YYYY (CustomDatePicker format)
-  const [toDate, setToDate] = useState('')      // DD-MM-YYYY (CustomDatePicker format)
+  const [fromDate, setFromDate] = useState('')
+  const [toDate, setToDate] = useState('')
   const [printDoc, setPrintDoc] = useState(null)
 
-  // Interactive graph selection states
   const [selectedAgingBucket, setSelectedAgingBucket] = useState(null)
   const [selectedVendor, setSelectedVendor] = useState(null)
   const [selectedFinancier, setSelectedFinancier] = useState(null)
@@ -62,7 +53,6 @@ export function Reports() {
     setSelectedMonth(null)
   }
 
-  // Parse DD-MM-YYYY string from CustomDatePicker into a JS Date (midnight local)
   const parseDdMmYyyy = (str) => {
     if (!str) return null
     const parts = str.split('-')
@@ -71,7 +61,6 @@ export function Reports() {
     return isNaN(d.getTime()) ? null : d
   }
 
-  // Data states
   const [bills, setBills] = useState([])
   const [payments, setPayments] = useState([])
   const [repayments, setRepayments] = useState([])
@@ -118,7 +107,6 @@ export function Reports() {
     return () => controller.abort()
   }, [])
 
-  // ── DATE RANGE FILTERING LOGIC ──────────────────────────────────────────────
   const filteredBills = useMemo(() => {
     const from = parseDdMmYyyy(fromDate)
     const to = parseDdMmYyyy(toDate)
@@ -179,7 +167,7 @@ export function Reports() {
     })
   }, [loans, fromDate, toDate])
 
-  // ── TAB 1: OUTSTANDING AGING REPORT ──────────────────────────────────────────
+  // TAB 1: Outstanding Aging
   const agingData = useMemo(() => {
     let b1 = 0, b2 = 0, b3 = 0, b4 = 0
     const vendorAging = {}
@@ -212,7 +200,7 @@ export function Reports() {
     return { chartData, tableList, total: b1 + b2 + b3 + b4 }
   }, [filteredBills])
 
-  // ── TAB 2: VENDOR PAYMENT SUMMARY ──────────────────────────────────────────
+  // TAB 2: Vendor Payments
   const vendorPaymentsSummary = useMemo(() => {
     const summary = {}
     filteredPayments.forEach(p => {
@@ -229,7 +217,7 @@ export function Reports() {
     return { list, chartData }
   }, [filteredPayments])
 
-  // ── TAB 3: LOAN REPAYMENT SUMMARY ──────────────────────────────────────────
+  // TAB 3: Loan Repayments
   const loanRepaymentsSummary = useMemo(() => {
     const summary = {}
     filteredLoans.forEach(l => {
@@ -255,7 +243,7 @@ export function Reports() {
     })
   }, [interestData, fromDate, toDate])
 
-  // ── TAB 4: CHEQUE STATUS REPORT ──────────────────────────────────────────────
+  // TAB 4: Cheque Status
   const chequeStatusData = useMemo(() => {
     const summary = { PENDING: { name: 'Pending', count: 0, amount: 0 }, CLEARED: { name: 'Cleared', count: 0, amount: 0 }, BOUNCED: { name: 'Bounced', count: 0, amount: 0 } }
     filteredCheques.forEach(c => {
@@ -268,7 +256,7 @@ export function Reports() {
     return { list, chartData }
   }, [filteredCheques])
 
-  // ── TAB 5: MONTHLY TRANSACTION OVERVIEW ─────────────────────────────────────
+  // TAB 5: Monthly Transactions
   const monthlyTransactionsData = useMemo(() => {
     const summary = {}
     filteredLedger.forEach(t => {
@@ -284,7 +272,6 @@ export function Reports() {
     return { list, chartData }
   }, [filteredLedger])
 
-  // Filtered lists for table display based on interactive graph selections
   const displayedAgingTable = useMemo(() => {
     if (!selectedAgingBucket) return agingData.tableList
     if (selectedAgingBucket === '0 to 30 Days') return agingData.tableList.filter(i => i.b1 > 0)
@@ -294,7 +281,6 @@ export function Reports() {
     return agingData.tableList
   }, [agingData.tableList, selectedAgingBucket])
 
-  // ── ITEM-LEVEL BREAKDOWN FOR INTERACTIVE FILTERS ───────────────────────────
   const financierLoansBreakdown = useMemo(() => {
     if (!selectedFinancier) return []
     return filteredLoans.filter(l => 
@@ -353,36 +339,39 @@ export function Reports() {
   }, [monthlyTransactionsData.list, selectedMonth])
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold" style={{ fontFamily: 'var(--font-display)', color: 'var(--color-text-primary)' }}>Reports</h1>
-          <p className="text-sm mt-0.5 font-medium" style={{ color: 'var(--color-text-muted)' }}>Bespoke financial summaries and dynamic interactive data graphs</p>
+    <div className="space-y-6 max-w-[1600px] mx-auto">
+      {/* Header with Date Filter */}
+      <PageHeader
+        title="Reports & Analytics"
+        description="Bespoke executive financial intelligence and dynamic interactive graphs"
+        breadcrumbs={[{ label: 'Reports' }]}
+      >
+        <div className="flex items-center gap-2 bg-white dark:bg-slate-800 border border-slate-200/90 dark:border-slate-700/80 rounded-xl p-1.5 shadow-xs">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider pl-2">From:</span>
+          <CustomDatePicker value={fromDate} onChange={setFromDate} placeholder="Start date" />
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">To:</span>
+          <CustomDatePicker value={toDate} onChange={setToDate} placeholder="End date" align="right" />
+          {(fromDate || toDate) && (
+            <button
+              onClick={() => { setFromDate(''); setToDate('') }}
+              className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 px-2 hover:underline"
+            >
+              Clear
+            </button>
+          )}
         </div>
-
-        {/* Global Date Range Filter */}
-        <div className="flex items-center gap-3 shrink-0 flex-wrap">
-          <div className="flex items-center gap-2" style={{ background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)', borderRadius: '12px', padding: '8px 12px' }}>
-            <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>From</span>
-            <CustomDatePicker value={fromDate} onChange={setFromDate} placeholder="Start date" />
-            <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>To</span>
-            <CustomDatePicker value={toDate} onChange={setToDate} placeholder="End date" align="right" />
-            {(fromDate || toDate) && (
-              <button onClick={() => { setFromDate(''); setToDate('') }} className="text-xs font-semibold transition-opacity hover:opacity-70" style={{ color: 'var(--color-primary)' }}>Clear</button>
-            )}
-          </div>
-        </div>
-      </div>
+      </PageHeader>
 
       {/* Tabs */}
-      <div className="flex flex-wrap items-center gap-1.5 rounded-xl p-1 w-fit" style={{ background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)' }}>
+      <div className="flex items-center gap-1.5 overflow-x-auto p-1 bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl w-fit">
         {tabs.map(tab => (
           <button 
             key={tab} 
             onClick={() => handleTabChange(tab)}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              activeTab === tab ? 'bg-brand-primary text-white shadow-sm' : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+              activeTab === tab 
+                ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-xs' 
+                : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
             }`}
           >
             {tab}
@@ -390,224 +379,210 @@ export function Reports() {
         ))}
       </div>
 
-      {/* Error Banner */}
+      {/* Error */}
       {error && (
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-xl px-5 py-3 text-sm text-red-600 dark:text-red-400">
-          {error} — <button onClick={fetchData} className="underline font-medium">Retry</button>
+        <div className="bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-800/40 rounded-xl p-4 text-xs font-semibold text-rose-700 dark:text-rose-400">
+          {error} — <button onClick={fetchData} className="underline font-bold">Retry</button>
         </div>
       )}
 
-      {/* Loading Skeleton */}
+      {/* Tab Content */}
       {loading ? (
         <div className="space-y-6">
-          <div className="flex gap-4">
-            {[0, 1, 2].map(i => <Skeleton key={i} className="flex-1 h-[80px] rounded-xl" />)}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Skeleton className="h-64 rounded-2xl" />
+            <Skeleton className="h-64 rounded-2xl" />
           </div>
-          <Skeleton className="h-[280px] w-full rounded-xl" />
         </div>
       ) : (
         <div className="space-y-6">
           {/* TAB 1: Outstanding Aging */}
           {activeTab === 'Outstanding Aging' && (
-            <>
-              <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
-                <div className="xl:col-span-7 rounded-xl p-5" style={{ background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)' }}>
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-xs font-bold uppercase tracking-wider" style={{ fontFamily: 'var(--font-display)', color: 'var(--color-text-muted)' }}>Aging Distribution</h3>
-                    <span className="text-[11px] text-gray-400">Click bars to filter details</span>
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+              <Card className="xl:col-span-7 p-5">
+                <div className="flex justify-between items-center mb-4">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100" style={{ fontFamily: 'var(--font-display)' }}>Aging Distribution</h3>
+                    <p className="text-xs text-slate-400">Click any bar to filter unpaid invoices</p>
                   </div>
-                  <ResponsiveContainer width="100%" height={260}>
-                    <BarChart data={agingData.chartData} barSize={36}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
-                      <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'var(--color-text-muted)' }} axisLine={false} tickLine={false} />
-                      <YAxis tickFormatter={v => `₹${v / 100000}L`} tick={{ fontSize: 10, fill: 'var(--color-text-muted)' }} axisLine={false} tickLine={false} />
-                      <Tooltip formatter={v => `₹${fmt(v)}`} labelFormatter={(label, payload) => payload?.[0]?.payload?.fullName || label} cursor={{ fill: 'transparent' }} contentStyle={{ background: 'var(--color-bg-elevated)', borderColor: 'var(--color-border)', borderRadius: '8px' }} />
-                      <Bar dataKey="Outstanding" radius={[4, 4, 0, 0]}>
-                        {agingData.chartData.map((entry, index) => (
-                          <Cell
-                            key={`cell-${index}`}
-                            fill="var(--color-primary)"
-                            opacity={!selectedAgingBucket || selectedAgingBucket === entry.name ? 1 : 0.3}
-                            onClick={() => setSelectedAgingBucket(prev => prev === entry.name ? null : entry.name)}
-                            style={{ cursor: 'pointer' }}
-                          />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
                 </div>
+                <ResponsiveContainer width="100%" height={260}>
+                  <BarChart data={agingData.chartData} barSize={36}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                    <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                    <YAxis tickFormatter={v => `₹${v / 100000}L`} tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                    <Tooltip formatter={v => `₹${fmt(v)}`} cursor={{ fill: 'transparent' }} contentStyle={{ background: '#ffffff', borderColor: '#e2e8f0', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                    <Bar dataKey="Outstanding" radius={[4, 4, 0, 0]}>
+                      {agingData.chartData.map((entry, index) => (
+                        <Cell
+                          key={`cell-${index}`}
+                          fill="#00C896"
+                          opacity={!selectedAgingBucket || selectedAgingBucket === entry.name ? 1 : 0.3}
+                          onClick={() => setSelectedAgingBucket(prev => prev === entry.name ? null : entry.name)}
+                          style={{ cursor: 'pointer' }}
+                        />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </Card>
 
-                <div className="xl:col-span-5 rounded-xl p-5 flex flex-col" style={{ background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)' }}>
-                  <div className="flex justify-between items-center mb-3">
-                    <h3 className="text-xs font-bold uppercase tracking-wider" style={{ fontFamily: 'var(--font-display)', color: 'var(--color-text-muted)' }}>
-                      {selectedAgingBucket ? `Unpaid Invoices (${selectedAgingBucket})` : 'Aging Summary'}
-                    </h3>
-                    {selectedAgingBucket && (
-                      <button onClick={() => setSelectedAgingBucket(null)} className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 transition-all flex items-center gap-1">
-                        {selectedAgingBucket} <span>✕</span>
-                      </button>
-                    )}
-                  </div>
-                  <div className="overflow-x-auto flex-1">
-                    {selectedAgingBucket ? (
-                      <table className="w-full min-w-[380px] table-responsive-clean text-xs">
-                        <thead>
-                          <tr style={{ borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}>
-                            <th className="text-left pb-2 px-2">BILL #</th>
-                            <th className="text-left pb-2 px-2">VENDOR</th>
-                            <th className="text-right pb-2 px-2">OUTSTANDING</th>
-                            <th className="text-right pb-2 px-2">DUE DATE</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {agingBillsBreakdown.map((b) => (
-                            <tr key={b._id} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                              <td className="py-2 px-2 font-mono text-gray-400">{b.billNo || b._id.slice(-6)}</td>
-                              <td className="py-2 px-2 font-medium truncate max-w-[110px]" style={{ color: 'var(--color-text-primary)' }}>{toTitleCase(b.vendorId?.name || 'Unknown')}</td>
-                              <td className="py-2 px-2 text-right font-bold text-orange-400 tabular-nums">₹{fmt(b.outstandingAmount)}</td>
-                              <td className="py-2 px-2 text-right text-gray-400 tabular-nums">{b.dueDate ? b.dueDate.split('T')[0] : '—'}</td>
-                            </tr>
-                          ))}
-                          {agingBillsBreakdown.length === 0 && (
-                            <tr><td colSpan={4} className="py-4 text-center text-gray-400">No invoices found for this aging bucket.</td></tr>
-                          )}
-                        </tbody>
-                      </table>
-                    ) : (
-                      <table className="w-full min-w-[420px] table-responsive-clean text-xs">
-                        <thead>
-                          <tr style={{ borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}>
-                            <th className="text-left pb-2 px-2">VENDOR</th>
-                            <th className={`text-right pb-2 px-2 ${selectedAgingBucket === '0 to 30 Days' ? 'text-emerald-500 font-bold' : ''}`}>0-30D</th>
-                            <th className={`text-right pb-2 px-2 ${selectedAgingBucket === '31 to 60 Days' ? 'text-emerald-500 font-bold' : ''}`}>31-60D</th>
-                            <th className={`text-right pb-2 px-2 ${selectedAgingBucket === '61 to 90 Days' ? 'text-emerald-500 font-bold' : ''}`}>61-90D</th>
-                            <th className={`text-right pb-2 px-2 ${selectedAgingBucket === '90+ Days' ? 'text-emerald-500 font-bold' : ''}`}>90D+</th>
-                            <th className="text-right pb-2 px-2">TOTAL</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {displayedAgingTable.map((item, idx) => (
-                            <tr key={item.name || idx} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                              <td className="py-2.5 px-2 font-medium max-w-[100px] truncate" style={{ color: 'var(--color-text-primary)' }}>{toTitleCase(item.name)}</td>
-                              <td className={`py-2.5 px-2 text-right tabular-nums ${selectedAgingBucket === '0 to 30 Days' ? 'font-bold text-emerald-400' : ''}`} style={{ color: 'var(--color-text-muted)' }}>{item.b1 > 0 ? `₹${fmt(item.b1)}` : '—'}</td>
-                              <td className={`py-2.5 px-2 text-right tabular-nums ${selectedAgingBucket === '31 to 60 Days' ? 'font-bold text-emerald-400' : ''}`} style={{ color: 'var(--color-text-secondary)' }}>{item.b2 > 0 ? `₹${fmt(item.b2)}` : '—'}</td>
-                              <td className={`py-2.5 px-2 text-right tabular-nums ${selectedAgingBucket === '61 to 90 Days' ? 'font-bold text-emerald-400' : 'text-orange-400'}`}>{item.b3 > 0 ? `₹${fmt(item.b3)}` : '—'}</td>
-                              <td className={`py-2.5 px-2 text-right tabular-nums ${selectedAgingBucket === '90+ Days' ? 'font-bold text-emerald-400' : 'text-red-500 font-semibold'}`}>{item.b4 > 0 ? `₹${fmt(item.b4)}` : '—'}</td>
-                              <td className="py-2.5 px-2 text-right font-bold tabular-nums" style={{ color: 'var(--color-text-primary)' }}>₹{fmt(item.total)}</td>
-                            </tr>
-                          ))}
-                          {displayedAgingTable.length === 0 && (
-                            <tr><td colSpan={6} className="py-4 text-center" style={{ color: 'var(--color-text-muted)' }}>No outstanding invoices.</td></tr>
-                          )}
-                        </tbody>
-                      </table>
-                    )}
-                  </div>
+              <Card className="xl:col-span-5 p-5 flex flex-col">
+                <div className="flex justify-between items-center mb-3">
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100" style={{ fontFamily: 'var(--font-display)' }}>
+                    {selectedAgingBucket ? `Unpaid Invoices (${selectedAgingBucket})` : 'Aging Summary'}
+                  </h3>
+                  {selectedAgingBucket && (
+                    <button onClick={() => setSelectedAgingBucket(null)} className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-all flex items-center gap-1">
+                      {selectedAgingBucket} <span>✕</span>
+                    </button>
+                  )}
                 </div>
-              </div>
-            </>
+                <div className="overflow-x-auto flex-1">
+                  {selectedAgingBucket ? (
+                    <table className="w-full text-left text-xs">
+                      <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100 dark:border-slate-700">
+                        <tr>
+                          <th className="pb-2">Bill #</th>
+                          <th className="pb-2">Vendor</th>
+                          <th className="pb-2 text-right">Outstanding</th>
+                          <th className="pb-2 text-right">Due Date</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
+                        {agingBillsBreakdown.map((b) => (
+                          <tr key={b._id}>
+                            <td className="py-2.5 font-mono text-slate-500">{b.billNo || b._id.slice(-6)}</td>
+                            <td className="py-2.5 font-semibold text-slate-800 dark:text-slate-200 truncate max-w-[120px]">{toTitleCase(b.vendorId?.name || 'Unknown')}</td>
+                            <td className="py-2.5 text-right font-bold text-rose-600 dark:text-rose-400 tabular-nums">₹{fmt(b.outstandingAmount)}</td>
+                            <td className="py-2.5 text-right text-slate-400">{b.dueDate ? b.dueDate.split('T')[0] : '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <table className="w-full text-left text-xs">
+                      <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100 dark:border-slate-700">
+                        <tr>
+                          <th className="pb-2">Vendor</th>
+                          <th className="pb-2 text-right">0-30D</th>
+                          <th className="pb-2 text-right">31-60D</th>
+                          <th className="pb-2 text-right">61-90D</th>
+                          <th className="pb-2 text-right">90D+</th>
+                          <th className="pb-2 text-right">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
+                        {displayedAgingTable.map((item, idx) => (
+                          <tr key={item.name || idx}>
+                            <td className="py-2.5 font-semibold text-slate-800 dark:text-slate-200 truncate max-w-[100px]">{toTitleCase(item.name)}</td>
+                            <td className="py-2.5 text-right text-slate-500 tabular-nums">{item.b1 > 0 ? `₹${fmt(item.b1)}` : '—'}</td>
+                            <td className="py-2.5 text-right text-slate-500 tabular-nums">{item.b2 > 0 ? `₹${fmt(item.b2)}` : '—'}</td>
+                            <td className="py-2.5 text-right text-amber-600 tabular-nums">{item.b3 > 0 ? `₹${fmt(item.b3)}` : '—'}</td>
+                            <td className="py-2.5 text-right text-rose-600 font-bold tabular-nums">{item.b4 > 0 ? `₹${fmt(item.b4)}` : '—'}</td>
+                            <td className="py-2.5 text-right font-bold text-slate-900 dark:text-slate-100 tabular-nums">₹{fmt(item.total)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </Card>
+            </div>
           )}
 
           {/* TAB 2: Vendor Payments */}
           {activeTab === 'Vendor Payments' && (
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
-              <div className="xl:col-span-7 bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-5">
+              <Card className="xl:col-span-7 p-5">
                 <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider" style={{ fontFamily: 'var(--font-display)' }}>Top Vendor Payments</h3>
-                  <span className="text-[11px] text-gray-400">Click a bar to view vendor details</span>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100" style={{ fontFamily: 'var(--font-display)' }}>Top Vendor Payments</h3>
+                    <p className="text-xs text-slate-400">Click a bar to inspect vendor payment logs</p>
+                  </div>
                 </div>
                 <ResponsiveContainer width="100%" height={260}>
                   <BarChart data={vendorPaymentsSummary.chartData} barSize={28}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
-                    <XAxis dataKey="name" tick={{ fontSize: 9, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-                    <YAxis tickFormatter={v => `₹${v / 100000}L`} tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-                    <Tooltip formatter={v => `₹${fmt(v)}`} labelFormatter={(label, payload) => payload?.[0]?.payload?.fullName || label} cursor={{ fill: 'transparent' }} contentStyle={{ background: 'var(--color-bg-elevated)', borderColor: 'var(--color-border)', borderRadius: '8px' }} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                    <XAxis dataKey="name" tick={{ fontSize: 9, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                    <YAxis tickFormatter={v => `₹${v / 100000}L`} tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                    <Tooltip formatter={v => `₹${fmt(v)}`} cursor={{ fill: 'transparent' }} contentStyle={{ background: '#ffffff', borderColor: '#e2e8f0', borderRadius: '12px' }} />
                     <Bar dataKey="Amount" radius={[4, 4, 0, 0]}>
-                      {vendorPaymentsSummary.chartData.map((entry, index) => {
-                        const isSelected = selectedVendor === entry.fullName
-                        return (
-                          <Cell
-                            key={`cell-${index}`}
-                            fill="var(--color-primary)"
-                            opacity={!selectedVendor || isSelected ? 1 : 0.3}
-                            onClick={() => setSelectedVendor(prev => prev === entry.fullName ? null : entry.fullName)}
-                            style={{ cursor: 'pointer' }}
-                          />
-                        )
-                      })}
+                      {vendorPaymentsSummary.chartData.map((entry, index) => (
+                        <Cell
+                          key={`cell-${index}`}
+                          fill="#00C896"
+                          opacity={!selectedVendor || selectedVendor === entry.fullName ? 1 : 0.3}
+                          onClick={() => setSelectedVendor(prev => prev === entry.fullName ? null : entry.fullName)}
+                          style={{ cursor: 'pointer' }}
+                        />
+                      ))}
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
-              </div>
+              </Card>
 
-              <div className="xl:col-span-5 rounded-xl border p-5 flex flex-col" style={{ background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)' }}>
+              <Card className="xl:col-span-5 p-5 flex flex-col">
                 <div className="flex justify-between items-center mb-3">
-                  <h3 className="text-xs font-bold uppercase tracking-wider" style={{ fontFamily: 'var(--font-display)', color: 'var(--color-text-muted)' }}>
-                    {selectedVendor ? `Payment Logs for ${toTitleCase(selectedVendor)}` : 'Payment Summary'}
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100" style={{ fontFamily: 'var(--font-display)' }}>
+                    {selectedVendor ? `Payment Logs (${toTitleCase(selectedVendor)})` : 'Vendor Payment Summary'}
                   </h3>
                   {selectedVendor && (
-                    <button onClick={() => setSelectedVendor(null)} className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 transition-all flex items-center gap-1">
+                    <button onClick={() => setSelectedVendor(null)} className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-all flex items-center gap-1">
                       {toTitleCase(selectedVendor)} <span>✕</span>
                     </button>
                   )}
                 </div>
                 <div className="overflow-x-auto flex-1">
                   {selectedVendor ? (
-                    <table className="w-full text-xs">
-                      <thead>
-                        <tr style={{ borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}>
-                          <th className="text-left pb-2">DATE</th>
-                          <th className="text-left pb-2">REF #</th>
-                          <th className="text-right pb-2">AMOUNT PAID</th>
-                          <th className="text-right pb-2">MODE</th>
+                    <table className="w-full text-left text-xs">
+                      <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100 dark:border-slate-700">
+                        <tr>
+                          <th className="pb-2">Date</th>
+                          <th className="pb-2">Ref #</th>
+                          <th className="pb-2 text-right">Amount Paid</th>
+                          <th className="pb-2 text-right">Mode</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-gray-50 dark:divide-slate-700/40">
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
                         {vendorPaymentsBreakdown.map((p) => (
-                          <tr key={p._id} onClick={() => setPrintDoc({ type: 'payment', id: p._id })} className="hover:bg-slate-50 dark:hover:bg-slate-800/20 cursor-pointer">
-                            <td className="py-2 text-gray-400">{p.paymentDate ? p.paymentDate.split('T')[0] : '—'}</td>
-                            <td className="py-2 font-mono text-gray-400">{p.voucherNo || p.referenceNo || p._id.slice(-6)}</td>
-                            <td className="py-2 text-right font-bold text-green-500 tabular-nums">₹{fmt(p.amount)}</td>
-                            <td className="py-2 text-right text-gray-400">{p.paymentMode || 'NEFT'}</td>
+                          <tr key={p._id} onClick={() => setPrintDoc({ type: 'payment', id: p._id })} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 cursor-pointer">
+                            <td className="py-2.5 text-slate-500">{p.paymentDate ? p.paymentDate.split('T')[0] : '—'}</td>
+                            <td className="py-2.5 font-mono text-slate-400">{p.voucherNo || p.referenceNo || p._id.slice(-6)}</td>
+                            <td className="py-2.5 text-right font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">₹{fmt(p.amount)}</td>
+                            <td className="py-2.5 text-right text-slate-400">{p.paymentMode || 'NEFT'}</td>
                           </tr>
                         ))}
-                        {vendorPaymentsBreakdown.length === 0 && (
-                          <tr><td colSpan={4} className="py-4 text-center text-gray-400">No payment logs found for this vendor.</td></tr>
-                        )}
                       </tbody>
                     </table>
                   ) : (
-                    <table className="w-full text-xs">
-                      <thead>
-                        <tr style={{ borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}>
-                          <th className="text-left pb-2">VENDOR</th>
-                          <th className="text-right pb-2">PAYMENTS</th>
-                          <th className="text-right pb-2">TOTAL PAID</th>
-                          <th className="text-right pb-2">LAST DATE</th>
+                    <table className="w-full text-left text-xs">
+                      <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100 dark:border-slate-700">
+                        <tr>
+                          <th className="pb-2">Vendor</th>
+                          <th className="pb-2 text-right">Payments</th>
+                          <th className="pb-2 text-right">Total Paid</th>
+                          <th className="pb-2 text-right">Last Date</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-gray-50 dark:divide-slate-700/40">
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
                         {displayedVendorPayments.map((item, idx) => (
                           <tr 
                             key={item.name || idx} 
                             onClick={() => setSelectedVendor(item.name)}
-                            style={{ cursor: 'pointer' }}
-                            className={`hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-all ${selectedVendor === item.name ? 'bg-emerald-500/10 font-bold' : ''}`}
+                            className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-all cursor-pointer"
                           >
-                            <td style={{ color: 'var(--color-text-primary)' }} className="font-semibold text-emerald-500">{toTitleCase(item.name)}</td>
-                            <td className="py-2.5 text-right tabular-nums text-gray-500">{item.count}</td>
-                            <td className="py-2.5 text-right font-bold tabular-nums text-green-600 dark:text-green-400">₹{fmt(item.amount)}</td>
-                            <td className="py-2.5 text-right tabular-nums text-gray-400">{item.lastDate ? item.lastDate.toISOString().split('T')[0] : '—'}</td>
+                            <td className="py-2.5 font-semibold text-slate-800 dark:text-slate-200 truncate max-w-[120px]">{toTitleCase(item.name)}</td>
+                            <td className="py-2.5 text-right text-slate-500 tabular-nums">{item.count}</td>
+                            <td className="py-2.5 text-right font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">₹{fmt(item.amount)}</td>
+                            <td className="py-2.5 text-right text-slate-400 tabular-nums">{item.lastDate ? item.lastDate.toISOString().split('T')[0] : '—'}</td>
                           </tr>
                         ))}
-                        {displayedVendorPayments.length === 0 && (
-                          <tr><td colSpan={4} className="py-4 text-center text-gray-400">No payment logs found.</td></tr>
-                        )}
                       </tbody>
                     </table>
                   )}
                 </div>
-              </div>
+              </Card>
             </div>
           )}
 
@@ -615,217 +590,105 @@ export function Reports() {
           {activeTab === 'Loan Repayments' && (
             <div className="space-y-6">
               <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
-                <div className="xl:col-span-6 rounded-xl p-5" style={{ background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)' }}>
+                <Card className="xl:col-span-6 p-5">
                   <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-xs font-bold uppercase tracking-wider" style={{ fontFamily: 'var(--font-display)', color: 'var(--color-text-muted)' }}>Financier Loans vs Repayments</h3>
-                    <span className="text-[11px] text-gray-400">Click Legend or Bars to filter details</span>
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100" style={{ fontFamily: 'var(--font-display)' }}>Financier Loans vs Repayments</h3>
+                      <p className="text-xs text-slate-400">Click legend or bars to filter</p>
+                    </div>
                   </div>
                   <ResponsiveContainer width="100%" height={250}>
                     <BarChart data={loanRepaymentsSummary.chartData} barSize={20}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
-                      <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-                      <YAxis tickFormatter={v => `₹${v / 100000}L`} tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-                      <Tooltip formatter={v => `₹${fmt(v)}`} labelFormatter={(label, payload) => payload?.[0]?.payload?.fullName || label} cursor={{ fill: 'transparent' }} contentStyle={{ background: 'var(--color-bg-elevated)', borderColor: 'var(--color-border)', borderRadius: '8px' }} />
-                      <Legend 
-                        verticalAlign="top" 
-                        height={36} 
-                        iconType="circle"
-                        onClick={(e) => setSelectedMetric(prev => prev === e.dataKey ? null : e.dataKey)}
-                        wrapperStyle={{ cursor: 'pointer' }}
-                      />
-                      <Bar 
-                        dataKey="Borrowed" 
-                        fill="var(--color-primary)" 
-                        radius={[3, 3, 0, 0]}
-                      >
-                        {loanRepaymentsSummary.chartData.map((entry, index) => (
-                          <Cell
-                            key={`cell-b-${index}`}
-                            opacity={(!selectedFinancier || selectedFinancier === entry.fullName) && (!selectedMetric || selectedMetric === 'Borrowed') ? 1 : 0.25}
-                            onClick={() => setSelectedFinancier(prev => prev === entry.fullName ? null : entry.fullName)}
-                            style={{ cursor: 'pointer' }}
-                          />
-                        ))}
-                      </Bar>
-                      <Bar 
-                        dataKey="Repaid" 
-                        fill="#3b82f6" 
-                        radius={[3, 3, 0, 0]}
-                      >
-                        {loanRepaymentsSummary.chartData.map((entry, index) => (
-                          <Cell
-                            key={`cell-r-${index}`}
-                            opacity={(!selectedFinancier || selectedFinancier === entry.fullName) && (!selectedMetric || selectedMetric === 'Repaid') ? 1 : 0.25}
-                            onClick={() => setSelectedFinancier(prev => prev === entry.fullName ? null : entry.fullName)}
-                            style={{ cursor: 'pointer' }}
-                          />
-                        ))}
-                      </Bar>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                      <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                      <YAxis tickFormatter={v => `₹${v / 100000}L`} tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                      <Tooltip formatter={v => `₹${fmt(v)}`} cursor={{ fill: 'transparent' }} contentStyle={{ background: '#ffffff', borderColor: '#e2e8f0', borderRadius: '12px' }} />
+                      <Legend verticalAlign="top" height={36} iconType="circle" />
+                      <Bar dataKey="Borrowed" fill="#00C896" radius={[3, 3, 0, 0]} />
+                      <Bar dataKey="Repaid" fill="#3b82f6" radius={[3, 3, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
-                </div>
+                </Card>
 
-                <div className="xl:col-span-6 bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-5 flex flex-col">
+                <Card className="xl:col-span-6 p-5 flex flex-col">
                   <div className="flex justify-between items-center mb-3">
-                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider" style={{ fontFamily: 'var(--font-display)' }}>
-                      {selectedFinancier ? `Itemized Breakdown for ${toTitleCase(selectedFinancier)}` : 'Financier Balances'}
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100" style={{ fontFamily: 'var(--font-display)' }}>
+                      {selectedFinancier ? `Breakdown for ${toTitleCase(selectedFinancier)}` : 'Financier Loan Balances'}
                     </h3>
-                    <div className="flex gap-1">
-                      {selectedFinancier && (
-                        <button onClick={() => setSelectedFinancier(null)} className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 transition-all flex items-center gap-1">
-                          {toTitleCase(selectedFinancier)} <span>✕</span>
-                        </button>
-                      )}
-                      {selectedMetric && (
-                        <button onClick={() => setSelectedMetric(null)} className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 transition-all flex items-center gap-1">
-                          {selectedMetric} <span>✕</span>
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                  <div className="overflow-x-auto flex-1">
-                    {selectedFinancier ? (
-                      <div className="space-y-4">
-                        <div>
-                          <span className="text-[10px] font-bold uppercase tracking-wider block mb-1 text-emerald-500">
-                            Loans ({financierLoansBreakdown.length}):
-                          </span>
-                          <table className="w-full min-w-[440px] table-responsive-clean text-xs">
-                            <thead>
-                              <tr style={{ borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}>
-                                <th className="text-left pb-2 px-2">LOAN NO</th>
-                                <th className="text-right pb-2 px-2">BORROWED</th>
-                                <th className="text-right pb-2 px-2">REPAID</th>
-                                <th className="text-right pb-2 px-2">OUTSTANDING</th>
-                                <th className="text-right pb-2 px-2">STATUS</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-50 dark:divide-slate-700/40">
-                              {financierLoansBreakdown.map((l) => (
-                                <tr key={l._id} onClick={() => setPrintDoc({ type: 'loan', id: l._id })} className="hover:bg-slate-50 dark:hover:bg-slate-800/20 cursor-pointer">
-                                  <td className="py-2 px-2 font-mono text-gray-500 dark:text-gray-300">{l.loanNo || l._id.slice(-6)}</td>
-                                  <td className="py-2 px-2 text-right tabular-nums font-semibold" style={{ color: 'var(--color-text-primary)' }}>₹{fmt(l.principalAmount)}</td>
-                                  <td className="py-2 px-2 text-right tabular-nums text-blue-500 font-semibold">₹{fmt(l.paidPrincipal)}</td>
-                                  <td className="py-2 px-2 text-right tabular-nums font-bold text-orange-500">₹{fmt(l.outstandingPrincipal)}</td>
-                                  <td className="py-2 px-2 text-right">
-                                    <Badge variant={l.status === 'SETTLED' ? 'success' : 'warning'}>
-                                      {l.status || 'ACTIVE'}
-                                    </Badge>
-                                  </td>
-                                </tr>
-                              ))}
-                              {financierLoansBreakdown.length === 0 && (
-                                <tr><td colSpan={5} className="py-3 text-center text-gray-400">No active loans found.</td></tr>
-                              )}
-                            </tbody>
-                          </table>
-                        </div>
-
-                        {financierRepaymentsBreakdown.length > 0 && (
-                          <div className="pt-3 border-t border-gray-100 dark:border-slate-700">
-                            <span className="text-[10px] font-bold uppercase tracking-wider block mb-1 text-blue-400">
-                              Recent Repayments ({financierRepaymentsBreakdown.length}):
-                            </span>
-                            <table className="w-full min-w-[380px] table-responsive-clean text-xs">
-                              <thead>
-                                <tr style={{ borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}>
-                                  <th className="text-left pb-2 px-2">DATE</th>
-                                  <th className="text-left pb-2 px-2">REF #</th>
-                                  <th className="text-right pb-2 px-2">REPAID</th>
-                                  <th className="text-right pb-2 px-2">MODE</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-gray-50 dark:divide-slate-700/40">
-                                {financierRepaymentsBreakdown.map((r) => (
-                                  <tr key={r._id} onClick={() => setPrintDoc({ type: 'repayment', id: r._id })} className="hover:bg-slate-50 dark:hover:bg-slate-800/20 cursor-pointer">
-                                    <td className="py-1.5 px-2 text-gray-400">{r.repaymentDate ? r.repaymentDate.split('T')[0] : '—'}</td>
-                                    <td className="py-1.5 px-2 font-mono text-gray-400">{r.referenceNumber || r.repaymentNo || r._id.slice(-6)}</td>
-                                    <td className="py-1.5 px-2 text-right font-bold text-green-500 tabular-nums">₹{fmt(r.amount)}</td>
-                                    <td className="py-1.5 px-2 text-right text-gray-400">{r.repaymentMode || 'NEFT'}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <table className="w-full min-w-[480px] table-responsive-clean text-xs">
-                        <thead>
-                          <tr style={{ borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}>
-                            <th className="text-left pb-2 px-2">FINANCIER</th>
-                            <th className="text-right pb-2 px-2">LOANS</th>
-                            <th className={`text-right pb-2 px-2 ${selectedMetric === 'Borrowed' ? 'text-emerald-500 font-bold' : ''}`}>BORROWED</th>
-                            <th className={`text-right pb-2 px-2 ${selectedMetric === 'Repaid' ? 'text-blue-500 font-bold' : ''}`}>REPAID</th>
-                            <th className="text-right pb-2 px-2">BALANCE</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-50 dark:divide-slate-700/40">
-                          {displayedLoanRepayments.map((item, idx) => (
-                            <tr 
-                              key={item.name || idx} 
-                              onClick={() => setSelectedFinancier(item.name)}
-                              style={{ cursor: 'pointer' }}
-                              className={`hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-all ${selectedFinancier === item.name ? 'bg-emerald-500/10 font-semibold' : ''}`}
-                            >
-                              <td style={{ color: 'var(--color-text-primary)' }} className="py-2.5 px-2 font-semibold text-emerald-500 max-w-[140px] truncate">{toTitleCase(item.name)}</td>
-                              <td className="py-2.5 px-2 text-right tabular-nums text-gray-500">{item.count}</td>
-                              <td className={`py-2.5 px-2 text-right tabular-nums ${selectedMetric === 'Borrowed' ? 'font-bold text-emerald-500' : ''}`} style={{ color: 'var(--color-text-primary)' }}>₹{fmt(item.borrowed)}</td>
-                              <td className={`py-2.5 px-2 text-right tabular-nums text-blue-600 ${selectedMetric === 'Repaid' ? 'font-bold text-blue-500' : ''}`}>₹{fmt(item.repaid)}</td>
-                              <td className="py-2.5 px-2 text-right font-bold tabular-nums text-orange-500">₹{fmt(item.outstanding)}</td>
-                            </tr>
-                          ))}
-                          {displayedLoanRepayments.length === 0 && (
-                            <tr><td colSpan={5} className="py-4 text-center text-gray-400">No loan records.</td></tr>
-                          )}
-                        </tbody>
-                      </table>
+                    {selectedFinancier && (
+                      <button onClick={() => setSelectedFinancier(null)} className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-all flex items-center gap-1">
+                        {toTitleCase(selectedFinancier)} <span>✕</span>
+                      </button>
                     )}
                   </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2 rounded-xl p-5" style={{ background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)' }}>
-                  <h3 className="text-xs font-bold uppercase tracking-wider mb-4" style={{ fontFamily: 'var(--font-display)', color: 'var(--color-text-muted)' }}>Amortized Interest Split Trend</h3>
-                  <ResponsiveContainer width="100%" height={250}>
-                    <BarChart data={filteredInterestSummary} barSize={20}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
-                      <XAxis dataKey="month" tick={{ fontSize: 9, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-                      <YAxis tickFormatter={v => `₹${v / 1000}k`} tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-                      <Tooltip formatter={v => `₹${fmt(v)}`} labelFormatter={(label, payload) => payload?.[0]?.payload?.fullName || label} cursor={{ fill: 'transparent' }} contentStyle={{ background: 'var(--color-bg-elevated)', borderColor: 'var(--color-border)', borderRadius: '8px' }} />
-                      <Legend verticalAlign="top" height={36} iconType="circle" />
-                      <Bar dataKey="principal" name="Principal Allocation" fill="var(--color-primary)" stackId="a" radius={[0, 0, 0, 0]} />
-                      <Bar dataKey="interest" name="Interest Accrued" fill="#ef4444" stackId="a" radius={[3, 3, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-
-                <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-5 flex flex-col">
-                  <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4" style={{ fontFamily: 'var(--font-display)' }}>Monthly Interest Accruals</h3>
                   <div className="overflow-x-auto flex-1">
-                    <table className="w-full min-w-[420px] table-responsive-clean text-xs">
-                      <thead>
-                        <tr style={{ borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}>
-                          <th className="text-left pb-2 px-2">MONTH</th>
-                          <th className="text-right pb-2 px-2">PRINCIPAL</th>
-                          <th className="text-right pb-2 px-2">INTEREST</th>
-                          <th className="text-right pb-2 px-2">CUMULATIVE</th>
+                    <table className="w-full text-left text-xs">
+                      <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100 dark:border-slate-700">
+                        <tr>
+                          <th className="pb-2">Financier</th>
+                          <th className="pb-2 text-right">Loans</th>
+                          <th className="pb-2 text-right">Borrowed</th>
+                          <th className="pb-2 text-right">Repaid</th>
+                          <th className="pb-2 text-right">Outstanding</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-gray-50 dark:divide-slate-700/40">
-                        {filteredInterestSummary.map((item, idx) => (
-                          <tr key={item.month || idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/20">
-                            <td className="py-2.5 px-2 font-mono" style={{ color: 'var(--color-text-primary)' }}>{item.month}</td>
-                            <td className="py-2.5 px-2 text-right tabular-nums" style={{ color: 'var(--color-text-secondary)' }}>₹{fmt(item.principal)}</td>
-                            <td className="py-2.5 px-2 text-right tabular-nums text-red-500 font-semibold">₹{fmt(item.interest)}</td>
-                            <td className="py-2.5 px-2 text-right tabular-nums font-semibold" style={{ color: 'var(--color-text-primary)' }}>₹{fmt(item.principal + item.interest)}</td>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
+                        {displayedLoanRepayments.map((item, idx) => (
+                          <tr key={item.name || idx} onClick={() => setSelectedFinancier(item.name)} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 cursor-pointer">
+                            <td className="py-2.5 font-semibold text-slate-800 dark:text-slate-200">{toTitleCase(item.name)}</td>
+                            <td className="py-2.5 text-right text-slate-500 tabular-nums">{item.count}</td>
+                            <td className="py-2.5 text-right font-medium text-slate-900 dark:text-slate-100 tabular-nums">₹{fmt(item.borrowed)}</td>
+                            <td className="py-2.5 text-right font-medium text-blue-600 dark:text-blue-400 tabular-nums">₹{fmt(item.repaid)}</td>
+                            <td className="py-2.5 text-right font-bold text-rose-600 dark:text-rose-400 tabular-nums">₹{fmt(item.outstanding)}</td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
-                </div>
+                </Card>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <Card className="lg:col-span-2 p-5">
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 mb-4" style={{ fontFamily: 'var(--font-display)' }}>Amortized Interest Split Trend</h3>
+                  <ResponsiveContainer width="100%" height={250}>
+                    <BarChart data={filteredInterestSummary} barSize={20}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                      <XAxis dataKey="month" tick={{ fontSize: 9, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                      <YAxis tickFormatter={v => `₹${v / 1000}k`} tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                      <Tooltip formatter={v => `₹${fmt(v)}`} cursor={{ fill: 'transparent' }} contentStyle={{ background: '#ffffff', borderColor: '#e2e8f0', borderRadius: '12px' }} />
+                      <Legend verticalAlign="top" height={36} iconType="circle" />
+                      <Bar dataKey="principal" name="Principal Allocation" fill="#00C896" stackId="a" />
+                      <Bar dataKey="interest" name="Interest Accrued" fill="#ef4444" stackId="a" radius={[3, 3, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </Card>
+
+                <Card className="p-5 flex flex-col">
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 mb-4" style={{ fontFamily: 'var(--font-display)' }}>Monthly Interest Accruals</h3>
+                  <div className="overflow-x-auto flex-1">
+                    <table className="w-full text-left text-xs">
+                      <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100 dark:border-slate-700">
+                        <tr>
+                          <th className="pb-2">Month</th>
+                          <th className="pb-2 text-right">Principal</th>
+                          <th className="pb-2 text-right">Interest</th>
+                          <th className="pb-2 text-right">Cumulative</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
+                        {filteredInterestSummary.map((item, idx) => (
+                          <tr key={item.month || idx}>
+                            <td className="py-2.5 font-mono text-slate-500">{item.month}</td>
+                            <td className="py-2.5 text-right text-slate-700 dark:text-slate-300 tabular-nums">₹{fmt(item.principal)}</td>
+                            <td className="py-2.5 text-right text-rose-600 font-semibold tabular-nums">₹{fmt(item.interest)}</td>
+                            <td className="py-2.5 text-right font-bold text-slate-900 dark:text-slate-100 tabular-nums">₹{fmt(item.principal + item.interest)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </Card>
               </div>
             </div>
           )}
@@ -833,26 +696,27 @@ export function Reports() {
           {/* TAB 4: Cheque Status */}
           {activeTab === 'Cheque Status' && (
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
-              <div className="xl:col-span-7 bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-5">
+              <Card className="xl:col-span-7 p-5">
                 <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider" style={{ fontFamily: 'var(--font-display)' }}>Cheque Value distribution</h3>
-                  <span className="text-[11px] text-gray-400">Click a bar to filter status details</span>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100" style={{ fontFamily: 'var(--font-display)' }}>Cheque Value Distribution</h3>
+                    <p className="text-xs text-slate-400">Click a bar to filter status details</p>
+                  </div>
                 </div>
                 <ResponsiveContainer width="100%" height={260}>
                   <BarChart data={chequeStatusData.chartData} barSize={38}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
-                    <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-                    <YAxis tickFormatter={v => `₹${v / 100000}L`} tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-                    <Tooltip formatter={v => `₹${fmt(v)}`} cursor={{ fill: 'transparent' }} contentStyle={{ background: 'var(--color-bg-elevated)', borderColor: 'var(--color-border)', borderRadius: '8px' }} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                    <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                    <YAxis tickFormatter={v => `₹${v / 100000}L`} tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                    <Tooltip formatter={v => `₹${fmt(v)}`} cursor={{ fill: 'transparent' }} contentStyle={{ background: '#ffffff', borderColor: '#e2e8f0', borderRadius: '12px' }} />
                     <Bar dataKey="Amount" radius={[4, 4, 0, 0]}>
                       {chequeStatusData.chartData.map((entry, index) => {
-                        const colors = ['#f5a623', '#22c55e', '#ef4444']
-                        const isSelected = selectedChequeStatus === entry.name
+                        const colors = ['#f59e0b', '#10b981', '#ef4444']
                         return (
                           <Cell 
                             key={`cell-${index}`} 
                             fill={colors[index % colors.length]} 
-                            opacity={!selectedChequeStatus || isSelected ? 1 : 0.3}
+                            opacity={!selectedChequeStatus || selectedChequeStatus === entry.name ? 1 : 0.3}
                             onClick={() => setSelectedChequeStatus(prev => prev === entry.name ? null : entry.name)}
                             style={{ cursor: 'pointer' }}
                           />
@@ -861,51 +725,53 @@ export function Reports() {
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
-              </div>
+              </Card>
 
-              <div className="xl:col-span-5 rounded-xl border p-5 flex flex-col" style={{ background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)' }}>
+              <Card className="xl:col-span-5 p-5 flex flex-col">
                 <div className="flex justify-between items-center mb-3">
-                  <h3 className="text-xs font-bold uppercase tracking-wider" style={{ fontFamily: 'var(--font-display)', color: 'var(--color-text-muted)' }}>Cheque Metrics</h3>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100" style={{ fontFamily: 'var(--font-display)' }}>Cheque Metrics</h3>
                   {selectedChequeStatus && (
-                    <button onClick={() => setSelectedChequeStatus(null)} className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-500/10 text-amber-500 hover:bg-amber-500/20 transition-all flex items-center gap-1">
+                    <button onClick={() => setSelectedChequeStatus(null)} className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-50 text-amber-600 hover:bg-amber-100 transition-all flex items-center gap-1">
                       {selectedChequeStatus} <span>✕</span>
                     </button>
                   )}
                 </div>
                 <div className="overflow-x-auto flex-1">
-                  <table className="w-full min-w-[360px] table-responsive-clean text-xs">
-                    <thead>
-                      <tr style={{ borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}>
-                        <th className="text-left pb-2 px-2">STATUS</th>
-                        <th className="text-right pb-2 px-2">COUNT</th>
-                        <th className="text-right pb-2 px-2">TOTAL VALUE</th>
+                  <table className="w-full text-left text-xs">
+                    <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100 dark:border-slate-700">
+                      <tr>
+                        <th className="pb-2">Status</th>
+                        <th className="pb-2 text-right">Count</th>
+                        <th className="pb-2 text-right">Total Value</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-50 dark:divide-slate-700/40">
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
                       {displayedChequeStatus.map((item, idx) => (
-                        <tr key={item.name || idx} className={`hover:bg-slate-50 dark:hover:bg-slate-800/20 ${selectedChequeStatus === item.name ? 'bg-amber-500/10 font-bold' : ''}`}>
-                          <td className="py-2.5 px-2 font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-                            <span className={`inline-block w-2 h-2 rounded-full mr-2 ${item.name === 'Cleared' ? 'bg-green-500' : item.name === 'Pending' ? 'bg-yellow-500' : 'bg-red-500'}`}></span>
+                        <tr key={item.name || idx}>
+                          <td className="py-2.5 font-semibold text-slate-800 dark:text-slate-200">
+                            <span className={`inline-block w-2 h-2 rounded-full mr-2 ${item.name === 'Cleared' ? 'bg-emerald-500' : item.name === 'Pending' ? 'bg-amber-500' : 'bg-rose-500'}`}></span>
                             {item.name}
                           </td>
-                          <td className="py-2.5 px-2 text-right tabular-nums text-gray-500">{item.count}</td>
-                          <td className="py-2.5 px-2 text-right tabular-nums font-bold" style={{ color: 'var(--color-text-primary)' }}>₹{fmt(item.amount)}</td>
+                          <td className="py-2.5 text-right text-slate-500 tabular-nums">{item.count}</td>
+                          <td className="py-2.5 text-right font-bold text-slate-900 dark:text-slate-100 tabular-nums">₹{fmt(item.amount)}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
-              </div>
+              </Card>
             </div>
           )}
 
           {/* TAB 5: Monthly Transactions */}
           {activeTab === 'Monthly Transactions' && (
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
-              <div className="xl:col-span-7 bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-5">
+              <Card className="xl:col-span-7 p-5">
                 <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider" style={{ fontFamily: 'var(--font-display)' }}>Cash Flows (Inflow vs Outflow)</h3>
-                  <span className="text-[11px] text-gray-400">Click graph point to filter month</span>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100" style={{ fontFamily: 'var(--font-display)' }}>Cash Flows (Inflow vs Outflow)</h3>
+                    <p className="text-xs text-slate-400">Click points to inspect monthly totals</p>
+                  </div>
                 </div>
                 <ResponsiveContainer width="100%" height={260}>
                   <AreaChart 
@@ -915,69 +781,67 @@ export function Reports() {
                   >
                     <defs>
                       <linearGradient id="colorInflow" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="var(--color-primary)" stopOpacity={0.4}/>
-                        <stop offset="95%" stopColor="var(--color-primary)" stopOpacity={0}/>
+                        <stop offset="5%" stopColor="#00C896" stopOpacity={0.4}/>
+                        <stop offset="95%" stopColor="#00C896" stopOpacity={0}/>
                       </linearGradient>
                       <linearGradient id="colorOutflow" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.4}/>
                         <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
-                    <XAxis dataKey="Month" tick={{ fontSize: 9, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-                    <YAxis tickFormatter={v => `₹${v / 100000}L`} tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-                    <Tooltip formatter={v => `₹${fmt(v)}`} cursor={{ fill: 'transparent' }} contentStyle={{ background: 'var(--color-bg-elevated)', borderColor: 'var(--color-border)', borderRadius: '8px' }} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                    <XAxis dataKey="Month" tick={{ fontSize: 9, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                    <YAxis tickFormatter={v => `₹${v / 100000}L`} tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                    <Tooltip formatter={v => `₹${fmt(v)}`} cursor={{ fill: 'transparent' }} contentStyle={{ background: '#ffffff', borderColor: '#e2e8f0', borderRadius: '12px' }} />
                     <Legend verticalAlign="top" height={36} iconType="circle" />
-                    <Area type="monotone" dataKey="Inflow" name="Inflow (Debits Added)" stroke="var(--color-primary)" fillOpacity={1} fill="url(#colorInflow)" strokeWidth={2} />
+                    <Area type="monotone" dataKey="Inflow" name="Inflow (Debits Added)" stroke="#00C896" fillOpacity={1} fill="url(#colorInflow)" strokeWidth={2} />
                     <Area type="monotone" dataKey="Outflow" name="Outflow (Payments)" stroke="#3b82f6" fillOpacity={1} fill="url(#colorOutflow)" strokeWidth={2} />
                   </AreaChart>
                 </ResponsiveContainer>
-              </div>
+              </Card>
 
-              <div className="xl:col-span-5 rounded-xl border p-5 flex flex-col" style={{ background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)' }}>
+              <Card className="xl:col-span-5 p-5 flex flex-col">
                 <div className="flex justify-between items-center mb-3">
-                  <h3 className="text-xs font-bold uppercase tracking-wider" style={{ fontFamily: 'var(--font-display)', color: 'var(--color-text-muted)' }}>Flow Summary</h3>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100" style={{ fontFamily: 'var(--font-display)' }}>Flow Summary</h3>
                   {selectedMonth && (
-                    <button onClick={() => setSelectedMonth(null)} className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 transition-all flex items-center gap-1">
+                    <button onClick={() => setSelectedMonth(null)} className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-50 text-blue-600 hover:bg-blue-100 transition-all flex items-center gap-1">
                       {selectedMonth} <span>✕</span>
                     </button>
                   )}
                 </div>
                 <div className="overflow-x-auto flex-1">
-                  <table className="w-full min-w-[420px] table-responsive-clean text-xs">
-                    <thead>
-                      <tr style={{ borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}>
-                        <th className="text-left pb-2 px-2">MONTH</th>
-                        <th className="text-right pb-2 px-2">INFLOW</th>
-                        <th className="text-right pb-2 px-2">OUTFLOW</th>
-                        <th className="text-right pb-2 px-2">NET FLOW</th>
+                  <table className="w-full text-left text-xs">
+                    <thead className="text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100 dark:border-slate-700">
+                      <tr>
+                        <th className="pb-2">Month</th>
+                        <th className="pb-2 text-right">Inflow</th>
+                        <th className="pb-2 text-right">Outflow</th>
+                        <th className="pb-2 text-right">Net Flow</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-50 dark:divide-slate-700/40">
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
                       {displayedMonthlyTransactions.map((item, idx) => {
                         const net = item.debit - item.credit
                         return (
-                          <tr key={item.month || idx} className={`hover:bg-slate-50 dark:hover:bg-slate-800/20 ${selectedMonth === item.month ? 'bg-blue-500/10 font-bold' : ''}`}>
-                            <td className="py-2.5 px-2 font-mono" style={{ color: 'var(--color-text-primary)' }}>{item.month}</td>
-                            <td className="py-2.5 px-2 text-right tabular-nums" style={{ color: 'var(--color-text-secondary)' }}>₹{fmt(item.debit)}</td>
-                            <td className="py-2.5 px-2 text-right tabular-nums" style={{ color: 'var(--color-text-secondary)' }}>₹{fmt(item.credit)}</td>
-                            <td className={`py-2.5 px-2 text-right font-bold tabular-nums ${net >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-500'}`}>
+                          <tr key={item.month || idx}>
+                            <td className="py-2.5 font-mono text-slate-500">{item.month}</td>
+                            <td className="py-2.5 text-right text-slate-700 dark:text-slate-300 tabular-nums">₹{fmt(item.debit)}</td>
+                            <td className="py-2.5 text-right text-slate-700 dark:text-slate-300 tabular-nums">₹{fmt(item.credit)}</td>
+                            <td className={`py-2.5 text-right font-bold tabular-nums ${net >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                               {net >= 0 ? '+' : ''}₹{fmt(net)}
                             </td>
                           </tr>
                         )
                       })}
-                      {displayedMonthlyTransactions.length === 0 && (
-                        <tr><td colSpan={4} className="py-4 text-center text-gray-400">No transactions recorded.</td></tr>
-                      )}
                     </tbody>
                   </table>
                 </div>
-              </div>
+              </Card>
             </div>
           )}
         </div>
       )}
+
       {printDoc && (
         <PrintPreviewModal
           type={printDoc.type}

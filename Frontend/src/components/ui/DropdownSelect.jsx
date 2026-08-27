@@ -91,30 +91,26 @@ export function DropdownSelect({
   const isButtonDisabled = !hasOptions && !onAction
 
   const isSmall = size === 'sm'
-  const paddingClasses = isSmall ? 'px-2 py-1 text-xs' : 'px-3 py-2 text-sm'
+  const paddingClasses = isSmall ? 'h-8 px-2.5 text-xs' : 'h-10 px-3 text-sm'
 
   return (
-    <div className="inline-flex items-center space-x-2 flex-wrap gap-y-1">
-      <div className={`relative ${className}`} ref={containerRef}>
+    <div className="inline-flex items-center space-x-2 flex-wrap gap-y-1 w-full">
+      <div className={`relative w-full ${className}`} ref={containerRef}>
         <button
           type="button"
           disabled={isButtonDisabled}
           onClick={() => setIsOpen(!isOpen)}
-          className={`w-full flex items-center justify-between ${paddingClasses} rounded-lg transition-all focus:outline-none animate-all`}
+          className={`w-full flex items-center justify-between ${paddingClasses} rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 hover:border-slate-300 dark:hover:border-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all font-medium`}
           style={{
-            background: 'var(--color-bg-elevated)',
-            border: `1px solid var(--color-border)`,
             color: selectedOption ? 'var(--color-text-primary)' : 'var(--color-text-muted)',
             opacity: isButtonDisabled ? 0.5 : 1,
             cursor: isButtonDisabled ? 'not-allowed' : 'pointer',
           }}
-          onFocus={e => { if (!isButtonDisabled) e.currentTarget.style.borderColor = 'var(--color-primary)' }}
-          onBlur={e => { if (!isButtonDisabled) e.currentTarget.style.borderColor = 'var(--color-border)' }}
         >
-          <span className="truncate font-medium whitespace-nowrap mr-1">
+          <span className="truncate font-medium whitespace-nowrap mr-1 text-left flex-1">
             {selectedOption ? selectedOption.label : btnPlaceholder}
           </span>
-          <ChevronDown size={isSmall ? 14 : 16} className="shrink-0 ml-1" style={{ color: 'var(--color-text-muted)' }} />
+          <ChevronDown size={isSmall ? 14 : 16} className="shrink-0 ml-1 text-slate-400" />
         </button>
 
         {isOpen && (hasOptions || onAction) && createPortal(

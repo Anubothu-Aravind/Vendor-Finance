@@ -42,6 +42,10 @@ const InvoiceTemplateSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  swapRecipientSupplier: {
+    type: Boolean,
+    default: false
+  },
   showSignatory: {
     type: Boolean,
     default: true

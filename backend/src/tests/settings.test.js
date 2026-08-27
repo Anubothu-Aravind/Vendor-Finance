@@ -8,12 +8,23 @@ test('Settings unit tests', async (t) => {
       showHsn: false,
       showQty: false,
       showTaxTable: false,
+      swapRecipientSupplier: false,
       borderStyle: 'minimal',
       declarationText: 'We declare that this invoice shows the actual price...'
     }
     assert.equal(templateSettings.borderStyle, 'minimal')
     assert.equal(templateSettings.showQr, true)
+    assert.equal(templateSettings.swapRecipientSupplier, false)
     assert.equal(typeof templateSettings.declarationText, 'string')
+  })
+
+  await t.test('swapRecipientSupplier handles existing legacy templates without property', () => {
+    const legacyTemplate = {
+      showQr: true,
+      showHsn: false
+    }
+    const resolvedSwap = legacyTemplate.swapRecipientSupplier ?? false
+    assert.equal(resolvedSwap, false)
   })
 
   await t.test('logo upload validation - size limit 2MB', () => {

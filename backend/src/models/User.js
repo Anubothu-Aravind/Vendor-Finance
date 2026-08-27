@@ -21,7 +21,7 @@ const UserSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['Admin', 'Viewer'],
+    enum: ['Admin', 'Viewer', 'Accountant', 'Full-time Staff', 'Part-time Staff', 'Hour-based User'],
     default: 'Viewer',
     required: true
   },
@@ -34,6 +34,10 @@ const UserSchema = new mongoose.Schema({
   isDefaultCredential: {
     type: Boolean,
     default: false
+  },
+  permissions: {
+    type: mongoose.Schema.Types.Mixed,
+    default: undefined
   }
 }, {
   timestamps: true

@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useReducer, useCallback } from 'react'
-import { Plus, Search, Trash2, Edit2, Eye, X } from 'lucide-react'
+import { Plus, Search, Trash2, Edit2, Eye, X, Printer, CreditCard, DollarSign, ArrowUpRight } from 'lucide-react'
 import PrintPreviewModal, { formatPaymentMode } from '../components/PrintPreviewModal'
 import { toInputDate, fromInputDate, getTodayFormatted } from '../utils/date'
 import DropdownSelect from '../components/ui/DropdownSelect'
@@ -8,6 +8,9 @@ import { toTitleCase } from '../utils/text'
 import EmptyState from '../components/ui/EmptyState'
 import Badge from '../components/ui/Badge'
 import Button from '../components/ui/Button'
+import PageHeader from '../components/ui/PageHeader'
+import { Card, KpiCard } from '../components/ui/Card'
+import FilterToolbar from '../components/ui/FilterToolbar'
 import api from '../utils/api'
 import { useToast } from '../hooks/useToast'
 import { useConfirm } from '../hooks/useConfirm'
@@ -21,19 +24,25 @@ import { usePagination } from '../hooks/usePagination'
 import Pagination from '../components/ui/Pagination'
 
 const initials = (name) => name.split(' ').slice(0,2).map(w => w[0]).join('').toUpperCase()
-const colors = ['bg-blue-100 text-blue-700', 'bg-yellow-100 text-yellow-700', 'bg-purple-100 text-purple-700',
-  'bg-teal-100 text-teal-700', 'bg-green-100 text-green-700', 'bg-red-100 text-red-700']
-
-const modeStyle = {
-  Cash: 'bg-green-50 text-green-700 border-green-200',
-  Cheque: 'bg-orange-50 text-orange-700 border-orange-200',
-  NEFT: 'bg-blue-50 text-blue-700 border-blue-200',
-  RTGS: 'bg-teal-50 text-teal-700 border-teal-200',
-}
+const avatarColors = [
+  'bg-emerald-50 text-emerald-700 border-emerald-200',
+  'bg-blue-50 text-blue-700 border-blue-200',
+  'bg-purple-50 text-purple-700 border-purple-200',
+  'bg-amber-50 text-amber-700 border-amber-200',
+  'bg-slate-100 text-slate-700 border-slate-200'
+]
 
 const fmt = (v) => new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(v)
 
-// ── Fetch state reducer (defined at module scope for stable reference) ────────
+const getModeBadgeVariant = (mode) => {
+  const m = String(mode).toLowerCase()
+  if (m.includes('cash')) return 'success'
+  if (m.includes('cheque')) return 'warning'
+  if (m.includes('neft') || m.includes('rtgs') || m.includes('bank') || m.includes('upi')) return 'info'
+  return 'neutral'
+}
+
+// ── Fetch state reducer ───────────────────────────────────────────────────────
 const fetchInitial = { status: 'idle', payments: [], vendors: [], bills: [], paymentModes: [], error: null }
 function fetchReducer(state, action) {
   switch (action.type) {
@@ -48,12 +57,12 @@ export function VendorPayments() {
   const toast = useToast()
   const confirm = useConfirm()
 
-  // ── Fetch state: consolidated into one reducer to avoid impossible states ──
   const [fetchState, fetchDispatch] = useReducer(fetchReducer, fetchInitial)
   const { payments, vendors, bills, paymentModes, status: fetchStatus, error } = fetchState
   const loading = fetchStatus === 'idle' || fetchStatus === 'loading'
 
   const [search, setSearch] = useState('')
+  const [modeFilter, setModeFilter] = useState('ALL')
   const [showModal, setShowModal] = useState(false)
   const [modalMode, setModalMode] = useState('add') // 'add' | 'edit' | 'preview'
   const [selectedPay, setSelectedPay] = useState(null)
@@ -63,7 +72,7 @@ export function VendorPayments() {
     vendor: '',
     date: getTodayFormatted(),
     amount: '',
-    mode: '',
+    mode: 'Bank Transfer',
     remarks: ''
   }
   const [form, setForm] = useState(emptyForm)
@@ -97,8 +106,6 @@ export function VendorPayments() {
     onDiscard: () => setForm(emptyForm)
   })
 
-  // ── Fetch payments, vendors, bills, profile ───────────────────────────────
-  // Wrapped in useCallback so the reference is stable across renders.
   const fetchPaymentsData = useCallback(async (signal) => {
     fetchDispatch({ type: 'FETCH_START' })
     try {
@@ -283,6 +290,7 @@ export function VendorPayments() {
       try {
         await api.delete(`/payments/${id}`)
         await fetchPaymentsData()
+        toast('Payment deleted successfully', 'success')
       } catch (err) {
         toast(err.message || 'Failed to delete payment', 'error')
       }
@@ -313,157 +321,216 @@ export function VendorPayments() {
 
   const tableContainerRef = React.useRef(null)
 
-  const filtered = payments.filter(p =>
-    (p.vendor || '').toLowerCase().includes(search.toLowerCase()) ||
-    (p.remarks || '').toLowerCase().includes(search.toLowerCase()) ||
-    (p.mode || '').toLowerCase().includes(search.toLowerCase())
-  )
+  const filtered = useMemo(() => {
+    return payments.filter(p => {
+      const matchSearch =
+        (p.vendor || '').toLowerCase().includes(search.toLowerCase()) ||
+        (p.remarks || '').toLowerCase().includes(search.toLowerCase()) ||
+        (p.ref || '').toLowerCase().includes(search.toLowerCase())
+      const matchMode =
+        modeFilter === 'ALL' ||
+        p.mode.toLowerCase().includes(modeFilter.toLowerCase())
+      return matchSearch && matchMode
+    })
+  }, [payments, search, modeFilter])
 
   const pagination = usePagination({
     items: filtered,
     moduleKey: 'vendor_payments',
     initialPageSize: 20,
-    filterDependencies: [search],
+    filterDependencies: [search, modeFilter],
     containerRef: tableContainerRef
   })
 
+  const totalPaid = useMemo(() => payments.reduce((s, p) => s + (p.amount || 0), 0), [payments])
+  const uniqueVendors = useMemo(() => new Set(payments.map(p => p.vendor)).size, [payments])
+
   return (
-    <>
-      <div className="space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Vendor Payments</h1>
-          <p className="text-sm text-gray-400 mt-0.5">{payments.length} transactions recorded</p>
-        </div>
-        <button onClick={handleOpenAdd} className="flex items-center space-x-1.5 bg-brand-primary text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-primary/95 transition-all shadow-sm">
-          <Plus size={16} />
+    <div className="space-y-6 max-w-[1600px] mx-auto">
+      {/* Page Header */}
+      <PageHeader
+        title="Vendor Payments"
+        description="Track, reconcile, and allocate disbursements made to registered suppliers"
+        breadcrumbs={[{ label: 'Vendor Payments' }]}
+      >
+        <Button onClick={handleOpenAdd} className="shadow-sm">
+          <Plus className="w-4 h-4" />
           <span>Record Payment</span>
-        </button>
+        </Button>
+      </PageHeader>
+
+      {/* KPI Stats */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+        <KpiCard
+          title="Total Paid Out"
+          value={loading ? <Skeleton className="h-8 w-32" /> : `₹${fmt(totalPaid)}`}
+          subtitle="Total settled disbursements"
+          icon={DollarSign}
+          iconColor="text-emerald-600 dark:text-emerald-400"
+          iconBg="bg-emerald-50 dark:bg-emerald-950/40 border-emerald-100 dark:border-emerald-900/40"
+        />
+        <KpiCard
+          title="Payment Transactions"
+          value={loading ? <Skeleton className="h-8 w-16" /> : String(payments.length)}
+          subtitle="Processed payment vouchers"
+          icon={CreditCard}
+          iconColor="text-slate-600 dark:text-slate-300"
+          iconBg="bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700"
+        />
+        <KpiCard
+          title="Vendors Paid"
+          value={loading ? <Skeleton className="h-8 w-16" /> : String(uniqueVendors)}
+          subtitle="Recipients served"
+          icon={ArrowUpRight}
+          iconColor="text-blue-600 dark:text-blue-400"
+          iconBg="bg-blue-50 dark:bg-blue-950/40 border-blue-100 dark:border-blue-900/40"
+        />
       </div>
 
-      {/* Table Card */}
-      <div className="bg-white rounded-xl border border-gray-200">
-        <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
-          <div className="relative w-64">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input type="text" placeholder="Search payments..." value={search} onChange={e => setSearch(e.target.value)}
-              className="w-full pl-9 pr-8 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary" />
-            {search && (
-              <button
-                type="button"
-                onClick={() => setSearch('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors p-0.5"
-                title="Clear search"
-              >
-                <X size={14} />
-              </button>
-            )}
-          </div>
+      {/* Filter Toolbar */}
+      <FilterToolbar
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search by vendor, reference #, remarks..."
+        isFiltered={search !== '' || modeFilter !== 'ALL'}
+        onReset={() => { setSearch(''); setModeFilter('ALL') }}
+      >
+        <div className="w-48">
+          <DropdownSelect
+            value={modeFilter}
+            onChange={setModeFilter}
+            options={[
+              { value: 'ALL', label: 'All Payment Modes' },
+              { value: 'Bank Transfer', label: 'Bank Transfer' },
+              { value: 'Cheque', label: 'Cheque' },
+              { value: 'Cash', label: 'Cash' },
+              { value: 'NEFT', label: 'NEFT / RTGS' },
+              { value: 'UPI', label: 'UPI' }
+            ]}
+          />
         </div>
+      </FilterToolbar>
 
+      {/* Table Card */}
+      <Card className="overflow-hidden">
         {error ? (
-          <div className="p-6">
+          <div className="p-8">
             <EmptyState icon="search" title="Error Loading Payments" description={error} />
           </div>
         ) : loading ? (
           <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider border-b border-gray-100">
-                  <th className="text-left px-5 py-3">REF #</th>
-                  <th className="text-left px-5 py-3">VENDOR</th>
-                  <th className="text-left px-5 py-3">PAYMENT DATE</th>
-                  <th className="text-right px-5 py-3">AMOUNT PAID</th>
-                  <th className="text-left px-5 py-3">MODE</th>
-                  <th className="text-left px-5 py-3">REMARKS</th>
-                  <th className="px-5 py-3"></th>
+            <table className="w-full text-left text-sm">
+              <thead className="bg-slate-50/90 dark:bg-slate-800/60 border-b border-slate-200/80 dark:border-slate-700 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                <tr>
+                  <th className="px-6 py-3.5">Ref #</th>
+                  <th className="px-6 py-3.5">Vendor</th>
+                  <th className="px-6 py-3.5">Payment Date</th>
+                  <th className="px-6 py-3.5 text-right">Amount Paid</th>
+                  <th className="px-6 py-3.5">Mode</th>
+                  <th className="px-6 py-3.5">Remarks</th>
+                  <th className="px-6 py-3.5 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
                 {Array.from({ length: 5 }).map((_, idx) => (
-                  <SkeletonTableRow key={idx} cols={7} widths={["w-16", "w-32", "w-24", "w-16", "w-16", "w-36", "w-8"]} />
+                  <SkeletonTableRow key={idx} cols={7} widths={["w-24", "w-36", "w-24", "w-20", "w-20", "w-40", "w-20"]} />
                 ))}
               </tbody>
             </table>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="p-6">
+          <div className="p-8">
             {payments.length === 0 ? (
               <EmptyState 
                 icon="wallet" 
                 title="No Payments Recorded" 
-                description="Record a payment against a vendor bill to see it here" 
+                description="Record your first vendor payment to settle outstanding bills." 
                 action={{ label: "Record Payment", onClick: handleOpenAdd }} 
               />
             ) : (
               <EmptyState 
                 icon="search" 
-                title="No Payments Match" 
-                description="Try adjusting your filters" 
+                title="No Matching Payments" 
+                description="No payments match your search filters. Try clearing filters." 
               />
             )}
           </div>
         ) : (
           <>
             <div ref={tableContainerRef} className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider border-b border-gray-100">
-                    <th className="text-left px-5 py-3">REF #</th>
-                    <th className="text-left px-5 py-3">VENDOR</th>
-                    <th className="text-left px-5 py-3">PAYMENT DATE</th>
-                    <th className="text-right px-5 py-3">AMOUNT PAID</th>
-                    <th className="text-left px-5 py-3">MODE</th>
-                    <th className="text-left px-5 py-3">REMARKS</th>
-                    <th className="px-5 py-3"></th>
+              <table className="w-full text-left text-sm">
+                <thead className="bg-slate-50/90 dark:bg-slate-800/60 border-b border-slate-200/80 dark:border-slate-700 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  <tr>
+                    <th className="px-6 py-3.5">Ref #</th>
+                    <th className="px-6 py-3.5">Vendor</th>
+                    <th className="px-6 py-3.5">Payment Date</th>
+                    <th className="px-6 py-3.5 text-right">Amount Paid</th>
+                    <th className="px-6 py-3.5">Mode</th>
+                    <th className="px-6 py-3.5">Remarks</th>
+                    <th className="px-6 py-3.5 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-50">
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
                   {pagination.paginatedItems.map((p, i) => (
-                    <motion.tr 
+                    <tr 
                       key={p.id} 
                       onClick={() => handleOpenPreview(p)} 
-                      initial={{ opacity: 0, y: 4 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: Math.min(i * 0.03, 0.3), duration: 0.2 }}
-                      className="hover:bg-gray-50 dark:hover:bg-slate-700/20 transition-colors cursor-pointer"
+                      className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors cursor-pointer h-16"
                     >
-                      <td className="px-5 py-3.5 text-sm font-mono text-gray-500">{p.ref}</td>
-                      <td className="px-5 py-3.5">
-                        <div className="flex items-center space-x-2.5">
-                          <div className={`h-7 w-7 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${colors[i % colors.length]}`}>
-                            {initials(p.vendor)}
+                      <td className="px-6 py-4 font-mono font-bold text-slate-900 dark:text-slate-100 whitespace-nowrap">
+                        {p.ref}
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className={`h-9 w-9 rounded-xl border flex items-center justify-center text-xs font-bold shrink-0 shadow-2xs ${avatarColors[i % avatarColors.length]}`}>
+                            {initials(p.vendor || 'V')}
                           </div>
-                          <span className="text-sm font-medium text-gray-900">{toTitleCase(p.vendor)}</span>
+                          <span className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">{toTitleCase(p.vendor)}</span>
                         </div>
                       </td>
-                      <td className="px-5 py-3.5 text-sm text-gray-500 font-mono">{p.date}</td>
-                      <td className="px-5 py-3.5 text-sm font-semibold text-gray-900 text-right tabular-nums">₹{fmt(p.amount)}</td>
-                      <td className="px-5 py-3.5 text-xs">
-                        <Badge variant={
-                          p.mode?.toLowerCase() === 'cash' ? 'success' :
-                          p.mode?.toLowerCase() === 'cheque' ? 'warning' :
-                          p.mode?.toLowerCase() === 'neft' || p.mode?.toLowerCase() === 'rtgs' ? 'info' : 'neutral'
-                        }>
+                      <td className="px-6 py-4 text-slate-500 dark:text-slate-400 font-medium whitespace-nowrap">{p.date}</td>
+                      <td className="px-6 py-4 text-right font-bold text-slate-900 dark:text-slate-100 tabular-nums whitespace-nowrap">
+                        ₹{fmt(p.amount)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <Badge variant={getModeBadgeVariant(p.mode)} dot>
                           {toTitleCase(p.mode)}
                         </Badge>
                       </td>
-                      <td className="px-5 py-3.5 text-xs text-gray-500 italic max-w-[200px] truncate">{p.remarks || '—'}</td>
-                      <td className="px-5 py-3.5">
-                        <div className="flex items-center justify-end space-x-2">
-                          <button onClick={(e) => { e.stopPropagation(); handleOpenPreview(p); }} className="text-xs text-gray-500 hover:text-brand-primary font-medium px-1.5 py-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors">
-                            View
+                      <td className="px-6 py-4 text-slate-500 dark:text-slate-400 max-w-[240px] truncate">{p.remarks || '—'}</td>
+                      <td className="px-6 py-4 text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-1" onClick={e => e.stopPropagation()}>
+                          <button
+                            onClick={() => setPrintDoc({ type: 'payment', id: p.id })}
+                            className="p-2 rounded-lg text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                            title="Print Voucher"
+                          >
+                            <Printer className="w-4 h-4" />
                           </button>
-                          <button onClick={(e) => { e.stopPropagation(); handleOpenEdit(p); }} className="text-xs text-gray-500 hover:text-brand-primary font-medium px-1.5 py-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors">
-                            Edit
+                          <button
+                            onClick={() => handleOpenPreview(p)}
+                            className="p-2 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                            title="View Details"
+                          >
+                            <Eye className="w-4 h-4" />
                           </button>
-                          <button onClick={(e) => { e.stopPropagation(); handleDelete(p.id); }} className="text-xs text-red-500 hover:text-red-700 font-medium px-1.5 py-0.5 rounded hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors">
-                            Delete
+                          <button
+                            onClick={() => handleOpenEdit(p)}
+                            className="p-2 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                            title="Edit Payment"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(p.id)}
+                            className="p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                            title="Delete Payment"
+                          >
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
                       </td>
-                    </motion.tr>
+                    </tr>
                   ))}
                 </tbody>
               </table>
@@ -471,247 +538,296 @@ export function VendorPayments() {
             <Pagination {...pagination} isLoading={loading} />
           </>
         )}
-      </div>
-      </div>
+      </Card>
 
-      {/* Modal */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm overflow-y-auto" onClick={closeModal}>
-          <div className="bg-white dark:bg-slate-800 w-[540px] rounded-xl border border-gray-200 dark:border-slate-700 shadow-xl p-6 my-8" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-4 border-b border-gray-100 dark:border-slate-700 pb-3">
-              <h2 className="text-base font-semibold text-gray-900 dark:text-white uppercase tracking-wide">
-                {modalMode === 'add' ? 'Record Vendor Payment' : modalMode === 'edit' ? 'Edit Payment Details' : 'Payment & FIFO Allocation Preview'}
-              </h2>
-              <button onClick={closeModal} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"><X size={18} /></button>
-            </div>
-
-            {modalMode === 'preview' ? (
-              <div className="space-y-4 text-sm text-gray-600">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-xs text-gray-400 uppercase font-semibold">Vendor</label>
-                    <p className="font-bold text-gray-900">{toTitleCase(selectedPay?.vendor)}</p>
-                  </div>
-                   <div>
-                    <label className="text-xs text-gray-400 uppercase font-semibold block mb-1">Payment Mode</label>
-                    <Badge variant={
-                      selectedPay?.mode?.toLowerCase() === 'cash' ? 'success' :
-                      selectedPay?.mode?.toLowerCase() === 'cheque' ? 'warning' :
-                      selectedPay?.mode?.toLowerCase() === 'neft' || selectedPay?.mode?.toLowerCase() === 'rtgs' ? 'info' : 'neutral'
-                    }>
-                      {toTitleCase(selectedPay?.mode)}
-                    </Badge>
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-400 uppercase font-semibold">Amount Paid</label>
-                    <p className="text-brand-primary font-bold tabular-nums text-base">₹{fmt(selectedPay?.amount || 0)}</p>
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-400 uppercase font-semibold">Payment Date</label>
-                    <p className="text-gray-900">{selectedPay?.date}</p>
-                  </div>
-                  <div className="col-span-2">
-                    <label className="text-xs text-gray-400 uppercase font-semibold">Remarks</label>
-                    <p className="text-gray-900">{selectedPay?.remarks || '—'}</p>
-                  </div>
-                </div>
-
-                {/* Allocation table in preview */}
+      {/* Modal Dialog */}
+      <AnimatePresence>
+        {showModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={closeModal}>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="fixed inset-0 bg-black/40 backdrop-blur-xs"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+              className="bg-white dark:bg-slate-800 w-full max-w-xl rounded-2xl border border-slate-200 dark:border-slate-700 shadow-2xl overflow-hidden relative z-10 flex flex-col max-h-[90vh]"
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/80">
                 <div>
-                  <h3 className="text-xs font-semibold text-gray-900 uppercase tracking-wider mb-2">FIFO Bill Allocations</h3>
-                  <div className="border border-gray-100 rounded-lg overflow-hidden bg-gray-50">
-                    <div className="overflow-x-auto">
-                    <table className="w-full text-xs">
-                      <thead>
-                        <tr className="bg-gray-100 text-gray-500 uppercase tracking-wider border-b border-gray-200">
-                          <th className="px-3 py-2 text-left">Bill #</th>
-                          <th className="px-3 py-2 text-right">Prev Balance</th>
-                          <th className="px-3 py-2 text-right">Adjusted</th>
-                          <th className="px-3 py-2 text-right">New Balance</th>
-                          <th className="px-3 py-2 text-left">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {selectedPay?.allocations?.map((a, idx) => (
-                          <tr key={idx} className="border-b border-gray-200 last:border-0">
-                            <td className="px-3 py-2 font-mono text-gray-700">{a.billNo}</td>
-                            <td className="px-3 py-2 text-right font-medium text-gray-600 tabular-nums">₹{fmt(a.prev)}</td>
-                            <td className="px-3 py-2 text-right font-bold text-green-600 tabular-nums">₹{fmt(a.adjusted)}</td>
-                            <td className="px-3 py-2 text-right font-medium text-gray-600 tabular-nums">₹{fmt(a.next)}</td>
-                            <td className="px-3 py-2">
-                              <Badge variant={a.status === 'Paid' ? 'success' : 'warning'} className="text-[10px] px-1.5 py-0.5">
-                                {toTitleCase(a.status)}
-                              </Badge>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>            </div>
-                  </div>
+                  <h2 className="text-base font-bold text-slate-900 dark:text-slate-100" style={{ fontFamily: 'var(--font-display)' }}>
+                    {modalMode === 'add' ? 'Record Vendor Payment' : modalMode === 'edit' ? 'Edit Payment Details' : 'Payment Voucher Details'}
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {modalMode === 'preview' ? `Transaction Reference #${selectedPay?.ref}` : 'Record disbursement and allocate against outstanding bills'}
+                  </p>
                 </div>
-
-                <div className="flex justify-end pt-4 border-t border-slate-200 dark:border-slate-700 mt-6 space-x-2">
-                  <Button 
-                    variant="default"
-                    onClick={() => {
-                      setShowModal(false);
-                      setPrintDoc({ type: 'payment', id: selectedPay?.id });
-                    }}
-                  >
-                    Print Voucher
-                  </Button>
-                  <Button variant="secondary" onClick={() => setShowModal(false)}>Close</Button>
-                </div>
+                <button
+                  onClick={closeModal}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
               </div>
-            ) : (
-              <form onSubmit={handleSave} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">Vendor *</label>
-                  <DropdownSelect
-                    value={form.vendor}
-                    onChange={val => setForm({...form, vendor: val})}
-                    placeholder="Select Vendor"
-                    options={vendors.map(v => ({ value: v.name, label: toTitleCase(v.name) }))}
-                  />
-                </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">Payment Date *</label>
-                    <CustomDatePicker
-                      value={form.date}
-                      onChange={val => setForm({...form, date: val})}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">Payment Mode *</label>
-                    <DropdownSelect
-                      value={form.mode}
-                      onChange={val => setForm({...form, mode: val})}
-                      placeholder="Select Payment Mode"
-                      options={paymentModes.length > 0 ? paymentModes.map(m => ({ value: m.name, label: m.name })) : [
-                        { value: 'Bank Transfer', label: 'Bank Transfer' },
-                        { value: 'Cheque', label: 'Cheque' },
-                        { value: 'Cash', label: 'Cash' },
-                        { value: 'UPI', label: 'UPI' },
-                        { value: 'NEFT / RTGS', label: 'NEFT / RTGS' }
-                      ]}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">Amount *</label>
-                  <input type="number" required value={form.amount} onChange={e => setForm({...form, amount: e.target.value})}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary" />
-                </div>
-
-                {/* Conditional Fields based on Payment Mode */}
-                {form.mode === 'Cheque' && (
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">Cheque Number *</label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="e.g. 123456"
-                        value={form.chequeNumber || ''}
-                        onChange={e => setForm({ ...form, chequeNumber: e.target.value.replace(/\D/g, '').slice(0, 6) })}
-                        className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary font-mono"
-                      />
+              {/* Modal Body */}
+              <div className="p-6 overflow-y-auto flex-1 space-y-5">
+                {modalMode === 'preview' ? (
+                  <div className="space-y-5 text-xs">
+                    <div className="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200/80 dark:border-slate-700/80 flex items-center justify-between">
+                      <div>
+                        <span className="text-slate-400 block text-[10px] uppercase font-bold">Vendor</span>
+                        <p className="font-bold text-sm text-slate-900 dark:text-slate-100 mt-0.5">{toTitleCase(selectedPay?.vendor)}</p>
+                      </div>
+                      <Badge variant={getModeBadgeVariant(selectedPay?.mode)}>
+                        {toTitleCase(selectedPay?.mode)}
+                      </Badge>
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">Cheque Date *</label>
-                      <CustomDatePicker
-                        value={form.chequeDate || form.date}
-                        onChange={val => setForm({ ...form, chequeDate: val })}
-                      />
+
+                    <div className="grid grid-cols-2 gap-4 p-4 bg-white dark:bg-slate-800 rounded-xl border border-slate-200/80 dark:border-slate-700/80">
+                      <div>
+                        <span className="text-slate-400 block mb-0.5">Amount Paid</span>
+                        <span className="font-bold text-emerald-600 dark:text-emerald-400 tabular-nums text-base">₹{fmt(selectedPay?.amount || 0)}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block mb-0.5">Payment Date</span>
+                        <span className="font-medium text-slate-800 dark:text-slate-200">{selectedPay?.date}</span>
+                      </div>
+                      <div className="col-span-2 pt-2 border-t border-slate-100 dark:border-slate-700/60">
+                        <span className="text-slate-400 block mb-0.5">Remarks / Ref</span>
+                        <span className="text-slate-700 dark:text-slate-300">{selectedPay?.remarks || '—'}</span>
+                      </div>
                     </div>
-                  </div>
-                )}
 
-                {(form.mode === 'Bank Transfer' || form.mode === 'NEFT' || form.mode === 'RTGS' || form.mode === 'UPI' || form.mode === 'NEFT / RTGS') && (
-                  <div>
-                    <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">Transaction Ref / UTR Number *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. UTRN987654321 / TXN Ref"
-                      value={form.refNum || form.referenceNumber || ''}
-                      onChange={e => setForm({ ...form, refNum: e.target.value, referenceNumber: e.target.value })}
-                      className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary font-mono"
-                    />
-                  </div>
-                )}
-
-                {form.mode === 'Cash' && (
-                  <div>
-                    <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">Cash Memo / Reference (Optional)</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Memo #101"
-                      value={form.refNum || form.referenceNumber || ''}
-                      onChange={e => setForm({ ...form, refNum: e.target.value, referenceNumber: e.target.value })}
-                      className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary font-mono"
-                    />
-                  </div>
-                )}
-
-                {/* FIFO Real-Time Allocation Preview */}
-                {form.amount && Number(form.amount) > 0 && (
-                  <div className="border border-brand-primary/10 rounded-lg p-3 bg-brand-primary/[0.01]">
-                    <p className="text-xs font-bold text-gray-900 mb-2 uppercase tracking-wide">Real-time FIFO Allocation Preview</p>
-                    {fifoAllocations.length === 0 ? (
-                      <p className="text-xs text-gray-400 italic">No outstanding bills found for {form.vendor}. This will register as an advance.</p>
-                    ) : (
-                      <div className="overflow-x-auto">
-                      <table className="w-full text-xs">
-                        <thead>
-                          <tr className="text-gray-400 border-b border-gray-100 pb-1">
-                            <th className="text-left font-semibold">Bill #</th>
-                            <th className="text-right font-semibold">Prev Balance</th>
-                            <th className="text-right font-semibold text-brand-primary">Adjusted</th>
-                            <th className="text-right font-semibold">New Balance</th>
-                            <th className="text-left font-semibold pl-2">New Status</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {fifoAllocations.map((a, idx) => (
-                            <tr key={idx} className="border-b border-gray-50 last:border-none py-1">
-                              <td className="font-mono text-gray-700 py-1">{a.billNo}</td>
-                              <td className="text-right py-1 font-medium text-gray-600 tabular-nums">₹{fmt(a.prev)}</td>
-                              <td className="text-right py-1 font-bold text-green-600 tabular-nums">₹{fmt(a.adjusted)}</td>
-                              <td className="text-right py-1 font-medium text-gray-600 tabular-nums">₹{fmt(a.next)}</td>
-                              <td className="py-1 pl-2">
-                                <span className={`text-[10px] font-semibold px-1 rounded ${
-                                  a.status === 'Paid' ? 'bg-green-50 text-green-600' : 'bg-orange-50 text-orange-600'
-                                }`}>{toTitleCase(a.status)}</span>
-                              </td>
+                    {/* FIFO Allocations Table */}
+                    <div>
+                      <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">FIFO Bill Allocations</h4>
+                      <div className="border border-slate-200/80 dark:border-slate-700/80 rounded-xl overflow-hidden">
+                        <table className="w-full text-left text-xs">
+                          <thead className="bg-slate-50 dark:bg-slate-900/60 border-b border-slate-100 dark:border-slate-700 text-[10px] font-bold uppercase text-slate-400">
+                            <tr>
+                              <th className="px-3 py-2">Bill #</th>
+                              <th className="px-3 py-2 text-right">Prev Balance</th>
+                              <th className="px-3 py-2 text-right">Adjusted</th>
+                              <th className="px-3 py-2 text-right">New Balance</th>
+                              <th className="px-3 py-2">Status</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>            </div>
-                    )}
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
+                            {selectedPay?.allocations?.map((a, idx) => (
+                              <tr key={idx}>
+                                <td className="px-3 py-2 font-mono text-slate-700 dark:text-slate-300">{a.billNo}</td>
+                                <td className="px-3 py-2 text-right text-slate-500 tabular-nums">₹{fmt(a.prev)}</td>
+                                <td className="px-3 py-2 text-right font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">₹{fmt(a.adjusted)}</td>
+                                <td className="px-3 py-2 text-right text-slate-500 tabular-nums">₹{fmt(a.next)}</td>
+                                <td className="px-3 py-2">
+                                  <Badge variant={a.status === 'Paid' ? 'success' : 'warning'} className="text-[10px]">
+                                    {toTitleCase(a.status)}
+                                  </Badge>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
                   </div>
+                ) : (
+                  <form id="payment-form" onSubmit={handleSave} className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Vendor <span className="text-rose-500">*</span>
+                      </label>
+                      <DropdownSelect
+                        value={form.vendor}
+                        onChange={val => setForm({...form, vendor: val})}
+                        placeholder="Select Vendor"
+                        options={vendors.map(v => ({ value: v.name, label: toTitleCase(v.name) }))}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          Payment Date <span className="text-rose-500">*</span>
+                        </label>
+                        <CustomDatePicker
+                          value={form.date}
+                          onChange={val => setForm({...form, date: val})}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          Payment Mode <span className="text-rose-500">*</span>
+                        </label>
+                        <DropdownSelect
+                          value={form.mode}
+                          onChange={val => setForm({...form, mode: val})}
+                          options={paymentModes.length > 0 ? paymentModes.map(m => ({ value: m.name, label: m.name })) : [
+                            { value: 'Bank Transfer', label: 'Bank Transfer' },
+                            { value: 'Cheque', label: 'Cheque' },
+                            { value: 'Cash', label: 'Cash' },
+                            { value: 'UPI', label: 'UPI' },
+                            { value: 'NEFT', label: 'NEFT / RTGS' }
+                          ]}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Amount to Pay (₹) <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        required
+                        min={1}
+                        value={form.amount}
+                        onChange={e => setForm({...form, amount: e.target.value})}
+                        placeholder="50000"
+                        className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 tabular-nums outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                      />
+                    </div>
+
+                    {/* Conditional Mode Inputs */}
+                    {form.mode === 'Cheque' && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                            Cheque Number <span className="text-rose-500">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="123456"
+                            value={form.chequeNumber || ''}
+                            onChange={e => setForm({ ...form, chequeNumber: e.target.value.replace(/\D/g, '').slice(0, 6) })}
+                            className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 font-mono outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                            Cheque Date
+                          </label>
+                          <CustomDatePicker
+                            value={form.chequeDate || form.date}
+                            onChange={val => setForm({ ...form, chequeDate: val })}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {(form.mode === 'Bank Transfer' || form.mode === 'NEFT' || form.mode === 'RTGS' || form.mode === 'UPI') && (
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          Transaction Reference / UTR Number
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. UTR12345678"
+                          value={form.refNum || ''}
+                          onChange={e => setForm({ ...form, refNum: e.target.value })}
+                          className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 font-mono outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                        />
+                      </div>
+                    )}
+
+                    {/* Real-time FIFO Allocation Preview */}
+                    {form.amount && Number(form.amount) > 0 && (
+                      <div className="p-3.5 bg-emerald-50/40 dark:bg-emerald-950/20 rounded-xl border border-emerald-100 dark:border-emerald-900/40 space-y-2">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-300 block">
+                          Real-time FIFO Allocation Preview
+                        </span>
+                        {fifoAllocations.length === 0 ? (
+                          <p className="text-xs text-slate-500 italic">No outstanding bills for {form.vendor}. This will record as an advance payment.</p>
+                        ) : (
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-left text-xs">
+                              <thead className="text-[10px] font-bold uppercase text-slate-400 border-b border-emerald-200/40">
+                                <tr>
+                                  <th className="py-1">Bill #</th>
+                                  <th className="py-1 text-right">Prev Balance</th>
+                                  <th className="py-1 text-right text-emerald-700 dark:text-emerald-300">Adjusted</th>
+                                  <th className="py-1 text-right">New Balance</th>
+                                  <th className="py-1 pl-2">Status</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-emerald-100/40">
+                                {fifoAllocations.map((a, idx) => (
+                                  <tr key={idx}>
+                                    <td className="py-1 font-mono text-slate-700 dark:text-slate-300">{a.billNo}</td>
+                                    <td className="py-1 text-right text-slate-500 tabular-nums">₹{fmt(a.prev)}</td>
+                                    <td className="py-1 text-right font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">₹{fmt(a.adjusted)}</td>
+                                    <td className="py-1 text-right text-slate-500 tabular-nums">₹{fmt(a.next)}</td>
+                                    <td className="py-1 pl-2">
+                                      <span className={`text-[9px] font-bold px-1 py-0.5 rounded ${a.status === 'Paid' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+                                        {a.status}
+                                      </span>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Remarks</label>
+                      <textarea
+                        rows={2}
+                        value={form.remarks}
+                        onChange={e => setForm({...form, remarks: e.target.value})}
+                        placeholder="Additional remarks or receipt details..."
+                        className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 resize-none"
+                      />
+                    </div>
+                  </form>
                 )}
+              </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">Remarks</label>
-                  <textarea rows={2} value={form.remarks} onChange={e => setForm({...form, remarks: e.target.value})}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary" />
-                </div>
-
-                <div className="flex justify-end space-x-3 pt-4 border-t border-gray-100 dark:border-slate-700 mt-6">
-                  <button type="button" onClick={closeModal} className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 dark:text-gray-300 dark:border-slate-600 dark:hover:bg-slate-700">Cancel</button>
-                  <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-brand-primary rounded-lg hover:bg-brand-primary/90">
-                    {modalMode === 'add' ? 'Confirm & Save' : 'Update Payment'}
-                  </button>
-                </div>
-              </form>
-            )}
+              {/* Modal Footer */}
+              <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-700 flex justify-end gap-3 bg-slate-50/50 dark:bg-slate-800/80">
+                {modalMode === 'preview' ? (
+                  <>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setShowModal(false)
+                        setPrintDoc({ type: 'payment', id: selectedPay?.id })
+                      }}
+                    >
+                      <Printer className="w-4 h-4" />
+                      <span>Print Voucher</span>
+                    </Button>
+                    <Button variant="secondary" onClick={() => setShowModal(false)}>
+                      Close
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button variant="secondary" onClick={closeModal}>
+                      Cancel
+                    </Button>
+                    <Button type="submit" form="payment-form" loading={isSaving}>
+                      {modalMode === 'add' ? 'Record Payment' : 'Update Payment'}
+                    </Button>
+                  </>
+                )}
+              </div>
+            </motion.div>
           </div>
-        </div>
-      )}
+        )}
+      </AnimatePresence>
+
       <SaveConfirmationModal {...confirmConfig} isSaving={isSaving} />
 
       {printDoc && (
@@ -721,7 +837,7 @@ export function VendorPayments() {
           onClose={() => setPrintDoc(null)}
         />
       )}
-    </>
+    </div>
   )
 }
 

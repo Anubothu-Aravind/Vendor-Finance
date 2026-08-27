@@ -15,20 +15,20 @@ export default {
           'primary-muted':  'var(--color-primary-muted, rgba(0,200,150,0.12))',
 
           // Backgrounds
-          canvas:           'var(--color-bg-base, #0B0F1A)',
-          surface:          'var(--color-bg-surface, #111827)',
-          elevated:         'var(--color-bg-elevated, #1A2235)',
-          hover:            'var(--color-bg-hover, #1F2D42)',
+          canvas:           'var(--color-bg-base, #F8FAFC)',
+          surface:          'var(--color-bg-surface, #FFFFFF)',
+          elevated:         'var(--color-bg-elevated, #F1F5F9)',
+          hover:            'var(--color-bg-hover, #E8EDF5)',
 
           // Borders
-          border:           'var(--color-border, #1E2D40)',
-          'border-strong':  'var(--color-border-strong, #2A3F5A)',
+          border:           'var(--color-border, #E2E8F0)',
+          'border-strong':  'var(--color-border-strong, #CBD5E1)',
 
           // Text
-          'ink-primary':    'var(--color-text-primary, #F0F4F8)',
-          'ink-secondary':  'var(--color-text-secondary, #8A9BB0)',
-          'ink-muted':      'var(--color-text-muted, #4A5E72)',
-          'ink-inverse':    'var(--color-text-inverse, #0B0F1A)',
+          'ink-primary':    'var(--color-text-primary, #0F172A)',
+          'ink-secondary':  'var(--color-text-secondary, #475569)',
+          'ink-muted':      'var(--color-text-muted, #94A3B8)',
+          'ink-inverse':    'var(--color-text-inverse, #FFFFFF)',
 
           // Semantic
           success:          'var(--color-success, #00C896)',
@@ -37,20 +37,20 @@ export default {
           info:             'var(--color-info, #4A9EFF)',
 
           // Sidebar
-          sidebar:          'var(--color-sidebar-bg, #0D1320)',
-          'sidebar-active': 'var(--color-sidebar-active, rgba(0,200,150,0.08))',
+          sidebar:          'var(--color-sidebar-bg, #090D16)',
+          'sidebar-active': 'var(--color-sidebar-active, rgba(0,200,150,0.14))',
           'sidebar-text':   'var(--color-sidebar-text, #8A9BB0)',
 
           // Table
-          'table-header':   'var(--color-table-header, #111827)',
-          'table-row-alt':  'var(--color-table-row-alt, #0F1824)',
-          'table-hover':    'var(--color-table-row-hover, #1A2235)',
+          'table-header':   'var(--color-table-header, #F8FAFC)',
+          'table-row-alt':  'var(--color-table-row-alt, #F1F5F9)',
+          'table-hover':    'var(--color-table-row-hover, #EEF2F8)',
 
           // Legacy aliases used in older code
-          panel:            'var(--color-bg-surface, #111827)',
-          'border-divider': 'var(--color-border, #1E2D40)',
-          'success-bg':     'rgba(0,200,150,0.08)',
-          header:           'var(--color-bg-elevated, #1A2235)',
+          panel:            'var(--color-bg-surface, #FFFFFF)',
+          'border-divider': 'var(--color-border, #E2E8F0)',
+          'success-bg':     'rgba(0,200,150,0.12)',
+          header:           'var(--color-bg-elevated, #F1F5F9)',
         },
       },
       fontFamily: {

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { Bell, Menu, ChevronRight } from 'lucide-react'
 import { useAuth } from '../../hooks/AuthContext'
 import api from '../../utils/api'
 
@@ -185,48 +186,47 @@ export function Topbar({ onMenuClick }) {
 
   return (
     <header
-      className="h-14 flex items-center justify-between px-4 md:px-6 shrink-0 relative"
-      style={{
-        background: 'var(--color-bg-elevated)',
-        borderBottom: '1px solid var(--color-border)',
-        zIndex: 40
-      }}
+      className="h-15 flex items-center justify-between px-4 md:px-8 shrink-0 relative bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800 z-30"
     >
       {/* Left: hamburger (mobile) + breadcrumb */}
       <div className="flex items-center space-x-3">
         <button
           onClick={onMenuClick}
-          className="md:hidden px-2 py-1 rounded-lg text-xs font-bold transition-all"
-          style={{ color: 'var(--color-text-secondary)', background: 'var(--color-bg-hover)' }}
+          className="md:hidden p-2 rounded-lg text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 bg-slate-100 dark:bg-slate-800 transition-colors"
           aria-label="Open menu"
         >
-          ☰
+          <Menu className="w-4 h-4" />
         </button>
 
         <div className="flex items-center space-x-2 text-sm">
-          <span className="hidden sm:inline text-xs font-semibold tracking-widest" style={{ color: 'var(--color-text-muted)', letterSpacing: '0.1em' }}>VASTRAMS</span>
-          <span className="hidden sm:inline text-xs" style={{ color: 'var(--color-text-muted)' }}>›</span>
-          <span className="page-title" style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '14px' }}>{title}</span>
+          <span className="hidden sm:inline text-xs font-bold tracking-wider text-slate-400 dark:text-slate-500" style={{ letterSpacing: '0.1em' }}>
+            VASTRAMS
+          </span>
+          <ChevronRight className="hidden sm:inline w-3.5 h-3.5 text-slate-300 dark:text-slate-600" />
+          <span className="font-bold text-slate-900 dark:text-slate-100 text-sm sm:text-base tracking-tight" style={{ fontFamily: 'var(--font-display)' }}>
+            {title}
+          </span>
         </div>
       </div>
 
       {/* Right Controls */}
       <div className="flex items-center space-x-3 relative" ref={dropdownRef}>
-        {/* Notifications button — text based */}
+        {/* Notifications button with Bell icon */}
         <button 
           onClick={() => {
             setShowDropdown(!showDropdown)
             if (!showDropdown) fetchNotifications()
           }}
-          className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all"
-          style={{ 
-            color: showDropdown ? 'var(--color-primary)' : 'var(--color-text-muted)',
-            background: showDropdown ? 'rgba(0,200,150,0.1)' : 'var(--color-bg-hover)'
-          }}
+          className={`relative p-2 rounded-lg text-xs font-semibold transition-all border ${
+            showDropdown
+              ? 'bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800'
+              : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 bg-slate-50 dark:bg-slate-800 border-slate-200/80 dark:border-slate-700'
+          }`}
+          title="Notifications"
         >
-          Alerts
+          <Bell className="w-4 h-4" />
           {unreadCount > 0 && (
-            <span className="h-4 min-w-4 px-1 rounded-full text-[9px] font-bold flex items-center justify-center" style={{ background: '#E84545', color: '#fff' }}>
+            <span className="absolute -top-1 -right-1 h-4 min-w-4 px-1 rounded-full text-[9px] font-black flex items-center justify-center bg-rose-500 text-white shadow-xs animate-pulse">
               {unreadCount}
             </span>
           )}
@@ -235,22 +235,17 @@ export function Topbar({ onMenuClick }) {
         {/* Notifications Dropdown */}
         {showDropdown && (
           <div 
-            className="absolute top-12 right-0 w-80 max-h-[420px] rounded-xl border shadow-xl z-50 flex flex-col"
-            style={{ 
-              background: 'var(--color-bg-elevated)', 
-              borderColor: 'var(--color-border)' 
-            }}
+            className="absolute top-12 right-0 w-80 max-h-[420px] rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-xl z-50 flex flex-col overflow-hidden"
           >
             {/* Header */}
-            <div className="p-3.5 border-b flex justify-between items-center" style={{ borderColor: 'var(--color-border)' }}>
-              <span className="text-sm font-semibold uppercase tracking-wider text-gray-900 dark:text-white" style={{ fontFamily: 'var(--font-display)' }}>
+            <div className="p-3.5 border-b border-slate-100 dark:border-slate-700/80 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/80">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200" style={{ fontFamily: 'var(--font-display)' }}>
                 Notifications {unreadCount > 0 && `(${unreadCount})`}
               </span>
               {unreadCount > 0 && (
                 <button 
                   onClick={handleMarkAllAsRead}
-                  className="text-xs font-semibold hover:opacity-80 transition-opacity"
-                  style={{ color: 'var(--color-primary)' }}
+                  className="text-xs font-semibold text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 transition-colors"
                 >
                   Mark all as read
                 </button>
@@ -258,27 +253,27 @@ export function Topbar({ onMenuClick }) {
             </div>
 
             {/* List */}
-            <div className="overflow-y-auto flex-1 divide-y" style={{ divideColor: 'var(--color-border)' }}>
+            <div className="overflow-y-auto flex-1 divide-y divide-slate-100 dark:divide-slate-700/60">
               {visibleNotifications.length === 0 ? (
-                <div className="p-8 text-center text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                <div className="p-8 text-center text-xs text-slate-400">
                   No notifications available
                 </div>
               ) : (
-                <div className="divide-y divide-gray-100 dark:divide-slate-800">
+                <div>
                   {recentNotifications.map(n => renderNotificationItem(n))}
                   
                   {olderNotifications.length > 0 && (
                     <div>
                       <button
                         onClick={() => setShowEarlier(!showEarlier)}
-                        className="w-full flex items-center justify-between px-3.5 py-2 text-[10px] font-bold uppercase tracking-wider bg-gray-50/50 dark:bg-slate-800/10 border-y border-gray-100 dark:border-slate-800 text-gray-400 hover:text-gray-600 transition-colors"
+                        className="w-full flex items-center justify-between px-3.5 py-2 text-[10px] font-bold uppercase tracking-wider bg-slate-50 dark:bg-slate-800/40 border-y border-slate-100 dark:border-slate-700 text-slate-400 hover:text-slate-600 transition-colors"
                       >
                         <span>Earlier Notifications ({olderNotifications.length})</span>
                         <span>{showEarlier ? 'Hide' : 'Show'}</span>
                       </button>
                       
                       {showEarlier && (
-                        <div className="divide-y divide-gray-100 dark:divide-slate-800">
+                        <div>
                           {olderNotifications.map(n => renderNotificationItem(n))}
                         </div>
                       )}
@@ -291,8 +286,11 @@ export function Topbar({ onMenuClick }) {
         )}
 
         {/* User Avatar */}
-        <div className="h-8 w-8 rounded-full flex items-center justify-center font-bold text-xs font-sans select-none"
-          style={{ background: 'var(--color-primary)', color: 'var(--color-text-inverse)' }}>
+        <div 
+          className="h-8 w-8 rounded-full flex items-center justify-center font-bold text-xs font-sans text-white shadow-xs select-none"
+          style={{ background: 'var(--gradient-primary)' }}
+          title={user?.name || 'User'}
+        >
           {initials}
         </div>
       </div>

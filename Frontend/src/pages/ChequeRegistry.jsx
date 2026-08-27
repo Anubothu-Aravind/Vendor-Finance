@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useReducer, useCallback, useMemo } from 'react'
-import { Plus, Search, Trash2, Edit2, Eye, X, CheckCircle, XCircle, AlertCircle } from 'lucide-react'
+import { Plus, Search, Trash2, Edit2, Eye, X, CheckSquare, Clock, AlertTriangle, CheckCircle2, DollarSign } from 'lucide-react'
 import { toInputDate, fromInputDate, getTodayFormatted } from '../utils/date'
 import DropdownSelect from '../components/ui/DropdownSelect'
 import CustomDatePicker from '../components/ui/CustomDatePicker'
@@ -7,6 +7,10 @@ import { toTitleCase } from '../utils/text'
 import EmptyState from '../components/ui/EmptyState'
 import Badge from '../components/ui/Badge'
 import PartyTypeBadge from '../components/ui/PartyTypeBadge'
+import Button from '../components/ui/Button'
+import PageHeader from '../components/ui/PageHeader'
+import { Card, KpiCard } from '../components/ui/Card'
+import FilterToolbar from '../components/ui/FilterToolbar'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Skeleton, SkeletonTableRow } from '../components/ui/Skeleton'
 import { usePagination } from '../hooks/usePagination'
@@ -21,12 +25,11 @@ import { SaveConfirmationModal } from '../components/ui/SaveConfirmationModal'
 
 const fmt = (v) => new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(v)
 
-// Map backend status to display
 const BE_STATUS_MAP = {
   PENDING: 'Pending',
   CLEARED: 'cleared',
   BOUNCED: 'bounced',
-  CANCELLED: 'deposited', // using 'deposited' as closest for cancelled/deposited
+  CANCELLED: 'deposited',
 }
 const FE_STATUS_MAP = {
   Pending: 'PENDING',
@@ -35,10 +38,18 @@ const FE_STATUS_MAP = {
   deposited: 'CANCELLED',
 }
 
-// Map cheque type frontend -> backend
 const BE_TYPE_MAP = {
   Vendor: 'ISSUED_VENDOR',
   Financier: 'ISSUED_FINANCIER',
+}
+
+const getStatusBadgeVariant = (status) => {
+  const s = String(status).toLowerCase()
+  if (s === 'cleared') return 'success'
+  if (s === 'pending') return 'warning'
+  if (s === 'deposited') return 'info'
+  if (s === 'bounced') return 'danger'
+  return 'neutral'
 }
 
 export function ChequeRegistry() {
@@ -52,7 +63,7 @@ export function ChequeRegistry() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState('All Status')
+  const [statusFilter, setStatusFilter] = useState('ALL')
   const [showModal, setShowModal] = useState(false)
   const [modalMode, setModalMode] = useState('add') // 'add' | 'edit' | 'preview'
   const [selectedCheque, setSelectedCheque] = useState(null)
@@ -62,10 +73,10 @@ export function ChequeRegistry() {
     date: getTodayFormatted(),
     amount: '',
     bank: '',
-    partyType: '',
+    partyType: 'Vendor',
     party: '',
     partyId: '',
-    status: '',
+    status: 'Pending',
     remarks: ''
   }
   const [form, setForm] = useState(emptyForm)
@@ -153,9 +164,7 @@ export function ChequeRegistry() {
   }, [])
 
   useEffect(() => {
-    const handleDataChanged = () => {
-      fetchData()
-    }
+    const handleDataChanged = () => fetchData()
     window.addEventListener('api-data-changed', handleDataChanged)
     return () => window.removeEventListener('api-data-changed', handleDataChanged)
   }, [])
@@ -167,15 +176,19 @@ export function ChequeRegistry() {
     setShowModal(true)
   }
 
-  const handleOpenPreview = (c) => {
-    setSelectedCheque(c)
+  const handleOpenPreview = (cheque) => {
+    setSelectedCheque(cheque)
     setModalMode('preview')
     setShowModal(true)
   }
 
-  const handleOpenEdit = (c) => {
-    const editObj = { ...c }
-    setSelectedCheque(c)
+  const handleOpenEdit = (cheque) => {
+    const editObj = {
+      ...cheque,
+      partyType: cheque.partyType || 'Vendor',
+      status: cheque.status || 'Pending'
+    }
+    setSelectedCheque(cheque)
     setForm(editObj)
     setInitialFormSnapshot(editObj)
     setModalMode('edit')
@@ -184,65 +197,55 @@ export function ChequeRegistry() {
 
   const handleSave = (e) => {
     if (e) e.preventDefault()
-    const amt = Number(form.amount) || 0
-
-    if (modalMode === 'add') {
-      if (!form.chequeNo || form.chequeNo.length !== 6) {
-        toast('Cheque number must be exactly 6 digits', 'error')
-        return
+    let selectedPartyId = form.partyId
+    if (!selectedPartyId && form.party) {
+      if (form.partyType === 'Vendor') {
+        selectedPartyId = vendors.find(v => v.name === form.party)?._id || ''
+      } else {
+        selectedPartyId = financiers.find(f => f.name === form.party)?._id || ''
       }
     }
 
     requestSaveConfirmation({
-      title: modalMode === 'add' ? 'Confirm Add Cheque' : 'Confirm Update Cheque Status',
+      title: modalMode === 'add' ? 'Confirm Register Cheque' : 'Confirm Cheque Update',
       message: `You are about to save changes for Cheque #${form.chequeNo || 'New'}.`,
       initialValues: initialFormSnapshot,
       currentValues: form,
       labelMap: {
         chequeNo: 'Cheque Number',
         date: 'Cheque Date',
-        amount: 'Cheque Amount',
+        amount: 'Amount',
         bank: 'Bank Name',
         partyType: 'Party Type',
-        party: 'Payee / Party',
-        status: 'Cheque Status',
-        remarks: 'Remarks'
+        party: 'Party Name',
+        status: 'Status',
+        remarks: 'Remarks / Bounce Reason'
       },
       onSaveApi: async () => {
-        const partyOptions = form.partyType === 'Vendor' ? vendors : financiers
-        const partyRecord = partyOptions.find(p => p.name === form.party || p._id === form.partyId)
-
         const payload = {
           chequeNumber: form.chequeNo,
           chequeDate: toInputDate(form.date),
-          amount: amt,
+          amount: Number(form.amount) || 0,
           bankName: form.bank,
-          payeeName: form.party,
-          partyType: form.partyType === 'Vendor' ? 'VENDOR' : 'FINANCIER',
-          partyId: partyRecord?._id || form.partyId,
-          type: 'ISSUED',
-          status: 'PENDING',
-          notes: form.remarks
-        }
-
-        const FE_STATUS_MAP = {
-          'Cleared': 'CLEARED',
-          'Pending': 'PENDING',
-          'Bounced': 'BOUNCED',
-          'Cancelled': 'CANCELLED'
+          type: BE_TYPE_MAP[form.partyType] || 'ISSUED_VENDOR',
+          status: FE_STATUS_MAP[form.status] || 'PENDING',
+          bounceReason: form.remarks,
+          partyName: form.party,
+          vendorId: form.partyType === 'Vendor' ? selectedPartyId : undefined,
+          financierId: form.partyType === 'Financier' ? selectedPartyId : undefined,
         }
 
         try {
           if (modalMode === 'add') {
             await api.post('/cheques', payload)
+            toast('Cheque registered successfully', 'success')
           } else {
-            const beStatus = FE_STATUS_MAP[form.status] || 'PENDING'
-            await api.patch(`/cheques/${selectedCheque.id}/status`, { status: beStatus })
+            await api.put(`/cheques/${selectedCheque.id}`, payload)
+            toast('Cheque updated successfully', 'success')
           }
           await fetchData()
           setShowModal(false)
           setForm(emptyForm)
-          toast(modalMode === 'add' ? 'Cheque registered successfully' : 'Cheque status updated successfully', 'success')
         } catch (err) {
           toast(err.message || 'Failed to save cheque', 'error')
           return false
@@ -256,25 +259,40 @@ export function ChequeRegistry() {
       try {
         await api.delete(`/cheques/${id}`)
         await fetchData()
+        toast('Cheque deleted successfully', 'success')
       } catch (err) {
         toast(err.message || 'Failed to delete cheque', 'error')
       }
     }
   }
 
-  const partyOptions = form.partyType === 'Vendor'
-    ? vendors.map(v => ({ value: v.name, label: toTitleCase(v.name) }))
-    : form.partyType === 'Financier'
-      ? financiers.map(f => ({ value: f.name, label: toTitleCase(f.name) }))
-      : []
+  const partyOptions = useMemo(() => {
+    return form.partyType === 'Vendor'
+      ? vendors.map(v => ({ value: v.name, label: toTitleCase(v.name) }))
+      : form.partyType === 'Financier'
+        ? financiers.map(f => ({ value: f.name, label: toTitleCase(f.name) }))
+        : []
+  }, [form.partyType, vendors, financiers])
+
+  const filtered = useMemo(() => {
+    return cheques.filter(c => {
+      const matchSearch =
+        (c.chequeNo || '').includes(search) ||
+        (c.party || '').toLowerCase().includes(search.toLowerCase()) ||
+        (c.bank || '').toLowerCase().includes(search.toLowerCase())
+      const matchStatus =
+        statusFilter === 'ALL' ||
+        c.status.toLowerCase() === statusFilter.toLowerCase()
+      return matchSearch && matchStatus
+    })
+  }, [cheques, search, statusFilter])
+
+  const pendingCount = useMemo(() => cheques.filter(c => c.status === 'Pending').length, [cheques])
+  const clearedCount = useMemo(() => cheques.filter(c => c.status === 'cleared').length, [cheques])
+  const bouncedCount = useMemo(() => cheques.filter(c => c.status === 'bounced').length, [cheques])
+  const totalPendingAmount = useMemo(() => cheques.filter(c => c.status === 'Pending').reduce((s, c) => s + (c.amount || 0), 0), [cheques])
 
   const tableContainerRef = React.useRef(null)
-
-  const filtered = cheques.filter(c => {
-    const matchSearch = c.chequeNo.includes(search) || (c.party || '').toLowerCase().includes(search.toLowerCase())
-    const matchStatus = statusFilter === 'All Status' || c.status === statusFilter
-    return matchSearch && matchStatus
-  })
 
   const pagination = usePagination({
     items: filtered,
@@ -285,179 +303,192 @@ export function ChequeRegistry() {
   })
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-[1600px] mx-auto">
       {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Cheque Registry</h1>
-          <p className="text-sm text-gray-400 mt-0.5">{cheques.length} cheques registered</p>
-        </div>
-        <button onClick={handleOpenAdd} className="flex items-center space-x-1.5 bg-brand-primary text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-primary/95 transition-all shadow-sm">
-          <Plus size={16} />
+      <PageHeader
+        title="Cheque Registry"
+        description={`${cheques.length} total cheques · Track in-transit, clearing, and bounced banking instruments`}
+        breadcrumbs={[{ label: 'Cheques' }]}
+      >
+        <Button onClick={handleOpenAdd} className="shadow-sm">
+          <Plus className="w-4 h-4" />
           <span>Add Cheque</span>
-        </button>
+        </Button>
+      </PageHeader>
+
+      {/* KPI Stats */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+        <KpiCard
+          title="Pending Clearing"
+          value={loading ? <Skeleton className="h-8 w-16" /> : String(pendingCount)}
+          subtitle={`₹${fmt(totalPendingAmount)} in transit`}
+          icon={Clock}
+          iconColor="text-amber-600 dark:text-amber-400"
+          iconBg="bg-amber-50 dark:bg-amber-950/40 border-amber-100 dark:border-amber-900/40"
+        />
+        <KpiCard
+          title="Cleared Cheques"
+          value={loading ? <Skeleton className="h-8 w-16" /> : String(clearedCount)}
+          subtitle="Successfully processed"
+          icon={CheckCircle2}
+          iconColor="text-emerald-600 dark:text-emerald-400"
+          iconBg="bg-emerald-50 dark:bg-emerald-950/40 border-emerald-100 dark:border-emerald-900/40"
+        />
+        <KpiCard
+          title="Bounced Cheques"
+          value={loading ? <Skeleton className="h-8 w-16" /> : String(bouncedCount)}
+          subtitle="Requires attention"
+          icon={AlertTriangle}
+          iconColor="text-rose-600 dark:text-rose-400"
+          iconBg="bg-rose-50 dark:bg-rose-950/40 border-rose-100 dark:border-rose-900/40"
+        />
+        <KpiCard
+          title="Total Registered"
+          value={loading ? <Skeleton className="h-8 w-16" /> : String(cheques.length)}
+          subtitle="All recorded instruments"
+          icon={CheckSquare}
+          iconColor="text-slate-600 dark:text-slate-300"
+          iconBg="bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700"
+        />
       </div>
 
-      {/* Error Banner */}
-      {error && (
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-xl px-5 py-3 text-sm text-red-600 dark:text-red-400">
-          {error} — <button onClick={fetchData} className="underline font-medium">Retry</button>
+      {/* Filter Toolbar */}
+      <FilterToolbar
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search by cheque #, party name, bank..."
+        isFiltered={search !== '' || statusFilter !== 'ALL'}
+        onReset={() => { setSearch(''); setStatusFilter('ALL') }}
+      >
+        <div className="w-48">
+          <DropdownSelect
+            value={statusFilter}
+            onChange={setStatusFilter}
+            options={[
+              { value: 'ALL', label: 'All Statuses' },
+              { value: 'Pending', label: 'Pending' },
+              { value: 'cleared', label: 'Cleared' },
+              { value: 'deposited', label: 'Deposited / Cancelled' },
+              { value: 'bounced', label: 'Bounced' }
+            ]}
+          />
         </div>
-      )}
-
-      {/* Stats Cards */}
-      {loading ? (
-        <div className="flex gap-4">
-          {[0,1,2,3].map(i => <Skeleton key={i} className="flex-1 h-[72px] rounded-xl" />)}
-        </div>
-      ) : (
-        <div className="flex flex-wrap w-full gap-4" style={{ boxSizing: 'border-box' }}>
-          <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 px-5 py-4 min-w-0" style={{ flex: '1 1 0%', boxSizing: 'border-box' }}>
-            <p className="text-xs text-gray-400 mb-1">Pending</p>
-            <p className="text-2xl font-bold text-orange-500">{cheques.filter(c => c.status === 'Pending').length}</p>
-          </div>
-          <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 px-5 py-4 min-w-0" style={{ flex: '1 1 0%', boxSizing: 'border-box' }}>
-            <p className="text-xs text-gray-400 mb-1">Deposited/Cancelled</p>
-            <p className="text-2xl font-bold text-blue-500">{cheques.filter(c => c.status === 'deposited').length}</p>
-          </div>
-          <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 px-5 py-4 min-w-0" style={{ flex: '1 1 0%', boxSizing: 'border-box' }}>
-            <p className="text-xs text-gray-400 mb-1">Cleared</p>
-            <p className="text-2xl font-bold text-green-600">{cheques.filter(c => c.status === 'cleared').length}</p>
-          </div>
-          <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 px-5 py-4 min-w-0" style={{ flex: '1 1 0%', boxSizing: 'border-box' }}>
-            <p className="text-xs text-gray-400 mb-1">Bounced</p>
-            <p className="text-2xl font-bold text-red-500">{cheques.filter(c => c.status === 'bounced').length}</p>
-          </div>
-        </div>
-      )}
+      </FilterToolbar>
 
       {/* Table Card */}
-      <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700">
-        {/* Filters */}
-        <div className="px-5 py-3 border-b border-gray-100 dark:border-slate-700 flex items-center space-x-3">
-          <div className="relative w-56">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input type="text" placeholder="Search cheques..." value={search} onChange={e => setSearch(e.target.value)}
-              className="w-full pl-9 pr-8 py-1.5 text-sm border border-gray-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary" />
-            {search && (
-              <button
-                type="button"
-                onClick={() => setSearch('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors p-0.5"
-                title="Clear search"
-              >
-                <X size={14} />
-              </button>
-            )}
+      <Card className="overflow-hidden">
+        {error ? (
+          <div className="p-8">
+            <EmptyState icon="search" title="Error Loading Cheques" description={error} />
           </div>
-          <div className="w-48">
-            <DropdownSelect
-              value={statusFilter}
-              onChange={val => setStatusFilter(val)}
-              options={['All Status', 'Pending', 'deposited', 'bounced', 'cleared'].map(s => ({ value: s, label: toTitleCase(s) }))}
-            />
-          </div>
-        </div>
-
-        {loading ? (
+        ) : loading ? (
           <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider border-b border-gray-100 dark:border-slate-700">
-                  <th className="text-left px-5 py-3">CHEQUE NO.</th>
-                  <th className="text-left px-5 py-3">CHEQUE DATE</th>
-                  <th className="text-right px-5 py-3">AMOUNT</th>
-                  <th className="text-left px-5 py-3">BANK NAME</th>
-                  <th className="text-left px-5 py-3">PARTY TYPE</th>
-                  <th className="text-left px-5 py-3">PARTY</th>
-                  <th className="text-left px-5 py-3">STATUS</th>
-                  <th className="text-left px-5 py-3">REMARKS</th>
-                  <th className="px-5 py-3"></th>
+            <table className="w-full text-left text-sm">
+              <thead className="bg-slate-50/90 dark:bg-slate-800/60 border-b border-slate-200/80 dark:border-slate-700 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                <tr>
+                  <th className="px-6 py-3.5">Cheque No.</th>
+                  <th className="px-6 py-3.5">Cheque Date</th>
+                  <th className="px-6 py-3.5 text-right">Amount</th>
+                  <th className="px-6 py-3.5">Bank Name</th>
+                  <th className="px-6 py-3.5">Party Type</th>
+                  <th className="px-6 py-3.5">Party</th>
+                  <th className="px-6 py-3.5">Status</th>
+                  <th className="px-6 py-3.5">Remarks</th>
+                  <th className="px-6 py-3.5 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50 dark:divide-slate-700/40">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
                 {Array.from({ length: 5 }).map((_, idx) => (
-                  <SkeletonTableRow key={idx} cols={9} widths={["w-16", "w-20", "w-16", "w-28", "w-16", "w-32", "w-12", "w-24", "w-8"]} />
+                  <SkeletonTableRow key={idx} cols={9} widths={["w-24", "w-24", "w-20", "w-32", "w-20", "w-36", "w-20", "w-28", "w-20"]} />
                 ))}
               </tbody>
             </table>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="p-6">
+          <div className="p-8">
             {cheques.length === 0 ? (
               <EmptyState
                 icon="cheque"
                 title="No Cheques Registered"
-                description="Register a new cheque to start tracking clearing statuses"
+                description="Register a new cheque to begin tracking clearing milestones."
                 action={{ label: 'Add Cheque', onClick: handleOpenAdd }}
               />
             ) : (
               <EmptyState
                 icon="search"
-                title="No Cheques Match"
-                description="Try adjusting your filters"
+                title="No Matching Cheques"
+                description="Try adjusting your search or filter keywords."
               />
             )}
           </div>
         ) : (
           <>
             <div ref={tableContainerRef} className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider border-b border-gray-100 dark:border-slate-700">
-                    <th className="text-left px-5 py-3">CHEQUE NO.</th>
-                    <th className="text-left px-5 py-3">CHEQUE DATE</th>
-                    <th className="text-right px-5 py-3">AMOUNT</th>
-                    <th className="text-left px-5 py-3">BANK NAME</th>
-                    <th className="text-left px-5 py-3">PARTY TYPE</th>
-                    <th className="text-left px-5 py-3">PARTY</th>
-                    <th className="text-left px-5 py-3">STATUS</th>
-                    <th className="text-left px-5 py-3">REMARKS</th>
-                    <th className="px-5 py-3"></th>
+              <table className="w-full text-left text-sm">
+                <thead className="bg-slate-50/90 dark:bg-slate-800/60 border-b border-slate-200/80 dark:border-slate-700 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  <tr>
+                    <th className="px-6 py-3.5">Cheque No.</th>
+                    <th className="px-6 py-3.5">Cheque Date</th>
+                    <th className="px-6 py-3.5 text-right">Amount</th>
+                    <th className="px-6 py-3.5">Bank Name</th>
+                    <th className="px-6 py-3.5">Party Type</th>
+                    <th className="px-6 py-3.5">Party</th>
+                    <th className="px-6 py-3.5">Status</th>
+                    <th className="px-6 py-3.5">Remarks</th>
+                    <th className="px-6 py-3.5 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-50 dark:divide-slate-700/40">
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
                   {pagination.paginatedItems.map((c, i) => (
-                    <motion.tr 
+                    <tr 
                       key={c._id || c.id} 
                       onClick={() => handleOpenPreview(c)} 
-                      initial={{ opacity: 0, y: 4 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: Math.min(i * 0.03, 0.3), duration: 0.2 }}
-                      className="hover:bg-gray-50 dark:hover:bg-slate-700/20 transition-colors cursor-pointer"
+                      className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors cursor-pointer h-16"
                     >
-                      <td className="px-5 py-3.5 text-sm font-mono font-semibold text-gray-700 dark:text-gray-200">{c.chequeNo}</td>
-                      <td className="px-5 py-3.5 text-sm text-gray-500 dark:text-gray-400 font-mono whitespace-nowrap">{c.date}</td>
-                      <td className="px-5 py-3.5 text-sm font-semibold text-gray-900 dark:text-white text-right tabular-nums">₹{fmt(c.amount)}</td>
-                      <td className="px-5 py-3.5 text-sm text-gray-600 dark:text-gray-300">{c.bank !== '—' ? toTitleCase(c.bank) : '—'}</td>
-                      <td className="px-5 py-3.5 text-xs">
+                      <td className="px-6 py-4 font-mono font-bold text-slate-900 dark:text-slate-100 whitespace-nowrap">
+                        {c.chequeNo}
+                      </td>
+                      <td className="px-6 py-4 text-slate-500 dark:text-slate-400 font-medium whitespace-nowrap">{c.date}</td>
+                      <td className="px-6 py-4 text-right font-bold text-slate-900 dark:text-slate-100 tabular-nums whitespace-nowrap">
+                        ₹{fmt(c.amount)}
+                      </td>
+                      <td className="px-6 py-4 text-slate-600 dark:text-slate-300 font-medium">{c.bank !== '—' ? toTitleCase(c.bank) : '—'}</td>
+                      <td className="px-6 py-4 whitespace-nowrap">
                         <PartyTypeBadge type={c.partyType} />
                       </td>
-                      <td className="px-5 py-3.5 text-sm text-gray-800 dark:text-gray-100 font-medium">{toTitleCase(c.party)}</td>
-                      <td className="px-5 py-3.5">
-                        <Badge variant={
-                          c.status?.toLowerCase() === 'cleared' ? 'success' :
-                          c.status?.toLowerCase() === 'pending' ? 'warning' :
-                          c.status?.toLowerCase() === 'deposited' ? 'info' : 'danger'
-                        }>
+                      <td className="px-6 py-4 font-semibold text-slate-900 dark:text-slate-100 truncate max-w-[200px]">{toTitleCase(c.party)}</td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <Badge variant={getStatusBadgeVariant(c.status)} dot>
                           {toTitleCase(c.status)}
                         </Badge>
                       </td>
-                      <td className="px-5 py-3.5 text-xs text-gray-500 dark:text-gray-400 italic truncate max-w-[150px]">{c.remarks || '—'}</td>
-                      <td className="px-5 py-3.5">
-                        <div className="flex items-center justify-end space-x-2">
-                          <button onClick={(e) => { e.stopPropagation(); handleOpenPreview(c); }} className="text-xs text-gray-500 hover:text-brand-primary font-medium px-1.5 py-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors">
-                            View
+                      <td className="px-6 py-4 text-slate-400 italic truncate max-w-[180px]">{c.remarks || '—'}</td>
+                      <td className="px-6 py-4 text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-1" onClick={e => e.stopPropagation()}>
+                          <button
+                            onClick={() => handleOpenPreview(c)}
+                            className="p-2 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                            title="View Details"
+                          >
+                            <Eye className="w-4 h-4" />
                           </button>
-                          <button onClick={(e) => { e.stopPropagation(); handleOpenEdit(c); }} className="text-xs text-gray-500 hover:text-brand-primary font-medium px-1.5 py-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors">
-                            Edit
+                          <button
+                            onClick={() => handleOpenEdit(c)}
+                            className="p-2 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                            title="Edit Cheque"
+                          >
+                            <Edit2 className="w-4 h-4" />
                           </button>
-                          <button onClick={(e) => { e.stopPropagation(); handleDelete(c.id); }} className="text-xs text-red-500 hover:text-red-700 font-medium px-1.5 py-0.5 rounded hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors">
-                            Delete
+                          <button
+                            onClick={() => handleDelete(c.id)}
+                            className="p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                            title="Delete Cheque"
+                          >
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
                       </td>
-                    </motion.tr>
+                    </tr>
                   ))}
                 </tbody>
               </table>
@@ -465,161 +496,218 @@ export function ChequeRegistry() {
             <Pagination {...pagination} isLoading={loading} />
           </>
         )}
-      </div>
+      </Card>
 
-      {/* Modal */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={closeModal}>
-          <div className="w-[480px] rounded-xl border shadow-xl p-6" style={{ background: 'var(--color-bg-surface)', borderColor: 'var(--color-border)' }} onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-4 border-b pb-3" style={{ borderColor: 'var(--color-border)' }}>
-              <h2 className="text-base font-semibold uppercase tracking-wide" style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>
-                {modalMode === 'add' ? 'Add Cheque' : modalMode === 'edit' ? 'Update Cheque Status' : 'Cheque Details Preview'}
-              </h2>
-              <button onClick={closeModal} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
-            </div>
+      {/* Modal Dialog */}
+      <AnimatePresence>
+        {showModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={closeModal}>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="fixed inset-0 bg-black/40 backdrop-blur-xs"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+              className="bg-white dark:bg-slate-800 w-full max-w-xl rounded-2xl border border-slate-200 dark:border-slate-700 shadow-2xl overflow-hidden relative z-10 flex flex-col max-h-[90vh]"
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/80">
+                <div>
+                  <h2 className="text-base font-bold text-slate-900 dark:text-slate-100" style={{ fontFamily: 'var(--font-display)' }}>
+                    {modalMode === 'add' ? 'Register Cheque' : modalMode === 'edit' ? 'Edit Cheque Record' : 'Cheque Record Details'}
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {modalMode === 'preview' ? `Cheque #${selectedCheque?.chequeNo}` : 'Enter cheque instrument specifics and payee information'}
+                  </p>
+                </div>
+                <button
+                  onClick={closeModal}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
 
-            {modalMode === 'preview' ? (
-              <div className="space-y-4 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-xs uppercase font-semibold" style={{ color: 'var(--color-text-muted)' }}>Cheque Number</label>
-                    <p className="font-mono font-bold" style={{ color: 'var(--color-text-primary)' }}>{selectedCheque?.chequeNo}</p>
-                  </div>
-                  <div>
-                    <label className="text-xs uppercase font-semibold" style={{ color: 'var(--color-text-muted)' }}>Cheque Date</label>
-                    <p className="font-medium" style={{ color: 'var(--color-text-primary)' }}>{selectedCheque?.date}</p>
-                  </div>
-                  <div>
-                    <label className="text-xs uppercase font-semibold" style={{ color: 'var(--color-text-muted)' }}>Amount</label>
-                    <p className="text-brand-primary font-bold tabular-nums">₹{fmt(selectedCheque?.amount || 0)}</p>
-                  </div>
-                  <div>
-                    <label className="text-xs uppercase font-semibold" style={{ color: 'var(--color-text-muted)' }}>Bank Name</label>
-                    <p style={{ color: 'var(--color-text-primary)' }}>{selectedCheque?.bank !== '—' ? toTitleCase(selectedCheque?.bank) : '—'}</p>
-                  </div>
-                  <div>
-                    <label className="text-xs uppercase font-semibold block mb-1" style={{ color: 'var(--color-text-muted)' }}>Party Type</label>
-                    <PartyTypeBadge type={selectedCheque?.partyType} />
-                  </div>
-                  <div>
-                    <label className="text-xs uppercase font-semibold block mb-1" style={{ color: 'var(--color-text-muted)' }}>Party Name</label>
-                    <p className="font-semibold text-sm mt-0.5" style={{ color: 'var(--color-text-primary)' }}>{toTitleCase(selectedCheque?.party)}</p>
-                  </div>
-                  <div>
-                    <label className="text-xs uppercase font-semibold block mb-1" style={{ color: 'var(--color-text-muted)' }}>Status</label>
-                    <div className="mt-0.5">
-                      <Badge variant={
-                        selectedCheque?.status?.toLowerCase() === 'cleared' ? 'success' :
-                        selectedCheque?.status?.toLowerCase() === 'pending' ? 'warning' :
-                        selectedCheque?.status?.toLowerCase() === 'deposited' ? 'info' : 'danger'
-                      }>
+              {/* Body */}
+              <div className="p-6 overflow-y-auto flex-1 space-y-4">
+                {modalMode === 'preview' ? (
+                  <div className="space-y-4 text-xs">
+                    <div className="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200/80 dark:border-slate-700/80 flex items-center justify-between">
+                      <div>
+                        <span className="text-slate-400 block text-[10px] uppercase font-bold">{selectedCheque?.partyType}</span>
+                        <p className="font-bold text-sm text-slate-900 dark:text-slate-100 mt-0.5">{toTitleCase(selectedCheque?.party)}</p>
+                      </div>
+                      <Badge variant={getStatusBadgeVariant(selectedCheque?.status)} dot>
                         {toTitleCase(selectedCheque?.status)}
                       </Badge>
                     </div>
+
+                    <div className="grid grid-cols-2 gap-4 p-4 bg-white dark:bg-slate-800 rounded-xl border border-slate-200/80 dark:border-slate-700/80">
+                      <div>
+                        <span className="text-slate-400 block mb-0.5">Cheque Number</span>
+                        <span className="font-mono font-bold text-slate-900 dark:text-slate-100">{selectedCheque?.chequeNo}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block mb-0.5">Cheque Date</span>
+                        <span className="font-medium text-slate-800 dark:text-slate-200">{selectedCheque?.date}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block mb-0.5">Cheque Amount</span>
+                        <span className="font-bold text-slate-900 dark:text-slate-100 tabular-nums">₹{fmt(selectedCheque?.amount || 0)}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block mb-0.5">Drawee Bank</span>
+                        <span className="font-medium text-slate-800 dark:text-slate-200">{selectedCheque?.bank || '—'}</span>
+                      </div>
+                      {selectedCheque?.remarks && (
+                        <div className="col-span-2 pt-2 border-t border-slate-100 dark:border-slate-700/60">
+                          <span className="text-slate-400 block mb-0.5">Remarks / Reason</span>
+                          <span className="text-slate-700 dark:text-slate-300">{selectedCheque.remarks}</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <div className="col-span-2">
-                    <label className="text-xs uppercase font-semibold" style={{ color: 'var(--color-text-muted)' }}>Remarks</label>
-                    <p style={{ color: 'var(--color-text-primary)' }}>{selectedCheque?.remarks || '—'}</p>
-                  </div>
-                </div>
-                <div className="flex justify-end pt-4 border-t mt-6" style={{ borderColor: 'var(--color-border)' }}>
-                  <button onClick={() => setShowModal(false)} className="px-4 py-2 bg-brand-primary text-white text-sm rounded-lg hover:bg-brand-primary/95">Close</button>
-                </div>
+                ) : (
+                  <form id="cheque-form" onSubmit={handleSave} className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          Party Type <span className="text-rose-500">*</span>
+                        </label>
+                        <DropdownSelect
+                          value={form.partyType}
+                          onChange={val => setForm({...form, partyType: val, party: '', partyId: ''})}
+                          options={[
+                            { value: 'Vendor', label: 'Vendor' },
+                            { value: 'Financier', label: 'Financier' }
+                          ]}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          Party Name <span className="text-rose-500">*</span>
+                        </label>
+                        <DropdownSelect
+                          value={form.party}
+                          onChange={val => {
+                            const found = form.partyType === 'Vendor' 
+                              ? vendors.find(v => v.name === val)
+                              : financiers.find(f => f.name === val)
+                            setForm({ ...form, party: val, partyId: found?._id || '' })
+                          }}
+                          placeholder="Select Party"
+                          options={partyOptions}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          Cheque Number <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="123456"
+                          value={form.chequeNo}
+                          onChange={e => setForm({...form, chequeNo: e.target.value.slice(0, 6).replace(/[^0-9]/g, '')})}
+                          className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 font-mono outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          Amount (₹) <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="number"
+                          required
+                          min={1}
+                          placeholder="50000"
+                          value={form.amount}
+                          onChange={e => setForm({...form, amount: e.target.value})}
+                          className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 tabular-nums outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          Cheque Date <span className="text-rose-500">*</span>
+                        </label>
+                        <CustomDatePicker
+                          value={form.date}
+                          onChange={d => setForm({...form, date: d})}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          Cheque Status <span className="text-rose-500">*</span>
+                        </label>
+                        <DropdownSelect
+                          value={form.status}
+                          onChange={val => setForm({...form, status: val})}
+                          options={[
+                            { value: 'Pending', label: 'Pending' },
+                            { value: 'cleared', label: 'Cleared' },
+                            { value: 'deposited', label: 'Deposited / Cancelled' },
+                            { value: 'bounced', label: 'Bounced' }
+                          ]}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Drawee Bank Name</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. State Bank of India"
+                        value={form.bank}
+                        onChange={e => setForm({...form, bank: e.target.value})}
+                        className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Remarks / Bounce Reason</label>
+                      <textarea
+                        rows={2}
+                        value={form.remarks}
+                        onChange={e => setForm({...form, remarks: e.target.value})}
+                        placeholder="Additional remarks..."
+                        className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 resize-none"
+                      />
+                    </div>
+                  </form>
+                )}
               </div>
-            ) : modalMode === 'edit' ? (
-              /* Edit mode — only allow updating status */
-              <form onSubmit={handleSave} className="space-y-4">
-                <div>
-                  <p className="text-xs mb-3" style={{ color: 'var(--color-text-secondary)' }}>Cheque <span className="font-mono font-bold" style={{ color: 'var(--color-text-primary)' }}>{selectedCheque?.chequeNo}</span> — ₹{fmt(selectedCheque?.amount || 0)} — {toTitleCase(selectedCheque?.party)}</p>
-                  <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--color-text-secondary)' }}>Update Status</label>
-                  <DropdownSelect
-                    value={form.status}
-                    onChange={val => setForm({...form, status: val})}
-                    placeholder="Select Status"
-                    options={[
-                      { value: 'Pending', label: 'Pending' },
-                      { value: 'deposited', label: 'Deposited / Cancelled' },
-                      { value: 'bounced', label: 'Bounced' },
-                      { value: 'cleared', label: 'Cleared' }
-                    ]}
-                  />
-                </div>
-                <div className="flex justify-end space-x-3 pt-4 border-t mt-6" style={{ borderColor: 'var(--color-border)' }}>
-                  <button type="button" onClick={closeModal} className="px-4 py-2 text-sm border rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700" style={{ color: 'var(--color-text-secondary)', borderColor: 'var(--color-border)' }}>Cancel</button>
-                  <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-brand-primary rounded-lg hover:bg-brand-primary/90">Update Status</button>
-                </div>
-              </form>
-            ) : (
-              <form onSubmit={handleSave} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--color-text-secondary)' }}>Cheque Number * (6 digits)</label>
-                    <input type="text" required pattern="\d{6}" maxLength={6} value={form.chequeNo} onChange={e => setForm({...form, chequeNo: e.target.value.replace(/[^0-9]/g, '').slice(0, 6)})}
-                      className="w-full px-3 py-2 text-sm rounded-lg focus:outline-none font-mono"
-                      style={{ background: 'var(--color-bg-elevated)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }} />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--color-text-secondary)' }}>Cheque Date *</label>
-                    <CustomDatePicker
-                      value={form.date}
-                      onChange={val => setForm({...form, date: val})}
-                    />
-                  </div>
-                </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--color-text-secondary)' }}>Amount *</label>
-                    <input type="number" required value={form.amount} onChange={e => setForm({...form, amount: e.target.value})}
-                      className="w-full px-3 py-2 text-sm rounded-lg focus:outline-none"
-                      style={{ background: 'var(--color-bg-elevated)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }} />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--color-text-secondary)' }}>Bank Name</label>
-                    <DropdownSelect
-                      value={form.bank}
-                      onChange={val => setForm({...form, bank: val})}
-                      placeholder="Select Bank"
-                      options={banks.map(b => ({ value: b, label: toTitleCase(b) }))}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--color-text-secondary)' }}>Party Type</label>
-                    <DropdownSelect
-                      value={form.partyType}
-                      onChange={val => setForm({...form, partyType: val, party: '', partyId: ''})}
-                      placeholder="Select Party Type"
-                      options={[
-                        { value: 'Vendor', label: 'Vendor' },
-                        { value: 'Financier', label: 'Financier' }
-                      ]}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--color-text-secondary)' }}>Party Name</label>
-                    <DropdownSelect
-                      value={form.party}
-                      onChange={val => setForm({...form, party: val})}
-                      placeholder="Select Party"
-                      options={partyOptions}
-                    />
-                  </div>
-                </div>
-
-                <div className="flex justify-end space-x-3 pt-4 border-t mt-6" style={{ borderColor: 'var(--color-border)' }}>
-                  <button type="button" onClick={closeModal} className="px-4 py-2 text-sm border rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700" style={{ color: 'var(--color-text-secondary)', borderColor: 'var(--color-border)' }}>Cancel</button>
-                  <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-brand-primary rounded-lg hover:bg-brand-primary/90">
-                    Save Cheque
-                  </button>
-                </div>
-              </form>
-            )}
+              {/* Footer */}
+              <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-700 flex justify-end gap-3 bg-slate-50/50 dark:bg-slate-800/80">
+                {modalMode === 'preview' ? (
+                  <Button variant="secondary" onClick={() => setShowModal(false)}>Close</Button>
+                ) : (
+                  <>
+                    <Button variant="secondary" onClick={closeModal}>Cancel</Button>
+                    <Button type="submit" form="cheque-form" loading={isSaving}>
+                      {modalMode === 'add' ? 'Register Cheque' : 'Update Cheque'}
+                    </Button>
+                  </>
+                )}
+              </div>
+            </motion.div>
           </div>
-        </div>
-      )}
+        )}
+      </AnimatePresence>
+
       <SaveConfirmationModal {...confirmConfig} isSaving={isSaving} />
     </div>
   )

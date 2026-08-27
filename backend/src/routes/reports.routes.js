@@ -1,9 +1,9 @@
 const express = require('express')
 const router = express.Router()
 const reportsController = require('../controllers/reports.controller')
-const { authenticateJWT } = require('../middleware/auth.middleware')
+const { authenticateJWT, requirePermission } = require('../middleware/auth.middleware')
 
-router.use(authenticateJWT)
+router.use(authenticateJWT, requirePermission(['reports', 'outstanding']))
 
 router.get('/interest-statements', reportsController.getInterestStatements)
 router.get('/monthly-interest-statement', reportsController.getInterestStatements)

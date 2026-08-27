@@ -1,73 +1,105 @@
 import React from 'react'
 import { cn } from '@/utils/cn'
 
-// Maps variant name → CSS variable pairs for bg, text, border
 const VARIANT_STYLES = {
   success: {
-    bg:     'rgba(0, 200, 150, 0.12)',
-    text:   'var(--color-success)',
-    border: 'rgba(0, 200, 150, 0.28)',
+    bg: 'bg-emerald-50 dark:bg-emerald-950/40',
+    text: 'text-emerald-700 dark:text-emerald-300',
+    border: 'border-emerald-200/80 dark:border-emerald-800/40',
+    dot: 'bg-emerald-500'
   },
-  warning: {
-    bg:     'rgba(245, 166, 35, 0.12)',
-    text:   'var(--color-warning)',
-    border: 'rgba(245, 166, 35, 0.28)',
+  emerald: {
+    bg: 'bg-emerald-50 dark:bg-emerald-950/40',
+    text: 'text-emerald-700 dark:text-emerald-300',
+    border: 'border-emerald-200/80 dark:border-emerald-800/40',
+    dot: 'bg-emerald-500'
   },
-  danger: {
-    bg:     'rgba(232, 69, 69, 0.12)',
-    text:   'var(--color-danger)',
-    border: 'rgba(232, 69, 69, 0.28)',
-  },
-  destructive: {
-    bg:     'rgba(232, 69, 69, 0.12)',
-    text:   'var(--color-danger)',
-    border: 'rgba(232, 69, 69, 0.28)',
+  teal: {
+    bg: 'bg-teal-50 dark:bg-teal-950/40',
+    text: 'text-teal-700 dark:text-teal-300',
+    border: 'border-teal-200/80 dark:border-teal-800/40',
+    dot: 'bg-teal-500'
   },
   info: {
-    bg:     'rgba(74, 158, 255, 0.12)',
-    text:   'var(--color-info)',
-    border: 'rgba(74, 158, 255, 0.28)',
+    bg: 'bg-sky-50 dark:bg-sky-950/40',
+    text: 'text-sky-700 dark:text-sky-300',
+    border: 'border-sky-200/80 dark:border-sky-800/40',
+    dot: 'bg-sky-500'
   },
   blue: {
-    bg:     'rgba(74, 158, 255, 0.12)',
-    text:   'var(--color-info)',
-    border: 'rgba(74, 158, 255, 0.28)',
+    bg: 'bg-blue-50 dark:bg-blue-950/40',
+    text: 'text-blue-700 dark:text-blue-300',
+    border: 'border-blue-200/80 dark:border-blue-800/40',
+    dot: 'bg-blue-500'
   },
   purple: {
-    bg:     'rgba(139, 92, 246, 0.12)',
-    text:   '#a78bfa',
-    border: 'rgba(139, 92, 246, 0.28)',
+    bg: 'bg-indigo-50 dark:bg-indigo-950/40',
+    text: 'text-indigo-700 dark:text-indigo-300',
+    border: 'border-indigo-200/80 dark:border-indigo-800/40',
+    dot: 'bg-indigo-500'
+  },
+  indigo: {
+    bg: 'bg-indigo-50 dark:bg-indigo-950/40',
+    text: 'text-indigo-700 dark:text-indigo-300',
+    border: 'border-indigo-200/80 dark:border-indigo-800/40',
+    dot: 'bg-indigo-500'
+  },
+  warning: {
+    bg: 'bg-amber-50 dark:bg-amber-950/40',
+    text: 'text-amber-700 dark:text-amber-300',
+    border: 'border-amber-200/80 dark:border-amber-800/40',
+    dot: 'bg-amber-500'
+  },
+  amber: {
+    bg: 'bg-amber-50 dark:bg-amber-950/40',
+    text: 'text-amber-700 dark:text-amber-300',
+    border: 'border-amber-200/80 dark:border-amber-800/40',
+    dot: 'bg-amber-500'
+  },
+  danger: {
+    bg: 'bg-rose-50 dark:bg-rose-950/40',
+    text: 'text-rose-700 dark:text-rose-300',
+    border: 'border-rose-200/80 dark:border-rose-800/40',
+    dot: 'bg-rose-500'
+  },
+  destructive: {
+    bg: 'bg-rose-50 dark:bg-rose-950/40',
+    text: 'text-rose-700 dark:text-rose-300',
+    border: 'border-rose-200/80 dark:border-rose-800/40',
+    dot: 'bg-rose-500'
   },
   neutral: {
-    bg:     'var(--color-bg-elevated)',
-    text:   'var(--color-text-secondary)',
-    border: 'var(--color-border)',
+    bg: 'bg-slate-100 dark:bg-slate-800',
+    text: 'text-slate-600 dark:text-slate-400',
+    border: 'border-slate-200/80 dark:border-slate-700/60',
+    dot: 'bg-slate-400'
   },
   gray: {
-    bg:     'var(--color-bg-elevated)',
-    text:   'var(--color-text-secondary)',
-    border: 'var(--color-border)',
-  },
+    bg: 'bg-slate-100 dark:bg-slate-800',
+    text: 'text-slate-600 dark:text-slate-400',
+    border: 'border-slate-200/80 dark:border-slate-700/60',
+    dot: 'bg-slate-400'
+  }
 }
 
-export function Badge({ children, label, variant = 'neutral', className, style, ...props }) {
+export function Badge({ children, label, variant = 'neutral', dot = false, className, ...props }) {
   const v = VARIANT_STYLES[variant] || VARIANT_STYLES.neutral
 
   return (
     <span
       className={cn(
-        'inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border tabular-nums',
+        'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border tabular-nums transition-colors',
+        v.bg,
+        v.text,
+        v.border,
         className
       )}
-      style={{
-        backgroundColor: v.bg,
-        color: v.text,
-        borderColor: v.border,
-        ...style,
-      }}
       {...props}
     >
-      {label || children}
+      {dot && (
+        <span className={cn('h-1.5 w-1.5 rounded-full shrink-0 animate-pulse-slow', v.dot)} />
+      )}
+      {children || label}
     </span>
   )
 }

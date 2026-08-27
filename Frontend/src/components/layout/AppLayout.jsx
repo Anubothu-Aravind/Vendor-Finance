@@ -16,7 +16,7 @@ export function AppLayout() {
 
   return (
     <NavigationGuardProvider>
-      <div className="flex h-screen w-screen overflow-hidden bg-brand-canvas select-none">
+      <div className="flex h-screen w-screen overflow-hidden select-none" style={{ backgroundColor: 'var(--color-bg-base)' }}>
       {/* Registers navigate function into api.js error navigation singleton */}
       <NavigationSetter />
       {/* Mobile backdrop — only shown when sidebar is open on mobile */}

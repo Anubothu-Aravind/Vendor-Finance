@@ -1,6 +1,8 @@
+const mongoose = require('mongoose')
 const jwt = require('jsonwebtoken')
 const bcrypt = require('bcryptjs')
 const User = require('../models/User')
+const { VALID_PERMISSIONS } = require('../middleware/auth.middleware')
 
 const ACCESS_SECRET = process.env.JWT_SECRET || 'vastrams_access_secret_key'
 const REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'vastrams_refresh_secret_key'
@@ -128,15 +130,15 @@ exports.login = async (req, res, next) => {
 
     res.cookie('accessToken', accessToken, {
       httpOnly: true,
-      secure: true,
-      sameSite: 'strict',
+      secure: isProd,
+      sameSite: sameSiteMode,
       maxAge: 15 * 60 * 1000 // 15 minutes (short-lived)
     })
 
     res.cookie('refreshToken', refreshToken, {
       httpOnly: true,
-      secure: true,
-      sameSite: 'strict',
+      secure: isProd,
+      sameSite: sameSiteMode,
       maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
     })
 
@@ -148,6 +150,7 @@ exports.login = async (req, res, next) => {
         name: user.name,
         email: user.email,
         role: user.role,
+        permissions: user.permissions || (user.role === 'Admin' ? VALID_PERMISSIONS : []),
         isDefaultCredential: Boolean(user.isDefaultCredential)
       }
     })
@@ -188,8 +191,8 @@ exports.refresh = async (req, res, next) => {
 
     res.cookie('accessToken', accessToken, {
       httpOnly: true,
-      secure: true,
-      sameSite: 'strict',
+      secure: isProd,
+      sameSite: sameSiteMode,
       maxAge: 15 * 60 * 1000 // 15 minutes (short-lived)
     })
 
@@ -224,6 +227,7 @@ exports.me = async (req, res, next) => {
         name: req.user.name,
         email: req.user.email,
         role: req.user.role,
+        permissions: req.user.permissions || (req.user.role === 'Admin' ? VALID_PERMISSIONS : []),
         isDefaultCredential: Boolean(req.user.isDefaultCredential)
       }
     })
@@ -242,7 +246,8 @@ exports.getUsers = async (req, res, next) => {
         name: u.name,
         email: u.email,
         role: u.role,
-        status: u.status
+        status: u.status,
+        permissions: u.permissions || (u.role === 'Admin' ? VALID_PERMISSIONS : [])
       }))
     })
   } catch (error) {
@@ -254,7 +259,7 @@ exports.updateUserRole = async (req, res, next) => {
   try {
     const { id } = req.params
     const { role } = req.body
-    if (!['Admin', 'Viewer'].includes(role)) {
+    if (!['Admin', 'Viewer', 'Accountant', 'Full-time Staff', 'Part-time Staff', 'Hour-based User'].includes(role)) {
       return res.status(400).json({ success: false, message: 'Invalid role' })
     }
     const user = await User.findByIdAndUpdate(id, { role }, { new: true }).select('-passwordHash')
@@ -262,6 +267,93 @@ exports.updateUserRole = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'User not found' })
     }
     res.status(200).json({ success: true, user })
+  } catch (error) {
+    next(error)
+  }
+}
+
+exports.updateUserPermissions = async (req, res, next) => {
+  try {
+    const { id } = req.params
+    const { permissions } = req.body
+
+    // 1. Validate target user ID
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: 'Invalid user ID format' })
+    }
+
+    // 2. Validate permissions array
+    if (!permissions || !Array.isArray(permissions)) {
+      return res.status(400).json({ success: false, message: 'Permissions must be an array' })
+    }
+
+    // 3. Validate permission identifiers
+    const invalidPermissions = permissions.filter(p => !VALID_PERMISSIONS.includes(p))
+    if (invalidPermissions.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid permission identifier(s): ${invalidPermissions.join(', ')}`
+      })
+    }
+
+    // 4. Find user
+    const user = await User.findById(id)
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' })
+    }
+
+    // 5. Update only permissions field
+    user.permissions = permissions
+    await user.save({ validateModifiedOnly: true })
+
+    res.status(200).json({
+      success: true,
+      message: 'Permissions updated successfully',
+      permissions: user.permissions
+    })
+  } catch (error) {
+    next(error)
+  }
+}
+
+exports.resetUserPassword = async (req, res, next) => {
+  try {
+    const { id } = req.params
+    const { password } = req.body
+
+    // 1. Validate target user ID format
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: 'Invalid user ID format' })
+    }
+
+    // 2. Validate new password
+    if (!password || typeof password !== 'string' || !password.trim()) {
+      return res.status(400).json({ success: false, message: 'Password is required' })
+    }
+
+    if (password.trim().length < 8) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password must be at least 8 characters long'
+      })
+    }
+
+    // 3. Find target user
+    const user = await User.findById(id)
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' })
+    }
+
+    // 4. Hash new password using standard bcrypt cost factor 10
+    const passwordHash = await bcrypt.hash(password.trim(), 10)
+    user.passwordHash = passwordHash
+    user.isDefaultCredential = false
+    await user.save({ validateModifiedOnly: true })
+
+    res.status(200).json({
+      success: true,
+      message: 'Password reset successfully'
+    })
   } catch (error) {
     next(error)
   }

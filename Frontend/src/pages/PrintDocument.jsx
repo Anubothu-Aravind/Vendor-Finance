@@ -44,6 +44,7 @@ export function PrintDocument() {
   const navigate = useNavigate()
   const [doc, setDoc] = useState(null)
   const [profile, setProfile] = useState(null)
+  const [template, setTemplate] = useState({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -52,13 +53,22 @@ export function PrintDocument() {
       try {
         setLoading(true)
         const profileRes = await api.get('/settings/profile')
-        setProfile(profileRes?.data || {
+        const prof = profileRes?.data || {
           businessName: 'Vastrams',
           address: '123 Main St, Surat, Gujarat',
           gstin: '24AAAAA0000A1Z0',
           phone: '9876543210',
           email: 'admin@vastrams.in'
-        })
+        }
+        setProfile(prof)
+
+        try {
+          const tmplRes = await api.get('/settings/invoice-template')
+          if (tmplRes?.data) setTemplate(tmplRes.data)
+          else setTemplate(prof?.invoiceTemplates || {})
+        } catch {
+          setTemplate(prof?.invoiceTemplates || {})
+        }
 
         let endpoint = ''
         if (type === 'bill') {
@@ -370,47 +380,92 @@ export function PrintDocument() {
           </div>
         </div>
 
-        {/* Merged Header Block: Recipient (LEFT) & Supplier (RIGHT) + Bottom Document Metadata Row */}
+        {/* Merged Header Block: Recipient & Supplier + Bottom Document Metadata Row */}
         <div className="border border-black mb-4">
           <div className="grid grid-cols-2">
-            {/* Recipient details box (Bill To - LEFT) */}
-            <div className="border-r border-black p-3 text-xs space-y-1">
-              <h2 className="font-bold text-[10px] uppercase text-slate-500 tracking-wider">Recipient (Bill To)</h2>
-              {type === 'bill' ? (
-                <>
-                  <p className="font-bold text-sm">{profile.businessName}</p>
-                  <p className="whitespace-pre-line">{profile.address}</p>
-                  {profile.gstin && <p className="font-mono mt-1 font-semibold">GSTIN/UIN: {profile.gstin}</p>}
-                  <p>State Name: Gujarat, Code : 24</p>
-                </>
-              ) : (
-                <>
-                  <p className="font-bold text-sm">{partyName}</p>
-                  <p className="whitespace-pre-line">{partyAddress !== '—' ? partyAddress : 'N/A'}</p>
-                  {partyGstin && partyGstin !== '—' && <p className="font-mono mt-1 font-semibold">GSTIN/UIN: {partyGstin}</p>}
-                </>
-              )}
-            </div>
+            {/* Left Column */}
+            {template.swapRecipientSupplier ? (
+              /* Supplier details box (From - LEFT) */
+              <div className="border-r border-black p-3 text-xs space-y-1">
+                <h2 className="font-bold text-[10px] uppercase text-slate-500 tracking-wider">Supplier (From)</h2>
+                {type === 'bill' ? (
+                  <>
+                    <p className="font-bold text-sm">{partyName}</p>
+                    <p className="whitespace-pre-line">{partyAddress}</p>
+                    {partyGstin && <p className="font-mono mt-1 font-semibold">GSTIN/UIN: {partyGstin}</p>}
+                    {stateCodeSupplier && <p>State Name: {stateCodeSupplier === '24' ? 'Gujarat' : stateCodeSupplier === '29' ? 'Karnataka' : 'Other'}, Code : {stateCodeSupplier}</p>}
+                  </>
+                ) : (
+                  <>
+                    <p className="font-bold text-sm">{profile.businessName}</p>
+                    <p className="whitespace-pre-line">{profile.address}</p>
+                    {profile.gstin && <p className="font-mono mt-1 font-semibold">GSTIN/UIN: {profile.gstin}</p>}
+                    <p>State Name: Gujarat, Code : 24</p>
+                  </>
+                )}
+              </div>
+            ) : (
+              /* Recipient details box (Bill To - LEFT) */
+              <div className="border-r border-black p-3 text-xs space-y-1">
+                <h2 className="font-bold text-[10px] uppercase text-slate-500 tracking-wider">Recipient (Bill To)</h2>
+                {type === 'bill' ? (
+                  <>
+                    <p className="font-bold text-sm">{profile.businessName}</p>
+                    <p className="whitespace-pre-line">{profile.address}</p>
+                    {profile.gstin && <p className="font-mono mt-1 font-semibold">GSTIN/UIN: {profile.gstin}</p>}
+                    <p>State Name: Gujarat, Code : 24</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="font-bold text-sm">{partyName}</p>
+                    <p className="whitespace-pre-line">{partyAddress !== '—' ? partyAddress : 'N/A'}</p>
+                    {partyGstin && partyGstin !== '—' && <p className="font-mono mt-1 font-semibold">GSTIN/UIN: {partyGstin}</p>}
+                  </>
+                )}
+              </div>
+            )}
 
-            {/* Supplier details box (From - RIGHT) */}
-            <div className="p-3 text-xs space-y-1">
-              <h2 className="font-bold text-[10px] uppercase text-slate-500 tracking-wider">Supplier (From)</h2>
-              {type === 'bill' ? (
-                <>
-                  <p className="font-bold text-sm">{partyName}</p>
-                  <p className="whitespace-pre-line">{partyAddress}</p>
-                  {partyGstin && <p className="font-mono mt-1 font-semibold">GSTIN/UIN: {partyGstin}</p>}
-                  {stateCodeSupplier && <p>State Name: {stateCodeSupplier === '24' ? 'Gujarat' : stateCodeSupplier === '29' ? 'Karnataka' : 'Other'}, Code : {stateCodeSupplier}</p>}
-                </>
-              ) : (
-                <>
-                  <p className="font-bold text-sm">{profile.businessName}</p>
-                  <p className="whitespace-pre-line">{profile.address}</p>
-                  {profile.gstin && <p className="font-mono mt-1 font-semibold">GSTIN/UIN: {profile.gstin}</p>}
-                  <p>State Name: Gujarat, Code : 24</p>
-                </>
-              )}
-            </div>
+            {/* Right Column */}
+            {template.swapRecipientSupplier ? (
+              /* Recipient details box (Bill To - RIGHT) */
+              <div className="p-3 text-xs space-y-1">
+                <h2 className="font-bold text-[10px] uppercase text-slate-500 tracking-wider">Recipient (Bill To)</h2>
+                {type === 'bill' ? (
+                  <>
+                    <p className="font-bold text-sm">{profile.businessName}</p>
+                    <p className="whitespace-pre-line">{profile.address}</p>
+                    {profile.gstin && <p className="font-mono mt-1 font-semibold">GSTIN/UIN: {profile.gstin}</p>}
+                    <p>State Name: Gujarat, Code : 24</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="font-bold text-sm">{partyName}</p>
+                    <p className="whitespace-pre-line">{partyAddress !== '—' ? partyAddress : 'N/A'}</p>
+                    {partyGstin && partyGstin !== '—' && <p className="font-mono mt-1 font-semibold">GSTIN/UIN: {partyGstin}</p>}
+                  </>
+                )}
+              </div>
+            ) : (
+              /* Supplier details box (From - RIGHT) */
+              <div className="p-3 text-xs space-y-1">
+                <h2 className="font-bold text-[10px] uppercase text-slate-500 tracking-wider">Supplier (From)</h2>
+                {type === 'bill' ? (
+                  <>
+                    <p className="font-bold text-sm">{partyName}</p>
+                    <p className="whitespace-pre-line">{partyAddress}</p>
+                    {partyGstin && <p className="font-mono mt-1 font-semibold">GSTIN/UIN: {partyGstin}</p>}
+                    {stateCodeSupplier && <p>State Name: {stateCodeSupplier === '24' ? 'Gujarat' : stateCodeSupplier === '29' ? 'Karnataka' : 'Other'}, Code : {stateCodeSupplier}</p>}
+                  </>
+                ) : (
+                  <>
+                    <p className="font-bold text-sm">{profile.businessName}</p>
+                    <p className="whitespace-pre-line">{profile.address}</p>
+                    {profile.gstin && <p className="font-mono mt-1 font-semibold">GSTIN/UIN: {profile.gstin}</p>}
+                    <p>State Name: Gujarat, Code : 24</p>
+                  </>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Merged Bottom Row: 4 Metadata Columns */}

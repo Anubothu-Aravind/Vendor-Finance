@@ -48,7 +48,7 @@ test('Frontend Loan & Amount Unit Tests', async (t) => {
 
   await t.test('Amount-in-words utility with paise', () => {
     const formatted = numberToWords(201972.60)
-    assert.equal(formatted, 'Indian Rupee Two Lakh One Thousand Nine Hundred Seventy Two and Sixty Paise Only')
+    assert.equal(formatted, 'Indian Rupee Two Lakh One Thousand Nine Hundred and Seventy Two and Sixty Paise Only')
   })
 
   await t.test('Loan card pending amount renders principal + accrued interest', () => {

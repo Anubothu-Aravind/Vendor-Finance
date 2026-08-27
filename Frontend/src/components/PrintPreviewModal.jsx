@@ -149,6 +149,7 @@ export function PrintPreviewModal({ type, id, onClose }) {
     showHsn: false,
     showQty: false,
     showTaxTable: false,
+    swapRecipientSupplier: false,
     borderStyle: 'boxed',
   })
 
@@ -226,10 +227,11 @@ export function PrintPreviewModal({ type, id, onClose }) {
         }
 
         setSettings({
-          showQr: tmpl.showQRCode !== undefined ? tmpl.showQRCode : true,
-          showHsn: tmpl.showHSNColumn !== undefined ? tmpl.showHSNColumn : false,
-          showQty: tmpl.showQuantityColumn !== undefined ? tmpl.showQuantityColumn : false,
-          showTaxTable: tmpl.showGSTTable !== undefined ? tmpl.showGSTTable : false,
+          showQr: tmpl.showQRCode !== undefined ? tmpl.showQRCode : (tmpl.showQr !== undefined ? tmpl.showQr : true),
+          showHsn: tmpl.showHSNColumn !== undefined ? tmpl.showHSNColumn : (tmpl.showHsn !== undefined ? tmpl.showHsn : false),
+          showQty: tmpl.showQuantityColumn !== undefined ? tmpl.showQuantityColumn : (tmpl.showQty !== undefined ? tmpl.showQty : false),
+          showTaxTable: tmpl.showGSTTable !== undefined ? tmpl.showGSTTable : (tmpl.showTaxTable !== undefined ? tmpl.showTaxTable : false),
+          swapRecipientSupplier: tmpl.swapRecipientSupplier !== undefined ? tmpl.swapRecipientSupplier : false,
           borderStyle: tmpl.borderStyle || 'minimal',
           theme: tmpl.theme || 'modern-minimal',
           accentColor: tmpl.accentColor || '#000000',
@@ -694,6 +696,28 @@ export function PrintPreviewModal({ type, id, onClose }) {
                 <span className="font-semibold text-slate-600 dark:text-slate-300">Show Quantity Column</span>
               </label>
 
+              {/* Swap Recipient / Supplier */}
+              <label className="flex items-center space-x-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={settings.swapRecipientSupplier}
+                  onChange={e => {
+                    const newSettings = { ...settings, swapRecipientSupplier: e.target.checked }
+                    setSettings(newSettings)
+                    api.put('/settings/invoice-template', {
+                      showQRCode: newSettings.showQr,
+                      showHSNColumn: newSettings.showHsn,
+                      showQuantityColumn: newSettings.showQty,
+                      showGSTTable: newSettings.showTaxTable,
+                      swapRecipientSupplier: newSettings.swapRecipientSupplier,
+                      borderStyle: newSettings.borderStyle
+                    }).catch(() => {})
+                  }}
+                  className="rounded text-indigo-600 focus:ring-indigo-500"
+                />
+                <span className="font-semibold text-slate-600 dark:text-slate-300">Swap Recipient / Supplier</span>
+              </label>
+
             </div>
 
             {/* Border Style toggle */}
@@ -788,106 +812,210 @@ export function PrintPreviewModal({ type, id, onClose }) {
                 )}
               </div>
 
-              {/* Merged Header Block: Recipient (LEFT), Supplier (RIGHT) + Bottom Document Metadata Row */}
+              {/* Merged Header Block: Recipient & Supplier + Bottom Document Metadata Row */}
               <div className="mb-4 text-left" style={{ border: getPreviewBorders(settings).cell }}>
                 <div className="grid grid-cols-2">
-                  {/* Recipient Details (Bill To - LEFT) */}
-                  <div className="p-3 text-xs space-y-1" style={{ borderRight: getPreviewBorders(settings).cell }}>
-                    <h2 
-                      contentEditable={true} 
-                      suppressContentEditableWarning={true}
-                      className="font-bold text-[10px] uppercase text-slate-500 tracking-wider outline-none hover:bg-slate-50"
-                    >
-                      Recipient (Bill To)
-                    </h2>
-                    <p 
-                      contentEditable={true} 
-                      suppressContentEditableWarning={true}
-                      className="font-bold text-sm outline-none hover:bg-slate-50 px-0.5 rounded"
-                      onBlur={e => setFields({...fields, recipientName: e.target.innerText})}
-                    >
-                      {fields.recipientName || 'Recipient'}
-                    </p>
-                    <p 
-                      contentEditable={true} 
-                      suppressContentEditableWarning={true}
-                      className="whitespace-pre-line outline-none hover:bg-slate-50 px-0.5 rounded"
-                      onBlur={e => setFields({...fields, recipientAddress: e.target.innerText})}
-                    >
-                      {fields.recipientAddress || 'Address details...'}
-                    </p>
-                    <p className="font-mono mt-1">
-                      <span contentEditable={true} suppressContentEditableWarning={true} className="font-bold outline-none">GSTIN/UIN:</span>{' '}
-                      <span 
+                  {/* Left Column */}
+                  {settings.swapRecipientSupplier ? (
+                    /* Supplier Details (From - LEFT) */
+                    <div className="p-3 text-xs space-y-1" style={{ borderRight: getPreviewBorders(settings).cell }}>
+                      <h2 
                         contentEditable={true} 
                         suppressContentEditableWarning={true}
-                        className="outline-none hover:bg-slate-50 font-semibold px-0.5 rounded"
-                        onBlur={e => setFields({...fields, recipientGstin: e.target.innerText.toUpperCase()})}
+                        className="font-bold text-[10px] uppercase text-slate-500 tracking-wider outline-none hover:bg-slate-50"
                       >
-                        {fields.recipientGstin || '—'}
-                      </span>
-                    </p>
-                    <p>
-                      <span contentEditable={true} suppressContentEditableWarning={true} className="font-semibold text-slate-500 outline-none">State Code:</span>{' '}
-                      <span 
+                        Supplier (From)
+                      </h2>
+                      <p 
                         contentEditable={true} 
                         suppressContentEditableWarning={true}
-                        className="outline-none hover:bg-slate-50 font-semibold px-0.5 rounded"
-                        onBlur={e => setFields({...fields, recipientState: e.target.innerText})}
+                        className="font-bold text-sm outline-none hover:bg-slate-50 px-0.5 rounded"
+                        onBlur={e => setFields({...fields, supplierName: e.target.innerText})}
                       >
-                        {fields.recipientState || '—'}
-                      </span>
-                    </p>
-                  </div>
+                        {fields.supplierName || 'Supplier'}
+                      </p>
+                      <p 
+                        contentEditable={true} 
+                        suppressContentEditableWarning={true}
+                        className="whitespace-pre-line outline-none hover:bg-slate-50 px-0.5 rounded"
+                        onBlur={e => setFields({...fields, supplierAddress: e.target.innerText})}
+                      >
+                        {fields.supplierAddress || 'Address details...'}
+                      </p>
+                      <p className="font-mono mt-1">
+                        <span contentEditable={true} suppressContentEditableWarning={true} className="font-bold outline-none">GSTIN/UIN:</span>{' '}
+                        <span 
+                          contentEditable={true} 
+                          suppressContentEditableWarning={true}
+                          className="outline-none hover:bg-slate-50 font-semibold px-0.5 rounded"
+                          onBlur={e => setFields({...fields, supplierGstin: e.target.innerText.toUpperCase()})}
+                        >
+                          {fields.supplierGstin || '—'}
+                        </span>
+                      </p>
+                      <p>
+                        <span contentEditable={true} suppressContentEditableWarning={true} className="font-semibold text-slate-500 outline-none">State Code:</span>{' '}
+                        <span 
+                          contentEditable={true} 
+                          suppressContentEditableWarning={true}
+                          className="outline-none hover:bg-slate-50 font-semibold px-0.5 rounded"
+                          onBlur={e => setFields({...fields, supplierState: e.target.innerText})}
+                        >
+                          {fields.supplierState || '—'}
+                        </span>
+                      </p>
+                    </div>
+                  ) : (
+                    /* Recipient Details (Bill To - LEFT) */
+                    <div className="p-3 text-xs space-y-1" style={{ borderRight: getPreviewBorders(settings).cell }}>
+                      <h2 
+                        contentEditable={true} 
+                        suppressContentEditableWarning={true}
+                        className="font-bold text-[10px] uppercase text-slate-500 tracking-wider outline-none hover:bg-slate-50"
+                      >
+                        Recipient (Bill To)
+                      </h2>
+                      <p 
+                        contentEditable={true} 
+                        suppressContentEditableWarning={true}
+                        className="font-bold text-sm outline-none hover:bg-slate-50 px-0.5 rounded"
+                        onBlur={e => setFields({...fields, recipientName: e.target.innerText})}
+                      >
+                        {fields.recipientName || 'Recipient'}
+                      </p>
+                      <p 
+                        contentEditable={true} 
+                        suppressContentEditableWarning={true}
+                        className="whitespace-pre-line outline-none hover:bg-slate-50 px-0.5 rounded"
+                        onBlur={e => setFields({...fields, recipientAddress: e.target.innerText})}
+                      >
+                        {fields.recipientAddress || 'Address details...'}
+                      </p>
+                      <p className="font-mono mt-1">
+                        <span contentEditable={true} suppressContentEditableWarning={true} className="font-bold outline-none">GSTIN/UIN:</span>{' '}
+                        <span 
+                          contentEditable={true} 
+                          suppressContentEditableWarning={true}
+                          className="outline-none hover:bg-slate-50 font-semibold px-0.5 rounded"
+                          onBlur={e => setFields({...fields, recipientGstin: e.target.innerText.toUpperCase()})}
+                        >
+                          {fields.recipientGstin || '—'}
+                        </span>
+                      </p>
+                      <p>
+                        <span contentEditable={true} suppressContentEditableWarning={true} className="font-semibold text-slate-500 outline-none">State Code:</span>{' '}
+                        <span 
+                          contentEditable={true} 
+                          suppressContentEditableWarning={true}
+                          className="outline-none hover:bg-slate-50 font-semibold px-0.5 rounded"
+                          onBlur={e => setFields({...fields, recipientState: e.target.innerText})}
+                        >
+                          {fields.recipientState || '—'}
+                        </span>
+                      </p>
+                    </div>
+                  )}
 
-                  {/* Supplier Details (From - RIGHT) */}
-                  <div className="p-3 text-xs space-y-1">
-                    <h2 
-                      contentEditable={true} 
-                      suppressContentEditableWarning={true}
-                      className="font-bold text-[10px] uppercase text-slate-500 tracking-wider outline-none hover:bg-slate-50"
-                    >
-                      Supplier (From)
-                    </h2>
-                    <p 
-                      contentEditable={true} 
-                      suppressContentEditableWarning={true}
-                      className="font-bold text-sm outline-none hover:bg-slate-50 px-0.5 rounded"
-                      onBlur={e => setFields({...fields, supplierName: e.target.innerText})}
-                    >
-                      {fields.supplierName || 'Supplier'}
-                    </p>
-                    <p 
-                      contentEditable={true} 
-                      suppressContentEditableWarning={true}
-                      className="whitespace-pre-line outline-none hover:bg-slate-50 px-0.5 rounded"
-                      onBlur={e => setFields({...fields, supplierAddress: e.target.innerText})}
-                    >
-                      {fields.supplierAddress || 'Address details...'}
-                    </p>
-                    <p className="font-mono mt-1">
-                      <span contentEditable={true} suppressContentEditableWarning={true} className="font-bold outline-none">GSTIN/UIN:</span>{' '}
-                      <span 
+                  {/* Right Column */}
+                  {settings.swapRecipientSupplier ? (
+                    /* Recipient Details (Bill To - RIGHT) */
+                    <div className="p-3 text-xs space-y-1">
+                      <h2 
                         contentEditable={true} 
                         suppressContentEditableWarning={true}
-                        className="outline-none hover:bg-slate-50 font-semibold px-0.5 rounded"
-                        onBlur={e => setFields({...fields, supplierGstin: e.target.innerText.toUpperCase()})}
+                        className="font-bold text-[10px] uppercase text-slate-500 tracking-wider outline-none hover:bg-slate-50"
                       >
-                        {fields.supplierGstin || '—'}
-                      </span>
-                    </p>
-                    <p>
-                      <span contentEditable={true} suppressContentEditableWarning={true} className="font-semibold text-slate-500 outline-none">State Code:</span>{' '}
-                      <span 
+                        Recipient (Bill To)
+                      </h2>
+                      <p 
                         contentEditable={true} 
                         suppressContentEditableWarning={true}
-                        className="outline-none hover:bg-slate-50 font-semibold px-0.5 rounded"
-                        onBlur={e => setFields({...fields, supplierState: e.target.innerText})}
+                        className="font-bold text-sm outline-none hover:bg-slate-50 px-0.5 rounded"
+                        onBlur={e => setFields({...fields, recipientName: e.target.innerText})}
                       >
-                        {fields.supplierState || '—'}
-                      </span>
-                    </p>
-                  </div>
+                        {fields.recipientName || 'Recipient'}
+                      </p>
+                      <p 
+                        contentEditable={true} 
+                        suppressContentEditableWarning={true}
+                        className="whitespace-pre-line outline-none hover:bg-slate-50 px-0.5 rounded"
+                        onBlur={e => setFields({...fields, recipientAddress: e.target.innerText})}
+                      >
+                        {fields.recipientAddress || 'Address details...'}
+                      </p>
+                      <p className="font-mono mt-1">
+                        <span contentEditable={true} suppressContentEditableWarning={true} className="font-bold outline-none">GSTIN/UIN:</span>{' '}
+                        <span 
+                          contentEditable={true} 
+                          suppressContentEditableWarning={true}
+                          className="outline-none hover:bg-slate-50 font-semibold px-0.5 rounded"
+                          onBlur={e => setFields({...fields, recipientGstin: e.target.innerText.toUpperCase()})}
+                        >
+                          {fields.recipientGstin || '—'}
+                        </span>
+                      </p>
+                      <p>
+                        <span contentEditable={true} suppressContentEditableWarning={true} className="font-semibold text-slate-500 outline-none">State Code:</span>{' '}
+                        <span 
+                          contentEditable={true} 
+                          suppressContentEditableWarning={true}
+                          className="outline-none hover:bg-slate-50 font-semibold px-0.5 rounded"
+                          onBlur={e => setFields({...fields, recipientState: e.target.innerText})}
+                        >
+                          {fields.recipientState || '—'}
+                        </span>
+                      </p>
+                    </div>
+                  ) : (
+                    /* Supplier Details (From - RIGHT) */
+                    <div className="p-3 text-xs space-y-1">
+                      <h2 
+                        contentEditable={true} 
+                        suppressContentEditableWarning={true}
+                        className="font-bold text-[10px] uppercase text-slate-500 tracking-wider outline-none hover:bg-slate-50"
+                      >
+                        Supplier (From)
+                      </h2>
+                      <p 
+                        contentEditable={true} 
+                        suppressContentEditableWarning={true}
+                        className="font-bold text-sm outline-none hover:bg-slate-50 px-0.5 rounded"
+                        onBlur={e => setFields({...fields, supplierName: e.target.innerText})}
+                      >
+                        {fields.supplierName || 'Supplier'}
+                      </p>
+                      <p 
+                        contentEditable={true} 
+                        suppressContentEditableWarning={true}
+                        className="whitespace-pre-line outline-none hover:bg-slate-50 px-0.5 rounded"
+                        onBlur={e => setFields({...fields, supplierAddress: e.target.innerText})}
+                      >
+                        {fields.supplierAddress || 'Address details...'}
+                      </p>
+                      <p className="font-mono mt-1">
+                        <span contentEditable={true} suppressContentEditableWarning={true} className="font-bold outline-none">GSTIN/UIN:</span>{' '}
+                        <span 
+                          contentEditable={true} 
+                          suppressContentEditableWarning={true}
+                          className="outline-none hover:bg-slate-50 font-semibold px-0.5 rounded"
+                          onBlur={e => setFields({...fields, supplierGstin: e.target.innerText.toUpperCase()})}
+                        >
+                          {fields.supplierGstin || '—'}
+                        </span>
+                      </p>
+                      <p>
+                        <span contentEditable={true} suppressContentEditableWarning={true} className="font-semibold text-slate-500 outline-none">State Code:</span>{' '}
+                        <span 
+                          contentEditable={true} 
+                          suppressContentEditableWarning={true}
+                          className="outline-none hover:bg-slate-50 font-semibold px-0.5 rounded"
+                          onBlur={e => setFields({...fields, supplierState: e.target.innerText})}
+                        >
+                          {fields.supplierState || '—'}
+                        </span>
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 {/* Merged Bottom Row: 4 Document Metadata Columns */}
