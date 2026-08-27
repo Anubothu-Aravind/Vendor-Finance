@@ -126,18 +126,19 @@ exports.login = async (req, res, next) => {
     const refreshToken = jwt.sign(tokenPayload, REFRESH_SECRET, { expiresIn: '30d' })
 
     const isProd = process.env.NODE_ENV === 'production'
-    const sameSiteMode = isProd ? 'strict' : 'lax'
+    const sameSiteMode = process.env.COOKIE_SAME_SITE || (isProd ? 'none' : 'lax')
+    const secureCookie = isProd || sameSiteMode === 'none'
 
     res.cookie('accessToken', accessToken, {
       httpOnly: true,
-      secure: isProd,
+      secure: secureCookie,
       sameSite: sameSiteMode,
       maxAge: 15 * 60 * 1000 // 15 minutes (short-lived)
     })
 
     res.cookie('refreshToken', refreshToken, {
       httpOnly: true,
-      secure: isProd,
+      secure: secureCookie,
       sameSite: sameSiteMode,
       maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
     })
@@ -187,11 +188,12 @@ exports.refresh = async (req, res, next) => {
 
     const accessToken = jwt.sign(tokenPayload, ACCESS_SECRET, { expiresIn: '24h' })
     const isProd = process.env.NODE_ENV === 'production'
-    const sameSiteMode = isProd ? 'strict' : 'lax'
+    const sameSiteMode = process.env.COOKIE_SAME_SITE || (isProd ? 'none' : 'lax')
+    const secureCookie = isProd || sameSiteMode === 'none'
 
     res.cookie('accessToken', accessToken, {
       httpOnly: true,
-      secure: isProd,
+      secure: secureCookie,
       sameSite: sameSiteMode,
       maxAge: 15 * 60 * 1000 // 15 minutes (short-lived)
     })
@@ -208,10 +210,11 @@ exports.refresh = async (req, res, next) => {
 exports.logout = async (req, res, next) => {
   try {
     const isProd = process.env.NODE_ENV === 'production'
-    const sameSiteMode = isProd ? 'strict' : 'lax'
-    res.clearCookie('accessToken', { httpOnly: true, secure: isProd, sameSite: sameSiteMode })
-    res.clearCookie('jwt', { httpOnly: true, secure: isProd, sameSite: typeof isProd !== 'undefined' && isProd ? 'strict' : 'lax' })
-    res.clearCookie('refreshToken', { httpOnly: true, secure: isProd, sameSite: sameSiteMode })
+    const sameSiteMode = process.env.COOKIE_SAME_SITE || (isProd ? 'none' : 'lax')
+    const secureCookie = isProd || sameSiteMode === 'none'
+    res.clearCookie('accessToken', { httpOnly: true, secure: secureCookie, sameSite: sameSiteMode })
+    res.clearCookie('jwt', { httpOnly: true, secure: secureCookie, sameSite: sameSiteMode })
+    res.clearCookie('refreshToken', { httpOnly: true, secure: secureCookie, sameSite: sameSiteMode })
     res.status(200).json({ success: true, message: 'Logged out successfully' })
   } catch (error) {
     next(error)

@@ -134,18 +134,19 @@ router.post('/complete', authenticateSetupToken, async (req, res, next) => {
     const refreshToken = jwt.sign(tokenPayload, REFRESH_SECRET, { expiresIn: '7d' })
 
     const isProd = process.env.NODE_ENV === 'production'
-    const sameSiteMode = isProd ? 'strict' : 'lax'
+    const sameSiteMode = process.env.COOKIE_SAME_SITE || (isProd ? 'none' : 'lax')
+    const secureCookie = isProd || sameSiteMode === 'none'
 
     res.cookie('accessToken', accessToken, {
       httpOnly: true,
-      secure: isProd,
+      secure: secureCookie,
       sameSite: sameSiteMode,
       maxAge: 15 * 60 * 1000 // 15 minutes
     })
 
     res.cookie('refreshToken', refreshToken, {
       httpOnly: true,
-      secure: isProd,
+      secure: secureCookie,
       sameSite: sameSiteMode,
       maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     })
@@ -197,18 +198,19 @@ router.post('/skip', authenticateSetupToken, async (req, res, next) => {
     const refreshToken = jwt.sign(tokenPayload, REFRESH_SECRET, { expiresIn: '7d' })
 
     const isProd = process.env.NODE_ENV === 'production'
-    const sameSiteMode = isProd ? 'strict' : 'lax'
+    const sameSiteMode = process.env.COOKIE_SAME_SITE || (isProd ? 'none' : 'lax')
+    const secureCookie = isProd || sameSiteMode === 'none'
 
     res.cookie('accessToken', accessToken, {
       httpOnly: true,
-      secure: isProd,
+      secure: secureCookie,
       sameSite: sameSiteMode,
       maxAge: 15 * 60 * 1000
     })
 
     res.cookie('refreshToken', refreshToken, {
       httpOnly: true,
-      secure: isProd,
+      secure: secureCookie,
       sameSite: sameSiteMode,
       maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     })
