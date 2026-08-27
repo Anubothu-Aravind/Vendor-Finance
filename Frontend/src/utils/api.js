@@ -5,8 +5,10 @@ export const setAuthToken = () => {
   // Access tokens are now managed purely via HttpOnly cookies by the browser.
 }
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api'
+
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: API_BASE_URL,
   withCredentials: true, // Automatically send HttpOnly cookies with every request
   headers: {
     'Content-Type': 'application/json',
@@ -35,7 +37,7 @@ api.interceptors.response.use(
     if (status === 401 && !originalRequest._retry && !isAuthEndpoint) {
       originalRequest._retry = true
       try {
-        const refreshRes = await axios.post('/api/auth/refresh', {}, { withCredentials: true })
+        const refreshRes = await axios.post(`${API_BASE_URL}/auth/refresh`, {}, { withCredentials: true })
         if (refreshRes.data && refreshRes.data.success) {
           return api(originalRequest)
         }
