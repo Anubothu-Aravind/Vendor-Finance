@@ -42,35 +42,10 @@ connectDB().then(() => {
   seedAdminUser()
 })
 
-// 4. Strict CORS configuration bounded to explicit FRONTEND_URL destination
-const normalizeOrigin = (url) => (url ? url.trim().replace(/\/+$/, '') : null)
-
-const allowedOrigins = [
-  normalizeOrigin(process.env.FRONTEND_URL),
-  normalizeOrigin(process.env.CLIENT_URL),
-  'https://vastrams.vercel.app',
-  'http://localhost:3000',
-  'http://127.0.0.1:3000',
-  'http://localhost:5173',
-  'http://127.0.0.1:5173'
-].filter(Boolean)
-
-const corsOptions = {
-  origin: (origin, callback) => {
-    // Allow non-browser requests (Postman, curl, server-to-server) or listed origins
-    if (!origin) {
-      return callback(null, true)
-    }
-    const cleanOrigin = normalizeOrigin(origin)
-    if (allowedOrigins.includes(cleanOrigin)) {
-      return callback(null, true)
-    }
-    callback(new Error(`CORS blocked: Origin ${origin} not permitted`))
-  },
-  credentials: true, // Allow HttpOnly cookie transmission
-  optionsSuccessStatus: 200
-}
+// 4. Strict CORS configuration with dynamic Vastrams Vercel preview domain support
+const { corsOptions } = require('./config/cors')
 app.use(cors(corsOptions))
+app.options('*', cors(corsOptions))
 
 // 5. Rate Limiting Protection
 // Dedicated strict rate limiter for login endpoint to prevent brute-forcing
