@@ -12,7 +12,7 @@ const connectDB = require('./config/db')
 const errorHandler = require('./middleware/errorHandler')
 
 // Loud validation of basic environment variables
-const PORT = process.env.PORT || 5000
+const PORT = process.env.PORT || 5001
 
 // Initialize Express App
 const app = express()
@@ -43,9 +43,12 @@ connectDB().then(() => {
 })
 
 // 4. Strict CORS configuration bounded to explicit FRONTEND_URL destination
+const normalizeOrigin = (url) => (url ? url.trim().replace(/\/+$/, '') : null)
+
 const allowedOrigins = [
-  process.env.FRONTEND_URL,
-  process.env.CLIENT_URL,
+  normalizeOrigin(process.env.FRONTEND_URL),
+  normalizeOrigin(process.env.CLIENT_URL),
+  'https://vastrams.vercel.app',
   'http://localhost:3000',
   'http://127.0.0.1:3000',
   'http://localhost:5173',
@@ -55,11 +58,14 @@ const allowedOrigins = [
 const corsOptions = {
   origin: (origin, callback) => {
     // Allow non-browser requests (Postman, curl, server-to-server) or listed origins
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true)
-    } else {
-      callback(new Error(`CORS blocked: Origin ${origin} not permitted`))
+    if (!origin) {
+      return callback(null, true)
     }
+    const cleanOrigin = normalizeOrigin(origin)
+    if (allowedOrigins.includes(cleanOrigin)) {
+      return callback(null, true)
+    }
+    callback(new Error(`CORS blocked: Origin ${origin} not permitted`))
   },
   credentials: true, // Allow HttpOnly cookie transmission
   optionsSuccessStatus: 200
@@ -134,50 +140,31 @@ const { sseHandler } = require('./utils/sse')
 app.get('/api/events', sseHandler)
 app.use('/api', require('./routes/backup.routes'))
 
-// Serve Frontend static assets if bundled locally in production
-const frontendBuildPath = path.join(__dirname, '../../Frontend/dist')
-const indexHtmlPath = path.join(frontendBuildPath, 'index.html')
+// Standalone API Server Root & Health Endpoints
+app.get('/', (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: 'Vastrams API Server is operational'
+  })
+})
 
-if (process.env.NODE_ENV === 'production' && require('fs').existsSync(indexHtmlPath)) {
-  app.use(express.static(frontendBuildPath))
-  
-  // Wildcard handler for client-side routing
-  app.get('*', (req, res) => {
-    if (req.originalUrl.startsWith('/api')) {
-      return res.status(404).json({ success: false, message: 'API route not found' })
-    }
-    res.sendFile(indexHtmlPath)
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    success: true,
+    status: 'healthy',
+    database: 'connected',
+    timestamp: new Date().toISOString()
   })
-} else {
-  // Standalone API server mode (Frontend hosted separately on Vercel)
-  app.get('/', (req, res) => {
-    res.status(200).json({
-      success: true,
-      message: 'Vastrams API Server is operational',
-      environment: process.env.NODE_ENV || 'development',
-      database: 'connected',
-      timestamp: new Date().toISOString()
-    })
-  })
+})
 
-  app.get('/health', (req, res) => {
-    res.status(200).json({
-      success: true,
-      status: 'healthy',
-      database: 'connected',
-      timestamp: new Date().toISOString()
-    })
+app.get('/api/health', (req, res) => {
+  res.status(200).json({
+    success: true,
+    status: 'healthy',
+    database: 'connected',
+    timestamp: new Date().toISOString()
   })
-
-  app.get('/api/health', (req, res) => {
-    res.status(200).json({
-      success: true,
-      status: 'healthy',
-      database: 'connected',
-      timestamp: new Date().toISOString()
-    })
-  })
-}
+})
 
 // Global Error Handler
 app.use(errorHandler)

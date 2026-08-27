@@ -84,6 +84,7 @@ function parseEnv(filePath) {
 
 // Print ASCII summary table
 function printSummaryTable(data) {
+  const SECRET_KEYS = new Set(['MONGO_URI', 'JWT_SECRET', 'JWT_REFRESH_SECRET', 'SETUP_TOKEN_SECRET', 'SMTP_PASS']);
   console.log('\n=== Environment Configuration Summary ===');
   console.log('┌' + '─'.repeat(22) + '┬' + '─'.repeat(42) + '┬' + '─'.repeat(16) + '┐');
   console.log('│ ' + 'Key'.padEnd(20) + ' │ ' + 'Value'.padEnd(40) + ' │ ' + 'Source'.padEnd(14) + ' │');
@@ -91,7 +92,9 @@ function printSummaryTable(data) {
   for (const row of data) {
     const keyStr = row.key.padEnd(20);
     let valStr = row.value || '';
-    if (valStr.length > 37) {
+    if (SECRET_KEYS.has(row.key) && valStr) {
+      valStr = '[SECURED / CONFIGURED]';
+    } else if (valStr.length > 37) {
       valStr = valStr.substring(0, 37) + '...';
     }
     valStr = valStr.padEnd(40);
@@ -102,12 +105,25 @@ function printSummaryTable(data) {
 }
 
 async function run() {
+  const isProduction = process.env.NODE_ENV === 'production';
+
+  // In production (e.g. Render), environment variables are managed by the platform
+  if (isProduction) {
+    console.log("\x1b[36m%s\x1b[0m", "=== Vastrams Backend (Production Mode) ===");
+    if (!process.env.MONGO_URI) {
+      console.error("\x1b[31mError: MONGO_URI is required in production environment.\x1b[0m");
+      process.exit(1);
+    }
+    console.log("\x1b[32m%s\x1b[0m", "✓ Production environment variables verified.");
+    process.exit(0);
+  }
+
   const existingEnv = parseEnv(envPath);
   
   // Merge provider-injected process.env settings if available
   const requiredKeys = [
     'PORT', 'MONGO_URI', 'JWT_SECRET', 'JWT_REFRESH_SECRET',
-    'CLIENT_URL', 'SETUP_TOKEN_SECRET',
+    'CLIENT_URL', 'FRONTEND_URL', 'SETUP_TOKEN_SECRET', 'COOKIE_SAME_SITE',
     'SMTP_HOST', 'SMTP_PORT', 'SMTP_SECURE', 'SMTP_USER', 'SMTP_PASS', 'SMTP_FROM'
   ];
   requiredKeys.forEach(key => {
@@ -119,10 +135,11 @@ async function run() {
   const finalEnv = { ...existingEnv };
   const summary = [];
   
-  // Check if all required keys exist and are non-empty
-  const hasAllKeys = requiredKeys.every(k => existingEnv[k] !== undefined && existingEnv[k] !== null && existingEnv[k].trim() !== '');
+  // Check if essential keys exist and are non-empty
+  const essentialKeys = ['PORT', 'MONGO_URI', 'JWT_SECRET', 'JWT_REFRESH_SECRET', 'SETUP_TOKEN_SECRET'];
+  const hasAllEssentialKeys = essentialKeys.every(k => existingEnv[k] !== undefined && existingEnv[k] !== null && existingEnv[k].trim() !== '');
 
-  if (!forceMode && fs.existsSync(envPath) && hasAllKeys) {
+  if (!forceMode && fs.existsSync(envPath) && hasAllEssentialKeys) {
     console.log("\x1b[32m%s\x1b[0m", "✓ Environment credentials verified & active.");
     process.exit(0);
   }
@@ -133,32 +150,38 @@ async function run() {
   }
 
   // 1. PORT
-  let portVal = existingEnv['PORT'] || '5001';
+  let portVal = process.env.PORT || existingEnv['PORT'] || '5001';
   finalEnv['PORT'] = portVal;
-  summary.push({ key: 'PORT', value: portVal, source: existingEnv['PORT'] ? 'existing' : 'default' });
+  summary.push({ key: 'PORT', value: portVal, source: process.env.PORT ? 'process.env' : (existingEnv['PORT'] ? 'existing' : 'default') });
 
-  // 2. CLIENT_URL
-  let clientUrlVal = existingEnv['CLIENT_URL'] || 'http://localhost:3000';
+  // 2. CLIENT_URL / FRONTEND_URL
+  let clientUrlVal = process.env.FRONTEND_URL || process.env.CLIENT_URL || existingEnv['FRONTEND_URL'] || existingEnv['CLIENT_URL'] || 'http://localhost:3000';
   finalEnv['CLIENT_URL'] = clientUrlVal;
-  summary.push({ key: 'CLIENT_URL', value: clientUrlVal, source: existingEnv['CLIENT_URL'] ? 'existing' : 'default' });
+  finalEnv['FRONTEND_URL'] = clientUrlVal;
+  summary.push({ key: 'CLIENT_URL', value: clientUrlVal, source: (process.env.FRONTEND_URL || process.env.CLIENT_URL) ? 'process.env' : (existingEnv['CLIENT_URL'] ? 'existing' : 'default') });
 
-  // 3. JWT_SECRET
-  let jwtSecretVal = existingEnv['JWT_SECRET'];
+  // 3. COOKIE_SAME_SITE
+  let sameSiteVal = process.env.COOKIE_SAME_SITE || existingEnv['COOKIE_SAME_SITE'] || 'lax';
+  finalEnv['COOKIE_SAME_SITE'] = sameSiteVal;
+  summary.push({ key: 'COOKIE_SAME_SITE', value: sameSiteVal, source: process.env.COOKIE_SAME_SITE ? 'process.env' : 'default' });
+
+  // 4. JWT_SECRET
+  let jwtSecretVal = process.env.JWT_SECRET || existingEnv['JWT_SECRET'];
   if (!jwtSecretVal || jwtSecretVal.length < 16) {
     jwtSecretVal = crypto.randomBytes(64).toString('hex');
     summary.push({ key: 'JWT_SECRET', value: jwtSecretVal, source: 'auto-generated' });
   } else {
-    summary.push({ key: 'JWT_SECRET', value: jwtSecretVal, source: 'existing' });
+    summary.push({ key: 'JWT_SECRET', value: jwtSecretVal, source: process.env.JWT_SECRET ? 'process.env' : 'existing' });
   }
   finalEnv['JWT_SECRET'] = jwtSecretVal;
 
-  // 4. JWT_REFRESH_SECRET
-  let jwtRefreshSecretVal = existingEnv['JWT_REFRESH_SECRET'];
+  // 5. JWT_REFRESH_SECRET
+  let jwtRefreshSecretVal = process.env.JWT_REFRESH_SECRET || existingEnv['JWT_REFRESH_SECRET'];
   if (!jwtRefreshSecretVal || jwtRefreshSecretVal.length < 16) {
     jwtRefreshSecretVal = crypto.randomBytes(64).toString('hex');
     summary.push({ key: 'JWT_REFRESH_SECRET', value: jwtRefreshSecretVal, source: 'auto-generated' });
   } else {
-    summary.push({ key: 'JWT_REFRESH_SECRET', value: jwtRefreshSecretVal, source: 'existing' });
+    summary.push({ key: 'JWT_REFRESH_SECRET', value: jwtRefreshSecretVal, source: process.env.JWT_REFRESH_SECRET ? 'process.env' : 'existing' });
   }
   finalEnv['JWT_REFRESH_SECRET'] = jwtRefreshSecretVal;
 
