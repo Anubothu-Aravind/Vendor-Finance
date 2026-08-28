@@ -45,14 +45,22 @@ exports.createLoan = async (req, res, next) => {
       linkedChequeId = cheque._id
     }
 
+    // Calculate default maturityDate (1 year) if omitted
+    let finalMaturityDate = maturityDate
+    if (!finalMaturityDate) {
+      const d = drawdownDate ? new Date(drawdownDate) : new Date()
+      d.setFullYear(d.getFullYear() + 1)
+      finalMaturityDate = d
+    }
+
     // Create Loan
     const loan = new Loan({
       loanReference,
       financierId,
       principalAmount,
       interestRate: interestRate || financier.defaultInterestRate,
-      drawdownDate,
-      maturityDate,
+      drawdownDate: drawdownDate || new Date(),
+      maturityDate: finalMaturityDate,
       linkedChequeId,
       outstandingPrincipal: principalAmount,
       status: 'ACTIVE'

@@ -17,13 +17,9 @@ import api from '../utils/api'
 
 const fmt = (v) => new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(v)
 
-const formatDate = (iso) => {
-  if (!iso) return '—'
-  try {
-    const d = new Date(iso)
-    return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
-  } catch { return '—' }
-}
+import { formatDateDisplay } from '../utils/date'
+
+const formatDate = formatDateDisplay
 
 const txTypeLabel = (type) => {
   switch (type) {

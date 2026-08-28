@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useReducer, useCallback, useMemo } from 'react'
 import { Plus, X, Edit2, Eye, Trash2, Landmark, Coins, TrendingUp, Percent } from 'lucide-react'
 import PrintPreviewModal from '../components/PrintPreviewModal'
-import { toInputDate, fromInputDate, getTodayFormatted } from '../utils/date'
+import { toInputDate, fromInputDate, getTodayFormatted, getDefaultMaturityDate, formatDateDisplay } from '../utils/date'
 import DropdownSelect from '../components/ui/DropdownSelect'
 import CustomDatePicker from '../components/ui/CustomDatePicker'
 import { toTitleCase } from '../utils/text'
@@ -40,7 +40,7 @@ export function Loans() {
     financier: '',
     noteNo: '',
     loanDate: getTodayFormatted(),
-    maturityDate: '',
+    maturityDate: getDefaultMaturityDate(getTodayFormatted()),
     amount: '',
     rate: '',
     remarks: '',
@@ -151,8 +151,15 @@ export function Loans() {
   }, [])
 
   const handleOpenAdd = () => {
-    setForm(emptyForm)
-    setInitialFormSnapshot(emptyForm)
+    const today = getTodayFormatted()
+    const defaultMaturity = getDefaultMaturityDate(today)
+    const newForm = {
+      ...emptyForm,
+      loanDate: today,
+      maturityDate: defaultMaturity
+    }
+    setForm(newForm)
+    setInitialFormSnapshot(newForm)
     setModalMode('add')
     setShowModal(true)
   }
@@ -166,7 +173,9 @@ export function Loans() {
   const handleOpenEdit = (loan) => {
     const editObj = {
       ...loan,
-      financier: loan.financierId || loan.financier
+      financier: loan.financierId || loan.financier,
+      loanDate: loan.loanDate || getTodayFormatted(),
+      maturityDate: loan.maturityDate || getDefaultMaturityDate(loan.loanDate)
     }
     setSelectedLoan(loan)
     setForm(editObj)
@@ -196,7 +205,7 @@ export function Loans() {
           financierId: form.financier,
           loanReference: form.noteNo,
           drawdownDate: toInputDate(form.loanDate),
-          maturityDate: form.maturityDate ? toInputDate(form.maturityDate) : undefined,
+          maturityDate: toInputDate(form.maturityDate || getDefaultMaturityDate(form.loanDate)),
           principalAmount: Number(form.amount) || 0,
           interestRate: Number(form.rate) || 0,
           notes: form.remarks
@@ -504,7 +513,11 @@ export function Loans() {
                       </div>
                       <div>
                         <span className="text-slate-400 block mb-0.5">Loan Date</span>
-                        <span className="font-medium text-slate-800 dark:text-slate-200">{selectedLoan?.loanDate}</span>
+                        <span className="font-medium text-slate-800 dark:text-slate-200">{formatDateDisplay(selectedLoan?.loanDate)}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block mb-0.5">Maturity Date</span>
+                        <span className="font-medium text-slate-800 dark:text-slate-200">{formatDateDisplay(selectedLoan?.maturityDate)}</span>
                       </div>
                       <div>
                         <span className="text-slate-400 block mb-0.5">Principal Amount</span>
@@ -566,16 +579,32 @@ export function Loans() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                          Loan Date *
+                          Loan Date <span className="text-rose-500">*</span>
                         </label>
                         <CustomDatePicker
                           value={form.loanDate}
-                          onChange={d => setForm({...form, loanDate: d})}
+                          onChange={d => setForm(prev => ({
+                            ...prev,
+                            loanDate: d,
+                            maturityDate: prev.maturityDate || getDefaultMaturityDate(d)
+                          }))}
                         />
                       </div>
                       <div>
                         <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                          Interest Rate (% p.a.) *
+                          Maturity Date <span className="text-rose-500">*</span>
+                        </label>
+                        <CustomDatePicker
+                          value={form.maturityDate}
+                          onChange={d => setForm(prev => ({ ...prev, maturityDate: d }))}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          Interest Rate (% p.a.) <span className="text-rose-500">*</span>
                         </label>
                         <input
                           type="number"
@@ -587,17 +616,16 @@ export function Loans() {
                           className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
                         />
                       </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Remarks</label>
-                      <textarea
-                        rows={2}
-                        value={form.remarks}
-                        onChange={e => setForm({...form, remarks: e.target.value})}
-                        placeholder="Additional notes or payment schedule..."
-                        className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 resize-none"
-                      />
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Remarks</label>
+                        <textarea
+                          rows={1}
+                          value={form.remarks}
+                          onChange={e => setForm({...form, remarks: e.target.value})}
+                          placeholder="Additional notes..."
+                          className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 resize-none"
+                        />
+                      </div>
                     </div>
                   </form>
                 )}

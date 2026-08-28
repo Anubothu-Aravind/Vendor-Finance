@@ -64,4 +64,15 @@ test('Frontend Loan & Amount Unit Tests', async (t) => {
     assert.equal(pendingAmount, 201972.60)
     assert.ok(pendingAmount > loan.outstandingPrincipal)
   })
+
+  await t.test('Date conversion and formatting utilities work without timezone shift', async () => {
+    const { toInputDate, fromInputDate, getDefaultMaturityDate, formatDateDisplay } = await import('../utils/date.js')
+
+    assert.equal(toInputDate('28-08-2026'), '2026-08-28')
+    assert.equal(fromInputDate('2026-08-28'), '28-08-2026')
+    assert.equal(fromInputDate('2026-08-28T00:00:00.000Z'), '28-08-2026')
+    assert.equal(getDefaultMaturityDate('28-08-2026'), '28-08-2027')
+    assert.equal(formatDateDisplay('2026-08-28'), '28 Aug 2026')
+    assert.equal(formatDateDisplay('28-08-2026'), '28 Aug 2026')
+  })
 })

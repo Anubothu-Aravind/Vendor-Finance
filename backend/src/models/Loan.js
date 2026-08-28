@@ -55,7 +55,12 @@ const LoanSchema = new mongoose.Schema({
   },
   maturityDate: {
     type: Date,
-    required: true
+    required: true,
+    default: function() {
+      const d = this.drawdownDate ? new Date(this.drawdownDate) : new Date()
+      d.setFullYear(d.getFullYear() + 1)
+      return d
+    }
   },
   status: {
     type: String,

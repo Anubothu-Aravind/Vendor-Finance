@@ -4,44 +4,86 @@ const Financier = require('../models/Financier')
 
 exports.validateLoan = [
   body('loanReference')
-    .trim()
-    .notEmpty()
-    .withMessage('Loan Reference is required'),
+    .custom((value, { req }) => {
+      const ref = value || req.body.noteNumber
+      if (!ref || !String(ref).trim()) {
+        throw new Error('Loan Reference is required')
+      }
+      req.body.loanReference = String(ref).trim()
+      return true
+    }),
 
   body('financierId')
-    .isMongoId()
-    .withMessage('Invalid Financier ID format')
-    .custom(async (value) => {
-      const financier = await Financier.findOne({ _id: value, isDeleted: false })
-      if (!financier) {
-        throw new Error('Financier does not exist in the system')
+    .custom(async (value, { req }) => {
+      const finId = value || req.body.financier
+      if (!finId) {
+        throw new Error('Financier is required')
+      }
+      if (!/^[0-9a-fA-F]{24}$/.test(finId)) {
+        throw new Error('Invalid Financier ID format')
+      }
+      req.body.financierId = finId
+      const mongoose = require('mongoose')
+      if (mongoose.connection && mongoose.connection.readyState === 1) {
+        const financier = await Financier.findOne({ _id: finId, isDeleted: false })
+        if (!financier) {
+          throw new Error('Financier does not exist in the system')
+        }
       }
       return true
     }),
 
   body('principalAmount')
-    .isFloat({ min: 0.01 })
-    .withMessage('Principal amount must be a positive number'),
+    .custom((value, { req }) => {
+      const val = value !== undefined ? value : req.body.amount
+      const num = parseFloat(val)
+      if (isNaN(num) || num <= 0) {
+        throw new Error('Principal amount must be a positive number')
+      }
+      req.body.principalAmount = num
+      return true
+    }),
 
   body('interestRate')
     .optional({ checkFalsy: true })
-    .isFloat({ min: 0, max: 100 })
-    .withMessage('Interest rate must be a valid percentage between 0 and 100'),
+    .custom((value, { req }) => {
+      const val = value !== undefined && value !== '' ? value : req.body.rate
+      if (val !== undefined && val !== '') {
+        const num = parseFloat(val)
+        if (isNaN(num) || num < 0 || num > 100) {
+          throw new Error('Interest rate must be a valid percentage between 0 and 100')
+        }
+        req.body.interestRate = num
+      }
+      return true
+    }),
 
   body('drawdownDate')
-    .notEmpty()
-    .withMessage('Drawdown date is required')
-    .isISO8601()
-    .withMessage('Invalid drawdown date format'),
+    .custom((value, { req }) => {
+      const dateVal = value || req.body.loanDate || req.body.date
+      if (!dateVal) {
+        throw new Error('Drawdown date is required')
+      }
+      const d = new Date(dateVal)
+      if (isNaN(d.getTime())) {
+        throw new Error('Invalid drawdown date format')
+      }
+      req.body.drawdownDate = dateVal
+      return true
+    }),
 
   body('maturityDate')
-    .notEmpty()
-    .withMessage('Maturity date is required')
-    .isISO8601()
-    .withMessage('Invalid maturity date format')
+    .optional({ checkFalsy: true })
     .custom((value, { req }) => {
-      if (new Date(value) < new Date(req.body.drawdownDate)) {
-        throw new Error('Maturity date cannot be before drawdown date')
+      if (value) {
+        const matDate = new Date(value)
+        if (isNaN(matDate.getTime())) {
+          throw new Error('Invalid maturity date format')
+        }
+        const drawDate = new Date(req.body.drawdownDate)
+        if (!isNaN(drawDate.getTime()) && matDate < drawDate) {
+          throw new Error('Maturity date cannot be before drawdown date')
+        }
       }
       return true
     }),

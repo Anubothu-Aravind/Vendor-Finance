@@ -61,4 +61,71 @@ test('Loan unit tests', async (t) => {
     const words = numberToWords(201972.60)
     assert.equal(words, 'Indian Rupee Two Lakh One Thousand Nine Hundred and Seventy Two and Sixty Paise Only')
   })
+
+  await t.test('Loan validation rules correctly validate payload structure', async () => {
+    const { validateLoan } = await import('../validators/loan.validator.js')
+    const expressModule = (await import('express')).default
+    const http = await import('node:http')
+
+    const app = expressModule()
+    app.use(expressModule.json())
+
+    app.post('/test-loan-validate', validateLoan, (req, res) => {
+      res.status(201).json({ success: true, data: req.body })
+    })
+
+    const server = http.createServer(app)
+    await new Promise((resolve) => server.listen(0, resolve))
+    const port = server.address().port
+
+    try {
+      // 1. Invalid payload with invalid financier format
+      const resInvalidFinancier = await fetch(`http://127.0.0.1:${port}/test-loan-validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          loanReference: 'LN-TEST-001',
+          financierId: 'invalid-id-format',
+          principalAmount: 500000,
+          drawdownDate: '2026-08-28'
+        })
+      })
+      assert.equal(resInvalidFinancier.status, 400)
+      const body1 = await resInvalidFinancier.json()
+      assert.equal(body1.success, false)
+      assert.ok(body1.message.includes('Financier'))
+
+      // 2. Invalid payload with negative principal
+      const resInvalidAmount = await fetch(`http://127.0.0.1:${port}/test-loan-validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          loanReference: 'LN-TEST-001',
+          financierId: '507f1f77bcf86cd799439011',
+          principalAmount: -500,
+          drawdownDate: '2026-08-28'
+        })
+      })
+      assert.equal(resInvalidAmount.status, 400)
+
+      // 3. Invalid payload where maturityDate < drawdownDate
+      const resInvalidMaturity = await fetch(`http://127.0.0.1:${port}/test-loan-validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          loanReference: 'LN-TEST-001',
+          financierId: '507f1f77bcf86cd799439011',
+          principalAmount: 500000,
+          drawdownDate: '2026-08-28',
+          maturityDate: '2026-01-01'
+        })
+      })
+      assert.equal(resInvalidMaturity.status, 400)
+      const body3 = await resInvalidMaturity.json()
+      assert.equal(body3.success, false)
+      assert.ok(body3.message.includes('Maturity date cannot be before drawdown date'))
+    } finally {
+      server.close()
+    }
+  })
 })

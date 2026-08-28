@@ -24,13 +24,9 @@ const avatarColors = [
   'bg-amber-50 text-amber-700 border-amber-200'
 ]
 
-const formatDate = (iso) => {
-  if (!iso) return '—'
-  try {
-    const d = new Date(iso)
-    return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
-  } catch { return '—' }
-}
+import { formatDateDisplay } from '../utils/date'
+
+const formatDate = formatDateDisplay
 
 export function OutstandingStatement() {
   const navigate = useNavigate()

@@ -13,6 +13,7 @@ import {
   TrendingUp
 } from 'lucide-react'
 import { toTitleCase } from '../utils/text'
+import { formatDateDisplay } from '../utils/date'
 import EmptyState from '../components/ui/EmptyState'
 import Badge from '../components/ui/Badge'
 import PageHeader from '../components/ui/PageHeader'
@@ -43,23 +44,28 @@ export function Dashboard() {
 
   const [summaryQ, paymentsQ, loansQ, chequesQ, ledgerQ] = results
 
-  const loading = results.some(r => r.isLoading)
-  const error   = results.find(r => r.isError)?.error?.message
+  const loading = summaryQ.isLoading
+  const error   = summaryQ.isError ? (summaryQ.error?.message || 'Failed to load dashboard summary') : null
 
   const summary      = summaryQ.data
-  const payments     = paymentsQ.data  ?? []
-  const loans        = loansQ.data     ?? []
-  const cheques      = chequesQ.data   ?? []
-  const transactions = ledgerQ.data    ?? []
+  const payments     = Array.isArray(paymentsQ.data)  ? paymentsQ.data  : []
+  const loans        = Array.isArray(loansQ.data)     ? loansQ.data     : []
+  const cheques      = Array.isArray(chequesQ.data)   ? chequesQ.data   : []
+  const transactions = Array.isArray(ledgerQ.data)    ? ledgerQ.data    : []
 
   // ── KPIs ────────────────────────────────────────────────────────────────────
   const kpis = useMemo(() => {
-    if (!summary) return []
+    if (!summary || !summary.kpis) return []
 
+    const todayYMD  = new Date().toISOString().split('T')[0]
     const todayStr  = new Date().toDateString()
     const oneWeekAgo = new Date(); oneWeekAgo.setDate(oneWeekAgo.getDate() - 7)
 
-    const todayPmts  = payments.filter(p => !p.isDeleted && new Date(p.paymentDate || p.date).toDateString() === todayStr)
+    const todayPmts  = payments.filter(p => {
+      if (p.isDeleted) return false
+      const raw = p.paymentDate || p.date || ''
+      return String(raw).startsWith(todayYMD) || new Date(raw).toDateString() === todayStr
+    })
     const weekPmts   = payments.filter(p => !p.isDeleted && new Date(p.paymentDate || p.date) >= oneWeekAgo)
     const activeLoans = loans.filter(l => !l.isDeleted && String(l.status).toUpperCase() === 'ACTIVE')
     const pendingCheques = cheques.filter(c => !c.isDeleted && String(c.status).toUpperCase() === 'PENDING')
@@ -67,7 +73,7 @@ export function Dashboard() {
     return [
       {
         title: 'Financier Outstanding',
-        value: `₹${fmt(summary.kpis.financierOutstanding)}`,
+        value: `₹${fmt(summary.kpis.financierOutstanding || 0)}`,
         subtitle: 'Total exposure',
         icon: Landmark,
         iconColor: 'text-blue-600 dark:text-blue-400',
@@ -76,7 +82,7 @@ export function Dashboard() {
       },
       {
         title: "Today's Payments",
-        value: `₹${fmt(todayPmts.reduce((s,p) => s+p.amount, 0))}`,
+        value: `₹${fmt(todayPmts.reduce((s,p) => s+(p.amount || 0), 0))}`,
         subtitle: `${todayPmts.length} payments today`,
         icon: CreditCard,
         iconColor: 'text-slate-600 dark:text-slate-300',
@@ -85,7 +91,7 @@ export function Dashboard() {
       },
       {
         title: "This Week's Payments",
-        value: `₹${fmt(weekPmts.reduce((s,p) => s+p.amount, 0))}`,
+        value: `₹${fmt(weekPmts.reduce((s,p) => s+(p.amount || 0), 0))}`,
         subtitle: `${weekPmts.length} payments recorded`,
         icon: CreditCard,
         iconColor: 'text-emerald-600 dark:text-emerald-400',
@@ -94,7 +100,7 @@ export function Dashboard() {
       },
       {
         title: 'Overdue Bills',
-        value: `₹${fmt(summary.kpis.overdueBills)}`,
+        value: `₹${fmt(summary.kpis.overdueBills || 0)}`,
         subtitle: 'Pending payable bills',
         icon: FileText,
         iconColor: 'text-rose-600 dark:text-rose-400',
@@ -112,7 +118,7 @@ export function Dashboard() {
       },
       {
         title: 'Upcoming Cheques',
-        value: `₹${fmt(pendingCheques.reduce((s,c) => s+c.amount, 0))}`,
+        value: `₹${fmt(pendingCheques.reduce((s,c) => s+(c.amount || 0), 0))}`,
         subtitle: 'In transit / pending',
         icon: CheckSquare,
         iconColor: 'text-amber-600 dark:text-amber-400',
@@ -124,18 +130,18 @@ export function Dashboard() {
 
   // ── Pie chart data ──────────────────────────────────────────────────────────
   const pieData = useMemo(() => [
-    { name: 'Vendor Payables', value: summary?.kpis.vendorOutstanding ?? 0, color: '#00C896' },
-    { name: 'Loan Outstanding', value: summary?.kpis.financierOutstanding ?? 0, color: '#4A9EFF' },
+    { name: 'Vendor Payables', value: summary?.kpis?.vendorOutstanding ?? 0, color: '#00C896' },
+    { name: 'Loan Outstanding', value: summary?.kpis?.financierOutstanding ?? 0, color: '#4A9EFF' },
   ], [summary])
 
   // ── Recent transactions ─────────────────────────────────────────────────────
   const recentTransactions = useMemo(() =>
     transactions.slice(0, 5).map(txn => ({
-      date:   txn.date ? new Date(txn.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—',
-      type:   txn.type,
+      date:   txn.date ? formatDateDisplay(txn.date) : '—',
+      type:   txn.type || 'TRANSACTION',
       party:  txn.vendorId?.name || txn.financierId?.name || txn.party || '—',
-      ref:    txn.referenceNumber || txn.ref || '—',
-      amount: txn.amount,
+      ref:    txn.description || txn.referenceNumber || txn.ref || '—',
+      amount: txn.amount || 0,
     })),
   [transactions])
 
@@ -145,10 +151,10 @@ export function Dashboard() {
       .filter(c => !c.isDeleted && String(c.status).toUpperCase() === 'PENDING')
       .slice(0, 5)
       .map(chq => ({
-        chqNo:  chq.chequeNo || '—',
-        date:   chq.chequeDate ? new Date(chq.chequeDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—',
+        chqNo:  chq.chequeNumber || chq.chequeNo || '—',
+        date:   chq.chequeDate ? formatDateDisplay(chq.chequeDate) : '—',
         party:  chq.vendorId?.name || chq.financierId?.name || chq.partyName || '—',
-        amount: chq.amount,
+        amount: chq.amount || 0,
         status: chq.status || 'Pending',
       })),
   [cheques])
