@@ -1,14 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../hooks/AuthContext'
-import { Mail, Lock, Eye, EyeOff, BarChart3, FileText, CreditCard, CheckCircle2 } from 'lucide-react'
+import { Mail, Lock, Eye, EyeOff, BarChart3, FileText, CreditCard, CheckCircle2, ShieldCheck, AlertCircle } from 'lucide-react'
 
-// ── Feature list shown on the left panel ─────────────────────────────────────
+// ── Feature list shown on desktop left panel ───────────────────────────────────
 const FEATURES = [
-  { icon: FileText,     text: 'Purchase Bills & FIFO payables tracking' },
-  { icon: CreditCard,   text: 'Vendor & financier payment reconciliation' },
-  { icon: BarChart3,    text: 'Real-time ledger, outstanding & reports' },
-  { icon: CheckCircle2, text: 'Cheque lifecycle management' },
+  { icon: FileText,     title: 'Purchase Bills & Invoices', text: 'Accurate FIFO tracking and payables aging' },
+  { icon: CreditCard,   title: 'Payment Settlements',       text: 'Multi-mode vendor & financier reconciliation' },
+  { icon: BarChart3,    title: 'Real-Time Financials',      text: 'Running ledger, statement, and exportable reports' },
+  { icon: CheckCircle2, title: 'Cheque Lifecycle',          text: 'Complete register from issue to bank clearance' },
 ]
 
 export function Login() {
@@ -32,7 +32,7 @@ export function Login() {
     e.preventDefault()
     if (submitting) return
 
-    // ── Manual field validation (so we fully control the error UI) ──
+    // Manual field validation
     const newFieldErrors = { email: '', password: '' }
     if (!email.trim())    newFieldErrors.email    = 'Email is required'
     if (!password.trim()) newFieldErrors.password = 'Password is required'
@@ -70,195 +70,156 @@ export function Login() {
   }
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      display: 'flex',
-      background: 'var(--color-bg-base)',
-      fontFamily: 'var(--font-body)',
-    }}>
+    <div className="min-h-screen min-h-dvh flex w-full bg-slate-50 dark:bg-slate-900 font-sans text-slate-900 dark:text-slate-100 selection:bg-emerald-500 selection:text-white">
 
-      {/* ── Left Panel (40%) ───────────────────────────────────────────── */}
-      <div style={{
-        width: '40%',
-        minHeight: '100vh',
-        background: 'var(--color-bg-elevated)',
-        borderRight: '1px solid var(--color-border)',
-        display: 'flex',
-        flexDirection: 'column',
-        padding: '48px 40px',
-        position: 'relative',
-        overflow: 'hidden',
-      }}>
-        {/* Decorative dot grid */}
-        <div style={{
-          position: 'absolute',
-          inset: 0,
-          backgroundImage: 'radial-gradient(circle, var(--color-border) 1px, transparent 1px)',
-          backgroundSize: '24px 24px',
-          pointerEvents: 'none',
-          opacity: 0.6,
-        }} />
+      {/* ── Left Feature Panel (Desktop >= lg only) ─────────────────────────── */}
+      <div className="hidden lg:flex w-[42%] max-w-lg min-h-screen bg-slate-900 text-white flex-col justify-between p-10 xl:p-12 relative overflow-hidden shrink-0 border-r border-slate-800">
+        {/* Subtle decorative dot pattern */}
+        <div 
+          className="absolute inset-0 opacity-[0.15] pointer-events-none"
+          style={{
+            backgroundImage: 'radial-gradient(circle, #94a3b8 1px, transparent 1px)',
+            backgroundSize: '24px 24px',
+          }}
+        />
 
-        {/* Gradient orb */}
-        <div style={{
-          position: 'absolute',
-          top: '10%',
-          left: '-10%',
-          width: '300px',
-          height: '300px',
-          borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(0,200,150,0.12) 0%, transparent 70%)',
-          pointerEvents: 'none',
-        }} />
+        {/* Ambient emerald glow */}
+        <div 
+          className="absolute -top-24 -left-24 w-96 h-96 rounded-full opacity-20 pointer-events-none blur-3xl"
+          style={{ background: 'radial-gradient(circle, #10B981 0%, transparent 70%)' }}
+        />
+        <div 
+          className="absolute -bottom-24 -right-24 w-96 h-96 rounded-full opacity-10 pointer-events-none blur-3xl"
+          style={{ background: 'radial-gradient(circle, #059669 0%, transparent 70%)' }}
+        />
 
-        {/* Bottom fade overlay */}
-        <div style={{
-          position: 'absolute',
-          bottom: 0,
-          left: 0,
-          right: 0,
-          height: '120px',
-          background: 'linear-gradient(to top, var(--color-bg-base), transparent)',
-          pointerEvents: 'none',
-        }} />
-
-        {/* Logo + brand */}
-        <div style={{ position: 'relative', zIndex: 1, marginBottom: '56px' }}>
-          <div style={{
-            width: '48px', height: '48px', borderRadius: '12px',
-            background: 'var(--gradient-primary)',
-            display: 'flex', alignItems: 'center',
-            justifyContent: 'center', marginBottom: '20px',
-            boxShadow: '0 0 0 1px rgba(0,200,150,0.25), 0 4px 24px rgba(0,200,150,0.20)',
-          }}>
-            <span style={{ color: '#fff', fontWeight: 800, fontSize: '22px', letterSpacing: '-0.03em', fontFamily: 'var(--font-display)' }}>V</span>
-          </div>
-          <h1 style={{
-            margin: 0, fontSize: '28px', fontWeight: 800,
-            color: 'var(--color-text-primary)',
-            fontFamily: 'var(--font-display)',
-            letterSpacing: '-0.03em', lineHeight: 1.15,
-          }}>VASTRAMS</h1>
-          <p style={{ margin: '6px 0 0', fontSize: '13px', color: 'var(--color-text-muted)', fontWeight: 400 }}>
-            Vendor &amp; Finance Management
-          </p>
-        </div>
-
-        {/* Feature list */}
-        <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          <p style={{ margin: '0 0 4px', fontSize: '11px', fontWeight: 600, color: 'var(--color-text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-            What's inside
-          </p>
-          {FEATURES.map(({ icon: Icon, text }, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <div style={{
-                width: '32px', height: '32px', borderRadius: '8px', flexShrink: 0,
-                background: 'rgba(0,200,150,0.08)',
-                border: '1px solid rgba(0,200,150,0.18)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>
-                <Icon size={15} color="var(--color-primary)" />
-              </div>
-              <span style={{ fontSize: '13px', color: 'var(--color-text-secondary)', lineHeight: 1.4 }}>{text}</span>
+        {/* Top Brand Header */}
+        <div className="relative z-10">
+          <div className="flex items-center gap-3.5 mb-8">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center text-white shadow-lg shadow-emerald-900/40 border border-emerald-400/30">
+              <span className="font-extrabold text-2xl tracking-tight font-display">V</span>
             </div>
-          ))}
+            <div>
+              <h1 className="text-2xl font-extrabold tracking-tight text-white font-display">
+                VASTRAMS
+              </h1>
+              <p className="text-xs text-slate-400 font-medium tracking-wide">
+                Vendor &amp; Finance Management
+              </p>
+            </div>
+          </div>
+
+          {/* Heading */}
+          <div className="space-y-2 mt-12 mb-10">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+              <ShieldCheck className="w-3.5 h-3.5" />
+              Enterprise Platform
+            </span>
+            <h2 className="text-3xl font-extrabold tracking-tight text-white font-display leading-snug">
+              Smart finance, settlements &amp; ledger control
+            </h2>
+            <p className="text-sm text-slate-400 leading-relaxed">
+              Designed specifically for fast-paced commercial operations, transparent invoice settlements, and rigorous audit trails.
+            </p>
+          </div>
+
+          {/* Feature List */}
+          <div className="space-y-4">
+            {FEATURES.map(({ icon: Icon, title, text }, i) => (
+              <div key={i} className="flex items-start gap-3.5 p-3 rounded-xl bg-slate-800/50 border border-slate-700/50">
+                <div className="w-9 h-9 rounded-lg bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0 mt-0.5">
+                  <Icon className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-slate-100">{title}</p>
+                  <p className="text-xs text-slate-400 leading-relaxed mt-0.5">{text}</p>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
 
-        {/* Footer */}
-        <p style={{
-          position: 'relative', zIndex: 1, marginTop: 'auto', paddingTop: '48px',
-          fontSize: '11px', color: 'var(--color-text-muted)',
-        }}>
-          © {new Date().getFullYear()} Vastrams · Internal tool
-        </p>
+        {/* Desktop Left Footer */}
+        <div className="relative z-10 pt-8 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-500">
+          <span>&copy; {new Date().getFullYear()} Vastrams</span>
+          <span>End-to-End Secure</span>
+        </div>
       </div>
 
-      {/* ── Right Panel (60%) ──────────────────────────────────────────── */}
-      <div style={{
-        flex: 1,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '40px 32px',
-        background: 'var(--color-bg-base)',
-      }}>
-        <div style={{ width: '100%', maxWidth: '380px' }}>
+      {/* ── Main Login Panel (Full width on mobile, right column on desktop) ─── */}
+      <div className="flex-1 flex flex-col items-center justify-center px-4 py-8 sm:px-6 md:px-8 min-h-screen min-h-dvh pt-[max(2rem,env(safe-area-inset-top))] pb-[max(2rem,env(safe-area-inset-bottom))]">
+        <div className="w-full max-w-[440px] flex flex-col items-center my-auto">
 
-          {/* Card */}
-          <div style={{
-            background: 'var(--color-bg-surface)',
-            border: '1px solid var(--color-border)',
-            borderRadius: '16px',
-            padding: '40px',
-          }}>
-            {/* Heading */}
-            <div style={{ marginBottom: '28px' }}>
-              <h2 style={{
-                margin: 0, fontSize: '22px', fontWeight: 700,
-                color: 'var(--color-text-primary)',
-                fontFamily: 'var(--font-display)',
-                letterSpacing: '-0.025em',
-              }}>Sign in to your account</h2>
-              <p style={{ margin: '6px 0 0', fontSize: '13px', color: 'var(--color-text-secondary)' }}>
+          {/* Mobile Header: Brand Logo & Title (Hidden on desktop lg+) */}
+          <div className="lg:hidden flex flex-col items-center text-center mb-6 sm:mb-8">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center text-white shadow-lg shadow-emerald-600/20 border border-emerald-400/30 mb-3.5">
+              <span className="font-black text-2xl tracking-tight font-display">V</span>
+            </div>
+            <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-slate-100 font-display">
+              VASTRAMS
+            </h1>
+            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium mt-0.5">
+              Vendor &amp; Finance Management
+            </p>
+          </div>
+
+          {/* Login Card */}
+          <div 
+            className="w-full bg-white dark:bg-slate-800 border border-slate-200/90 dark:border-slate-700/80 rounded-2xl p-5 sm:p-8 shadow-xl shadow-slate-200/50 dark:shadow-none transition-all"
+            style={{ animation: shake ? 'login-shake 0.45s ease' : 'none' }}
+          >
+            {/* Card Heading */}
+            <div className="mb-6 text-left">
+              <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100 font-display">
+                Sign in to your account
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
                 Enter your credentials to continue
               </p>
             </div>
 
-            {/* Error alert */}
+            {/* Error Alert */}
             {error && (
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: '8px',
-                background: 'rgba(232,69,69,0.08)',
-                borderLeft: '3px solid var(--color-danger)',
-                borderRadius: '6px', padding: '10px 12px', marginBottom: '20px',
-                animation: shake ? 'login-shake 0.45s ease' : 'none',
-              }}>
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                  <circle cx="7" cy="7" r="6" stroke="var(--color-danger)" strokeWidth="1.4"/>
-                  <path d="M7 4v3.5M7 9.5v.01" stroke="var(--color-danger)" strokeWidth="1.4" strokeLinecap="round"/>
-                </svg>
-                <span style={{ fontSize: '13px', color: 'var(--color-danger)', fontWeight: 500 }}>{error}</span>
+              <div 
+                role="alert" 
+                className="flex items-start gap-2.5 p-3.5 mb-5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/50 text-rose-700 dark:text-rose-300 text-xs sm:text-sm font-medium"
+              >
+                <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+                <span className="leading-snug">{error}</span>
               </div>
             )}
 
             {/* Form */}
-            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5" noValidate>
 
-              {/* Email */}
+              {/* Email Address */}
               <div>
-                <label style={{
-                  display: 'block', fontSize: '11px', fontWeight: 600,
-                  color: 'var(--color-text-muted)', letterSpacing: '0.08em',
-                  textTransform: 'uppercase', marginBottom: '6px',
-                }}>Email Address</label>
-                <div style={{ position: 'relative' }}>
-                  <Mail size={14} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)', pointerEvents: 'none' }} />
+                <label 
+                  htmlFor="login-email"
+                  className="block text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1.5"
+                >
+                  Email Address
+                </label>
+                <div className="relative">
+                  <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500 pointer-events-none" />
                   <input
+                    id="login-email"
                     ref={emailRef}
                     type="email"
-                    autoComplete="off"
+                    autoComplete="email"
                     data-lpignore="true"
-                    data-form-type="other"
                     value={email}
                     onChange={e => { setEmail(e.target.value); setError(''); setFieldErrors(fe => ({ ...fe, email: '' })) }}
                     placeholder="name@company.com"
-                    style={{
-                      width: '100%', boxSizing: 'border-box',
-                      paddingLeft: '36px', paddingRight: '12px', paddingTop: '10px', paddingBottom: '10px',
-                      background: 'var(--color-bg-elevated)',
-                      border: `1px solid ${fieldErrors.email ? 'var(--color-danger)' : 'var(--color-border)'}`,
-                      borderRadius: '8px',
-                      color: 'var(--color-text-primary)',
-                      fontSize: '13px', fontWeight: 500,
-                      outline: 'none', transition: 'border-color 150ms ease, box-shadow 150ms ease',
-                      fontFamily: 'var(--font-body)',
-                    }}
-                    onFocus={e => { e.target.style.borderColor = fieldErrors.email ? 'var(--color-danger)' : 'var(--color-primary)'; e.target.style.boxShadow = '0 0 0 3px rgba(0,200,150,0.14)' }}
-                    onBlur={e  => { e.target.style.borderColor = fieldErrors.email ? 'var(--color-danger)' : 'var(--color-border)'; e.target.style.boxShadow = 'none' }}
+                    className={`w-full h-12 sm:h-[50px] pl-10 pr-4 rounded-xl bg-slate-50/80 dark:bg-slate-900/60 border text-slate-900 dark:text-slate-100 text-sm font-medium placeholder:text-slate-400 outline-none focus:bg-white dark:focus:bg-slate-900 transition-all ${
+                      fieldErrors.email 
+                        ? 'border-rose-400 focus:border-rose-500 focus:ring-4 focus:ring-rose-500/10' 
+                        : 'border-slate-200 dark:border-slate-700 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10'
+                    }`}
                   />
                 </div>
                 {fieldErrors.email && (
-                  <p style={{ marginTop: '4px', fontSize: '11px', color: 'var(--color-danger)', fontWeight: 500 }}>
+                  <p className="mt-1 text-xs text-rose-600 dark:text-rose-400 font-medium">
                     {fieldErrors.email}
                   </p>
                 )}
@@ -266,96 +227,71 @@ export function Login() {
 
               {/* Password */}
               <div>
-                <label style={{
-                  display: 'block', fontSize: '11px', fontWeight: 600,
-                  color: 'var(--color-text-muted)', letterSpacing: '0.08em',
-                  textTransform: 'uppercase', marginBottom: '6px',
-                }}>Password</label>
-                <div style={{ position: 'relative' }}>
-                  <Lock size={14} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)', pointerEvents: 'none' }} />
+                <label 
+                  htmlFor="login-password"
+                  className="block text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1.5"
+                >
+                  Password
+                </label>
+                <div className="relative">
+                  <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500 pointer-events-none" />
                   <input
+                    id="login-password"
                     type={showPassword ? 'text' : 'password'}
+                    autoComplete="current-password"
                     value={password}
                     onChange={e => { setPassword(e.target.value); setError(''); setFieldErrors(fe => ({ ...fe, password: '' })) }}
                     placeholder="••••••••"
-                    style={{
-                      width: '100%', boxSizing: 'border-box',
-                      paddingLeft: '36px', paddingRight: '40px', paddingTop: '10px', paddingBottom: '10px',
-                      background: 'var(--color-bg-elevated)',
-                      border: `1px solid ${fieldErrors.password ? 'var(--color-danger)' : 'var(--color-border)'}`,
-                      borderRadius: '8px',
-                      color: 'var(--color-text-primary)',
-                      fontSize: '13px', fontWeight: 500,
-                      outline: 'none', transition: 'border-color 150ms ease, box-shadow 150ms ease',
-                      fontFamily: 'var(--font-body)',
-                    }}
-                    onFocus={e => { e.target.style.borderColor = fieldErrors.password ? 'var(--color-danger)' : 'var(--color-primary)'; e.target.style.boxShadow = '0 0 0 3px rgba(0,200,150,0.14)' }}
-                    onBlur={e  => { e.target.style.borderColor = fieldErrors.password ? 'var(--color-danger)' : 'var(--color-border)'; e.target.style.boxShadow = 'none' }}
+                    className={`w-full h-12 sm:h-[50px] pl-10 pr-12 rounded-xl bg-slate-50/80 dark:bg-slate-900/60 border text-slate-900 dark:text-slate-100 text-sm font-medium placeholder:text-slate-400 outline-none focus:bg-white dark:focus:bg-slate-900 transition-all ${
+                      fieldErrors.password 
+                        ? 'border-rose-400 focus:border-rose-500 focus:ring-4 focus:ring-rose-500/10' 
+                        : 'border-slate-200 dark:border-slate-700 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10'
+                    }`}
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(v => !v)}
-                    style={{
-                      position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)',
-                      background: 'none', border: 'none', cursor: 'pointer',
-                      color: 'var(--color-text-muted)',
-                      padding: '4px', display: 'flex', alignItems: 'center',
-                    }}
-                    onMouseEnter={e => e.currentTarget.style.color = 'var(--color-text-primary)'}
-                    onMouseLeave={e => e.currentTarget.style.color = 'var(--color-text-muted)'}
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 h-10 w-10 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
                   >
-                    {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
                 {fieldErrors.password && (
-                  <p style={{ marginTop: '4px', fontSize: '11px', color: 'var(--color-danger)', fontWeight: 500 }}>
+                  <p className="mt-1 text-xs text-rose-600 dark:text-rose-400 font-medium">
                     {fieldErrors.password}
                   </p>
                 )}
               </div>
 
-              {/* Submit */}
-              <button
-                type="submit"
-                disabled={submitting}
-                style={{
-                  marginTop: '8px',
-                  width: '100%', padding: '11px',
-                  background: 'var(--gradient-primary)',
-                  border: 'none', borderRadius: '10px',
-                  color: '#fff', fontSize: '14px', fontWeight: 600,
-                  fontFamily: 'var(--font-display)',
-                  cursor: submitting ? 'not-allowed' : 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-                  transition: 'filter 150ms, transform 100ms',
-                  letterSpacing: '-0.01em',
-                  opacity: submitting ? 0.7 : 1,
-                }}
-                onMouseEnter={e => { if (!submitting) e.currentTarget.style.filter = 'brightness(0.9)' }}
-                onMouseLeave={e => { e.currentTarget.style.filter = '' }}
-                onMouseDown={e  => { if (!submitting) e.currentTarget.style.transform = 'scale(0.985)' }}
-                onMouseUp={e    => { e.currentTarget.style.transform = 'scale(1)' }}
-              >
-                {submitting ? (
-                  <>
-                    <div style={{
-                      width: '14px', height: '14px', borderRadius: '50%',
-                      border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff',
-                      animation: 'spin 0.6s linear infinite',
-                    }} />
-                    Signing in…
-                  </>
-                ) : (
-                  'Sign In'
-                )}
-              </button>
+              {/* Submit Button */}
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="w-full h-12 sm:h-[50px] rounded-xl bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-bold text-sm sm:text-base shadow-sm shadow-emerald-600/25 flex items-center justify-center gap-2 transition-all focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-emerald-500/30 disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {submitting ? (
+                    <>
+                      <div className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                      <span>Signing In…</span>
+                    </>
+                  ) : (
+                    <span>Sign In</span>
+                  )}
+                </button>
+              </div>
             </form>
           </div>
+
+          {/* Mobile bottom subtle copyright */}
+          <p className="text-xs text-slate-400 dark:text-slate-500 text-center mt-6">
+            &copy; {new Date().getFullYear()} Vastrams · Vendor &amp; Finance Management
+          </p>
         </div>
       </div>
 
       <style>{`
-        @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes login-shake {
           0%, 100% { transform: translateX(0); }
           20% { transform: translateX(-6px); }
