@@ -353,7 +353,7 @@ export function PrintPreviewModal({ type, id, onClose }) {
 
           initialFields.description = `Loan Drawdown Principal - Ref: ${l.loanReference || ''}`
           initialFields.totalAmount = totalPayable
-          initialFields.interestRate = l.interestRate || 0
+          initialFields.interestRate = (l.interestRate !== null && l.interestRate !== undefined && !isNaN(l.interestRate)) ? l.interestRate : null
           initialFields.accruedInterest = Math.round(accruedInterest * 100) / 100
           initialFields.daysElapsed = daysElapsed
         } else if (type === 'repayment') {
@@ -1069,7 +1069,7 @@ export function PrintPreviewModal({ type, id, onClose }) {
                         <div className="mt-2 text-[10px] space-y-0.5 border-t pt-1 border-dashed border-slate-300 dark:border-slate-600">
                           <p className="font-bold text-slate-700 dark:text-slate-200">Loan & Interest Parameters:</p>
                           <p>Financier: <span className="font-semibold">{fields.recipientName}</span></p>
-                          <p>Interest Rate: <span className="font-bold text-slate-900">{fields.interestRate}% p.a.</span></p>
+                          <p>Interest Rate: <span className="font-bold text-slate-900">{fields.interestRate !== null && fields.interestRate !== undefined ? `${fields.interestRate}% p.a.` : '—'}</span></p>
                           {fields.accruedInterest > 0 && (
                             <p>Accrued Interest ({fields.daysElapsed} days): <span className="font-bold text-slate-900">₹{fmt(fields.accruedInterest)}</span></p>
                           )}
@@ -1108,7 +1108,7 @@ export function PrintPreviewModal({ type, id, onClose }) {
                       </td>
                     )}
                     <td className="p-2 text-right tabular-nums" style={{ borderRight: getPreviewBorders(settings).cell }}>
-                      {type === 'loan' ? `${fields.interestRate || 0}% p.a.` : `₹${fmt(taxableValue)}`}
+                      {type === 'loan' ? (fields.interestRate !== null && fields.interestRate !== undefined ? `${fields.interestRate}% p.a.` : '—') : `₹${fmt(taxableValue)}`}
                     </td>
                     <td className="p-2 text-right tabular-nums">
                       ₹{fmt(taxableValue)}

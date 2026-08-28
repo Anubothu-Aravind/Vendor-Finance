@@ -71,7 +71,14 @@ test('Loan unit tests', async (t) => {
     app.use(expressModule.json())
 
     app.post('/test-loan-validate', validateLoan, (req, res) => {
-      res.status(201).json({ success: true, data: req.body })
+      res.status(201).json({
+        success: true,
+        data: {
+          ...req.body,
+          interestRate: req.body.interestRate !== undefined ? req.body.interestRate : null,
+          drawdownDate: req.body.drawdownDate !== undefined ? req.body.drawdownDate : null
+        }
+      })
     })
 
     const server = http.createServer(app)
@@ -124,6 +131,113 @@ test('Loan unit tests', async (t) => {
       const body3 = await resInvalidMaturity.json()
       assert.equal(body3.success, false)
       assert.ok(body3.message.includes('Maturity date cannot be before drawdown date'))
+
+      // 4. CASE 1: With optional values (loanDate + interestRate)
+      const resWithOptional = await fetch(`http://127.0.0.1:${port}/test-loan-validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          loanReference: 'LN-001',
+          financierId: '507f1f77bcf86cd799439011',
+          principalAmount: 500000,
+          drawdownDate: '2026-08-28',
+          interestRate: 12
+        })
+      })
+      assert.equal(resWithOptional.status, 201)
+      const body4 = await resWithOptional.json()
+      assert.equal(body4.success, true)
+      assert.equal(body4.data.interestRate, 12)
+      assert.equal(body4.data.drawdownDate, '2026-08-28')
+
+      // 5. CASE 2: Without optional values (no loanDate, no interestRate)
+      const resWithoutOptional = await fetch(`http://127.0.0.1:${port}/test-loan-validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          loanReference: 'LN-002',
+          financierId: '507f1f77bcf86cd799439011',
+          principalAmount: 500000
+        })
+      })
+      assert.equal(resWithoutOptional.status, 201)
+      const body5 = await resWithoutOptional.json()
+      assert.equal(body5.success, true)
+      assert.equal(body5.data.interestRate, null)
+      assert.equal(body5.data.drawdownDate, null)
+
+      // 6. Without Loan Date succeeds
+      const resNoDate = await fetch(`http://127.0.0.1:${port}/test-loan-validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          loanReference: 'LN-003',
+          financierId: '507f1f77bcf86cd799439011',
+          principalAmount: 500000,
+          interestRate: 14.5
+        })
+      })
+      assert.equal(resNoDate.status, 201)
+      const body6 = await resNoDate.json()
+      assert.equal(body6.data.drawdownDate, null)
+      assert.equal(body6.data.interestRate, 14.5)
+
+      // 7. Without Interest Rate succeeds (empty string / omitted is null, not 0)
+      const resNoRate = await fetch(`http://127.0.0.1:${port}/test-loan-validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          loanReference: 'LN-004',
+          financierId: '507f1f77bcf86cd799439011',
+          principalAmount: 500000,
+          drawdownDate: '2026-08-28',
+          interestRate: ''
+        })
+      })
+      assert.equal(resNoRate.status, 201)
+      const body7 = await resNoRate.json()
+      assert.equal(body7.data.interestRate, null)
+
+      // 8. Explicit Interest Rate 0 succeeds (preserved as 0, not null)
+      const resZeroRate = await fetch(`http://127.0.0.1:${port}/test-loan-validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          loanReference: 'LN-005',
+          financierId: '507f1f77bcf86cd799439011',
+          principalAmount: 500000,
+          interestRate: 0
+        })
+      })
+      assert.equal(resZeroRate.status, 201)
+      const body8 = await resZeroRate.json()
+      assert.equal(body8.data.interestRate, 0)
+
+      // 9. Invalid Interest Rate (e.g. > 100 or negative or non-numeric) is rejected
+      const resInvalidRate = await fetch(`http://127.0.0.1:${port}/test-loan-validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          loanReference: 'LN-006',
+          financierId: '507f1f77bcf86cd799439011',
+          principalAmount: 500000,
+          interestRate: 150
+        })
+      })
+      assert.equal(resInvalidRate.status, 400)
+
+      // 10. Invalid Loan Date is rejected
+      const resInvalidDate = await fetch(`http://127.0.0.1:${port}/test-loan-validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          loanReference: 'LN-007',
+          financierId: '507f1f77bcf86cd799439011',
+          principalAmount: 500000,
+          drawdownDate: 'invalid-date-string'
+        })
+      })
+      assert.equal(resInvalidDate.status, 400)
     } finally {
       server.close()
     }

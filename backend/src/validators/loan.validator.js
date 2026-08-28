@@ -3,6 +3,25 @@ const validate = require('../middleware/validate')
 const Financier = require('../models/Financier')
 
 exports.validateLoan = [
+  (req, res, next) => {
+    // Normalize empty strings and aliases for optional fields
+    if (req.body.interestRate === '' || req.body.interestRate === undefined) {
+      if (req.body.rate !== undefined && req.body.rate !== '') {
+        req.body.interestRate = req.body.rate
+      } else {
+        req.body.interestRate = null
+      }
+    }
+    if (req.body.drawdownDate === '' || req.body.drawdownDate === undefined) {
+      const d = req.body.loanDate !== undefined ? req.body.loanDate : req.body.date
+      req.body.drawdownDate = (d !== '' && d !== undefined) ? d : null
+    }
+    if (req.body.maturityDate === '' || req.body.maturityDate === undefined) {
+      req.body.maturityDate = null
+    }
+    next()
+  },
+
   body('loanReference')
     .custom((value, { req }) => {
       const ref = value || req.body.noteNumber
@@ -45,11 +64,10 @@ exports.validateLoan = [
     }),
 
   body('interestRate')
-    .optional({ checkFalsy: true })
+    .optional({ nullable: true })
     .custom((value, { req }) => {
-      const val = value !== undefined && value !== '' ? value : req.body.rate
-      if (val !== undefined && val !== '') {
-        const num = parseFloat(val)
+      if (value !== null && value !== undefined) {
+        const num = parseFloat(value)
         if (isNaN(num) || num < 0 || num > 100) {
           throw new Error('Interest rate must be a valid percentage between 0 and 100')
         }
@@ -59,31 +77,33 @@ exports.validateLoan = [
     }),
 
   body('drawdownDate')
+    .optional({ nullable: true })
     .custom((value, { req }) => {
-      const dateVal = value || req.body.loanDate || req.body.date
-      if (!dateVal) {
-        throw new Error('Drawdown date is required')
+      if (value !== null && value !== undefined) {
+        const d = new Date(value)
+        if (isNaN(d.getTime())) {
+          throw new Error('Invalid drawdown date format')
+        }
+        req.body.drawdownDate = value
       }
-      const d = new Date(dateVal)
-      if (isNaN(d.getTime())) {
-        throw new Error('Invalid drawdown date format')
-      }
-      req.body.drawdownDate = dateVal
       return true
     }),
 
   body('maturityDate')
-    .optional({ checkFalsy: true })
+    .optional({ nullable: true })
     .custom((value, { req }) => {
-      if (value) {
+      if (value !== null && value !== undefined) {
         const matDate = new Date(value)
         if (isNaN(matDate.getTime())) {
           throw new Error('Invalid maturity date format')
         }
-        const drawDate = new Date(req.body.drawdownDate)
-        if (!isNaN(drawDate.getTime()) && matDate < drawDate) {
-          throw new Error('Maturity date cannot be before drawdown date')
+        if (req.body.drawdownDate) {
+          const drawDate = new Date(req.body.drawdownDate)
+          if (!isNaN(drawDate.getTime()) && matDate < drawDate) {
+            throw new Error('Maturity date cannot be before drawdown date')
+          }
         }
+        req.body.maturityDate = value
       }
       return true
     }),

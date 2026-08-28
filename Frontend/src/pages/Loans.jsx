@@ -39,8 +39,8 @@ export function Loans() {
   const emptyForm = {
     financier: '',
     noteNo: '',
-    loanDate: getTodayFormatted(),
-    maturityDate: getDefaultMaturityDate(getTodayFormatted()),
+    loanDate: '',
+    maturityDate: '',
     amount: '',
     rate: '',
     remarks: '',
@@ -95,11 +95,11 @@ export function Loans() {
         else if (l.status === 'OVERDUE') displayStatus = 'Overdue'
 
         let accruedInterest = 0
-        if (l.drawdownDate && l.interestRate && l.outstandingPrincipal) {
+        if (l.drawdownDate && l.interestRate !== null && l.interestRate !== undefined && !isNaN(l.interestRate) && l.outstandingPrincipal) {
           const dDate = new Date(l.drawdownDate)
           if (!isNaN(dDate.getTime())) {
             const daysElapsed = Math.max(0, Math.floor((new Date() - dDate) / (1000 * 60 * 60 * 24)))
-            accruedInterest = (l.outstandingPrincipal * l.interestRate * daysElapsed) / (100 * 365)
+            accruedInterest = (l.outstandingPrincipal * Number(l.interestRate) * daysElapsed) / (100 * 365)
           }
         }
         const totalPending = Math.round(((l.outstandingPrincipal || 0) + accruedInterest) * 100) / 100
@@ -114,7 +114,7 @@ export function Loans() {
           loanDate: drawdownDateStr,
           maturityDate: maturityDateStr,
           amount: l.principalAmount,
-          rate: String(l.interestRate),
+          rate: (l.interestRate !== null && l.interestRate !== undefined && !isNaN(l.interestRate)) ? String(l.interestRate) : '',
           repaid: l.paidPrincipal,
           pending: totalPending,
           principalPending: l.outstandingPrincipal,
@@ -151,15 +151,8 @@ export function Loans() {
   }, [])
 
   const handleOpenAdd = () => {
-    const today = getTodayFormatted()
-    const defaultMaturity = getDefaultMaturityDate(today)
-    const newForm = {
-      ...emptyForm,
-      loanDate: today,
-      maturityDate: defaultMaturity
-    }
-    setForm(newForm)
-    setInitialFormSnapshot(newForm)
+    setForm(emptyForm)
+    setInitialFormSnapshot(emptyForm)
     setModalMode('add')
     setShowModal(true)
   }
@@ -174,8 +167,9 @@ export function Loans() {
     const editObj = {
       ...loan,
       financier: loan.financierId || loan.financier,
-      loanDate: loan.loanDate || getTodayFormatted(),
-      maturityDate: loan.maturityDate || getDefaultMaturityDate(loan.loanDate)
+      loanDate: loan.loanDate || '',
+      maturityDate: loan.maturityDate || '',
+      rate: (loan.rate !== undefined && loan.rate !== null && loan.rate !== 'undefined') ? String(loan.rate) : '',
     }
     setSelectedLoan(loan)
     setForm(editObj)
@@ -204,11 +198,22 @@ export function Loans() {
         const payload = {
           financierId: form.financier,
           loanReference: form.noteNo,
-          drawdownDate: toInputDate(form.loanDate),
-          maturityDate: toInputDate(form.maturityDate || getDefaultMaturityDate(form.loanDate)),
           principalAmount: Number(form.amount) || 0,
-          interestRate: Number(form.rate) || 0,
-          notes: form.remarks
+          notes: form.remarks || ''
+        }
+
+        if (form.loanDate) {
+          const dateStr = toInputDate(form.loanDate)
+          if (dateStr) payload.drawdownDate = dateStr
+        }
+
+        if (form.maturityDate) {
+          const matStr = toInputDate(form.maturityDate)
+          if (matStr) payload.maturityDate = matStr
+        }
+
+        if (form.rate !== undefined && form.rate !== null && form.rate !== '') {
+          payload.interestRate = Number(form.rate)
         }
 
         try {
@@ -379,7 +384,9 @@ export function Loans() {
                       <h3 className={`text-base sm:text-lg font-bold mt-1 ${loan.isOrphaned ? 'text-slate-400 italic' : 'text-slate-900 dark:text-slate-100'}`}>
                         {loan.isOrphaned ? 'Deleted Financier' : toTitleCase(loan.financier)}
                       </h3>
-                      <p className="text-xs text-slate-400 mt-1">{loan.rate}% p.a. · Issued: {loan.loanDate}</p>
+                      <p className="text-xs text-slate-400 mt-1">
+                        {loan.rate !== '' && loan.rate !== null && loan.rate !== undefined ? `${loan.rate}% p.a.` : 'Rate: Not specified'} · Issued: {formatDateDisplay(loan.loanDate)}
+                      </p>
                     </div>
                     <Badge variant={loan.status === 'Overdue' ? 'danger' : loan.status === 'Closed' ? 'success' : 'purple'} dot>
                       {toTitleCase(loan.status)}
@@ -509,7 +516,9 @@ export function Loans() {
                       </div>
                       <div>
                         <span className="text-slate-400 block mb-0.5">Interest Rate</span>
-                        <span className="font-bold text-slate-900 dark:text-slate-100">{selectedLoan?.rate}% p.a.</span>
+                        <span className="font-bold text-slate-900 dark:text-slate-100">
+                          {selectedLoan?.rate !== '' && selectedLoan?.rate !== null && selectedLoan?.rate !== undefined ? `${selectedLoan?.rate}% p.a.` : '—'}
+                        </span>
                       </div>
                       <div>
                         <span className="text-slate-400 block mb-0.5">Loan Date</span>
@@ -579,24 +588,20 @@ export function Loans() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                          Loan Date <span className="text-rose-500">*</span>
+                          Loan Date
                         </label>
                         <CustomDatePicker
                           value={form.loanDate}
-                          onChange={d => setForm(prev => ({
-                            ...prev,
-                            loanDate: d,
-                            maturityDate: prev.maturityDate || getDefaultMaturityDate(d)
-                          }))}
+                          onChange={d => setForm({...form, loanDate: d})}
                         />
                       </div>
                       <div>
                         <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                          Maturity Date <span className="text-rose-500">*</span>
+                          Maturity Date
                         </label>
                         <CustomDatePicker
                           value={form.maturityDate}
-                          onChange={d => setForm(prev => ({ ...prev, maturityDate: d }))}
+                          onChange={d => setForm({...form, maturityDate: d})}
                         />
                       </div>
                     </div>
@@ -604,12 +609,11 @@ export function Loans() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                          Interest Rate (% p.a.) <span className="text-rose-500">*</span>
+                          Interest Rate (% p.a.)
                         </label>
                         <input
                           type="number"
                           step="0.01"
-                          required
                           value={form.rate}
                           onChange={e => setForm({...form, rate: e.target.value})}
                           placeholder="12.00"

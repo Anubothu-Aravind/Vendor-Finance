@@ -29,6 +29,24 @@ exports.createLoan = async (req, res, next) => {
       return res.status(400).json({ success: false, message: `Loan Reference '${loanReference}' already exists.` })
     }
 
+    // Finalize optional fields (store null if absent/unspecified, preserve 0 if explicit)
+    let finalInterestRate = null
+    if (interestRate !== undefined && interestRate !== null && interestRate !== '') {
+      finalInterestRate = Number(interestRate)
+    }
+
+    let finalDrawdownDate = null
+    if (drawdownDate) {
+      const d = new Date(drawdownDate)
+      if (!isNaN(d.getTime())) finalDrawdownDate = d
+    }
+
+    let finalMaturityDate = null
+    if (maturityDate) {
+      const d = new Date(maturityDate)
+      if (!isNaN(d.getTime())) finalMaturityDate = d
+    }
+
     // If cheque number provided, log issued cheque to financier
     let linkedChequeId = null
     if (linkChequeNumber) {
@@ -38,19 +56,11 @@ exports.createLoan = async (req, res, next) => {
         partyName: financier.name,
         financierId,
         amount: principalAmount,
-        chequeDate: drawdownDate || new Date(),
+        chequeDate: finalDrawdownDate || new Date(),
         status: 'PENDING'
       })
       await cheque.save({ session })
       linkedChequeId = cheque._id
-    }
-
-    // Calculate default maturityDate (1 year) if omitted
-    let finalMaturityDate = maturityDate
-    if (!finalMaturityDate) {
-      const d = drawdownDate ? new Date(drawdownDate) : new Date()
-      d.setFullYear(d.getFullYear() + 1)
-      finalMaturityDate = d
     }
 
     // Create Loan
@@ -58,8 +68,8 @@ exports.createLoan = async (req, res, next) => {
       loanReference,
       financierId,
       principalAmount,
-      interestRate: interestRate || financier.defaultInterestRate,
-      drawdownDate: drawdownDate || new Date(),
+      interestRate: finalInterestRate,
+      drawdownDate: finalDrawdownDate,
       maturityDate: finalMaturityDate,
       linkedChequeId,
       outstandingPrincipal: principalAmount,

@@ -55,7 +55,7 @@ export function FinancierProfile() {
   // Add loan form state
   const [loanForm, setLoanForm] = useState({
     noteNo: '',
-    date: getTodayFormatted(),
+    date: '',
     amount: '',
     interestRate: '',
     remarks: ''
@@ -93,7 +93,7 @@ export function FinancierProfile() {
           .map(l => ({
             id: l._id,
             noteNo: l.loanReference,
-            date: fromInputDate(l.drawdownDate.split('T')[0]),
+            date: l.drawdownDate ? fromInputDate(l.drawdownDate.split('T')[0]) : '',
             amount: l.principalAmount,
             paid: l.paidPrincipal,
             outstanding: l.outstandingPrincipal,
@@ -151,17 +151,21 @@ export function FinancierProfile() {
     const payload = {
       financierId: id,
       loanReference: loanForm.noteNo,
-      drawdownDate: toInputDate(loanForm.date),
       principalAmount: amt,
-      interestRate: Number(loanForm.interestRate) || profile?.defaultInterestRate || 12,
-      notes: loanForm.remarks,
-      status: 'Active'
+      notes: loanForm.remarks || ''
+    }
+    if (loanForm.date) {
+      const dateStr = toInputDate(loanForm.date)
+      if (dateStr) payload.drawdownDate = dateStr
+    }
+    if (loanForm.interestRate !== undefined && loanForm.interestRate !== null && loanForm.interestRate !== '') {
+      payload.interestRate = Number(loanForm.interestRate)
     }
     try {
       await api.post('/loans', payload)
       await fetchProfileAndLoans()
       setShowAddLoanModal(false)
-      setLoanForm({ noteNo: '', date: getTodayFormatted(), amount: '', interestRate: '', remarks: '' })
+      setLoanForm({ noteNo: '', date: '', amount: '', interestRate: '', remarks: '' })
       toast('Loan account created successfully', 'success')
     } catch (err) {
       toast(err.message || 'Failed to save loan', 'error')
@@ -692,7 +696,7 @@ export function FinancierProfile() {
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Loan Date *</label>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Loan Date</label>
                     <CustomDatePicker
                       value={loanForm.date}
                       onChange={val => setLoanForm({...loanForm, date: val})}

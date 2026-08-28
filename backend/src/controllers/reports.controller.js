@@ -122,13 +122,16 @@ exports.getInterestStatements = async (req, res, next) => {
     const monthlyAggregates = {}
 
     for (const loan of loans) {
-      const P = loan.principalAmount
-      const R = loan.interestRate
-      const drawdown = new Date(loan.drawdownDate)
-      const maturity = new Date(loan.maturityDate)
+      const P = loan.principalAmount || 0
+      const R = (loan.interestRate !== null && loan.interestRate !== undefined && !isNaN(loan.interestRate)) ? Number(loan.interestRate) : 0
+      const drawdown = loan.drawdownDate ? new Date(loan.drawdownDate) : null
+      const maturity = loan.maturityDate ? new Date(loan.maturityDate) : null
       
-      let tenureMonths = (maturity.getFullYear() - drawdown.getFullYear()) * 12 + (maturity.getMonth() - drawdown.getMonth())
-      if (tenureMonths <= 0) tenureMonths = 1
+      let tenureMonths = 1
+      if (drawdown && maturity && !isNaN(drawdown.getTime()) && !isNaN(maturity.getTime())) {
+        tenureMonths = (maturity.getFullYear() - drawdown.getFullYear()) * 12 + (maturity.getMonth() - drawdown.getMonth())
+        if (tenureMonths <= 0) tenureMonths = 1
+      }
 
       const r = R / (100 * 12)
       let emi = 0
@@ -140,9 +143,10 @@ exports.getInterestStatements = async (req, res, next) => {
 
       const schedule = []
       let balance = P
+      const baseDate = (drawdown && !isNaN(drawdown.getTime())) ? drawdown : new Date()
 
       for (let m = 1; m <= tenureMonths; m++) {
-        const paymentDate = new Date(drawdown.getFullYear(), drawdown.getMonth() + m, drawdown.getDate())
+        const paymentDate = new Date(baseDate.getFullYear(), baseDate.getMonth() + m, baseDate.getDate())
         const monthKey = `${paymentDate.getFullYear()}-${String(paymentDate.getMonth() + 1).padStart(2, '0')}`
 
         let interest = balance * r

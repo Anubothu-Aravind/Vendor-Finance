@@ -206,9 +206,9 @@ export function PrintDocument() {
     partyGstin = loanObj.financierId?.gstin || 'N/A'
     
     const principalAmount = loanObj.principalAmount || 0
-    loanInterestRate = loanObj.interestRate || 0
+    loanInterestRate = (loanObj.interestRate !== null && loanObj.interestRate !== undefined && !isNaN(loanObj.interestRate)) ? loanObj.interestRate : null
     let accruedInterest = 0
-    if (loanObj.drawdownDate && loanInterestRate && principalAmount) {
+    if (loanObj.drawdownDate && loanInterestRate !== null && principalAmount) {
       let dDate = new Date(loanObj.drawdownDate)
       if (isNaN(dDate.getTime()) && typeof loanObj.drawdownDate === 'string') {
         const parts = loanObj.drawdownDate.split(/[-/\s]/)
@@ -227,7 +227,7 @@ export function PrintDocument() {
       }
       if (dDate && !isNaN(dDate.getTime())) {
         const daysElapsed = Math.max(0, Math.floor((new Date() - dDate) / (1000 * 60 * 60 * 24)))
-        accruedInterest = (principalAmount * loanInterestRate * daysElapsed) / (100 * 365)
+        accruedInterest = (principalAmount * Number(loanInterestRate) * daysElapsed) / (100 * 365)
       }
     }
     totalAmount = Math.round((principalAmount + accruedInterest) * 100) / 100
@@ -528,7 +528,7 @@ export function PrintDocument() {
                 {type === 'loan' && (
                   <>
                     <p className="font-bold">Loan Drawdown Principal</p>
-                    <p className="text-[10px] text-slate-500">Financier: {partyName} - Interest Rate: {doc.loan?.interestRate || doc.interestRate}%</p>
+                    <p className="text-[10px] text-slate-500">Financier: {partyName} - Interest Rate: {loanInterestRate !== null ? `${loanInterestRate}%` : 'Not specified'}</p>
                   </>
                 )}
                 {type === 'repayment' && (
@@ -542,7 +542,7 @@ export function PrintDocument() {
               {isGstApplicable && <td className="border-r border-black p-2 text-center font-mono">9983</td>}
               <td className="border-r border-black p-2 text-center">1 No</td>
               <td className="border-r border-black p-2 text-right tabular-nums">
-                {type === 'loan' ? `${loanInterestRate}% p.a.` : (isGstApplicable ? `₹${fmt(taxableValue)}` : `₹${fmt(totalAmount)}`)}
+                {type === 'loan' ? (loanInterestRate !== null ? `${loanInterestRate}% p.a.` : '—') : (isGstApplicable ? `₹${fmt(taxableValue)}` : `₹${fmt(totalAmount)}`)}
               </td>
               <td className="p-2 text-right tabular-nums">
                 ₹{isGstApplicable ? fmt(taxableValue) : fmt(totalAmount)}

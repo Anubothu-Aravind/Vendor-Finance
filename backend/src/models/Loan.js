@@ -19,7 +19,8 @@ const LoanSchema = new mongoose.Schema({
   },
   interestRate: {
     type: Number,
-    required: true,
+    required: false,
+    default: null,
     min: 0
   },
   paidPrincipal: {
@@ -50,17 +51,13 @@ const LoanSchema = new mongoose.Schema({
   },
   drawdownDate: {
     type: Date,
-    required: true,
-    default: Date.now
+    required: false,
+    default: null
   },
   maturityDate: {
     type: Date,
-    required: true,
-    default: function() {
-      const d = this.drawdownDate ? new Date(this.drawdownDate) : new Date()
-      d.setFullYear(d.getFullYear() + 1)
-      return d
-    }
+    required: false,
+    default: null
   },
   status: {
     type: String,

@@ -74,5 +74,61 @@ test('Frontend Loan & Amount Unit Tests', async (t) => {
     assert.equal(getDefaultMaturityDate('28-08-2026'), '28-08-2027')
     assert.equal(formatDateDisplay('2026-08-28'), '28 Aug 2026')
     assert.equal(formatDateDisplay('28-08-2026'), '28 Aug 2026')
+    assert.equal(formatDateDisplay(null), '—')
+    assert.equal(formatDateDisplay(''), '—')
+    assert.equal(formatDateDisplay(undefined), '—')
+  })
+
+  await t.test('Missing Interest Rate or Loan Date does not produce NaN or Invalid Date', () => {
+    // 1. Missing interestRate (null/undefined)
+    const loanMissingRate = {
+      principalAmount: 500000,
+      outstandingPrincipal: 500000,
+      interestRate: null,
+      drawdownDate: '2026-08-28'
+    }
+
+    let accruedInterest1 = 0
+    if (loanMissingRate.drawdownDate && loanMissingRate.interestRate !== null && loanMissingRate.interestRate !== undefined && !isNaN(loanMissingRate.interestRate) && loanMissingRate.outstandingPrincipal) {
+      const dDate = new Date(loanMissingRate.drawdownDate)
+      if (!isNaN(dDate.getTime())) {
+        const daysElapsed = 20
+        accruedInterest1 = (loanMissingRate.outstandingPrincipal * Number(loanMissingRate.interestRate) * daysElapsed) / (100 * 365)
+      }
+    }
+    const totalPending1 = Math.round(((loanMissingRate.outstandingPrincipal || 0) + accruedInterest1) * 100) / 100
+    assert.equal(accruedInterest1, 0)
+    assert.equal(totalPending1, 500000)
+    assert.ok(!isNaN(totalPending1))
+
+    // 2. Missing drawdownDate
+    const loanMissingDate = {
+      principalAmount: 500000,
+      outstandingPrincipal: 500000,
+      interestRate: 12,
+      drawdownDate: null
+    }
+    let accruedInterest2 = 0
+    if (loanMissingDate.drawdownDate && loanMissingDate.interestRate !== null && loanMissingDate.interestRate !== undefined && !isNaN(loanMissingDate.interestRate) && loanMissingDate.outstandingPrincipal) {
+      const dDate = new Date(loanMissingDate.drawdownDate)
+      if (!isNaN(dDate.getTime())) {
+        const daysElapsed = 20
+        accruedInterest2 = (loanMissingDate.outstandingPrincipal * Number(loanMissingDate.interestRate) * daysElapsed) / (100 * 365)
+      }
+    }
+    const totalPending2 = Math.round(((loanMissingDate.outstandingPrincipal || 0) + accruedInterest2) * 100) / 100
+    assert.equal(accruedInterest2, 0)
+    assert.equal(totalPending2, 500000)
+    assert.ok(!isNaN(totalPending2))
+
+    // 3. Explicit 0% interest rate
+    const loanZeroRate = {
+      principalAmount: 500000,
+      outstandingPrincipal: 500000,
+      interestRate: 0,
+      drawdownDate: '2026-08-28'
+    }
+    const rateDisplay = (loanZeroRate.interestRate !== null && loanZeroRate.interestRate !== undefined) ? `${loanZeroRate.interestRate}% p.a.` : '—'
+    assert.equal(rateDisplay, '0% p.a.')
   })
 })
