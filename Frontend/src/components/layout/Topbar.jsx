@@ -186,45 +186,46 @@ export function Topbar({ onMenuClick }) {
 
   return (
     <header
-      className="h-15 flex items-center justify-between px-4 md:px-8 shrink-0 relative bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800 z-30"
+      className="h-16 flex items-center justify-between px-3.5 sm:px-6 md:px-8 shrink-0 relative bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800 z-30"
     >
-      {/* Left: hamburger (mobile) + breadcrumb */}
-      <div className="flex items-center space-x-3">
+      {/* Left: hamburger (mobile) + brand & page title */}
+      <div className="flex items-center space-x-2.5 sm:space-x-3 min-w-0">
         <button
           onClick={onMenuClick}
-          className="md:hidden p-2 rounded-lg text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 bg-slate-100 dark:bg-slate-800 transition-colors"
-          aria-label="Open menu"
+          className="md:hidden h-10 w-10 flex items-center justify-center rounded-xl text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100 bg-slate-100 dark:bg-slate-800 transition-colors shrink-0"
+          aria-label="Open menu drawer"
         >
-          <Menu className="w-4 h-4" />
+          <Menu className="w-5 h-5" />
         </button>
 
-        <div className="flex items-center space-x-2 text-sm">
-          <span className="hidden sm:inline text-xs font-bold tracking-wider text-slate-400 dark:text-slate-500" style={{ letterSpacing: '0.1em' }}>
+        <div className="flex items-center space-x-2 text-sm min-w-0">
+          <span className="hidden sm:inline text-xs font-bold tracking-wider text-slate-400 dark:text-slate-500 shrink-0" style={{ letterSpacing: '0.1em' }}>
             VASTRAMS
           </span>
-          <ChevronRight className="hidden sm:inline w-3.5 h-3.5 text-slate-300 dark:text-slate-600" />
-          <span className="font-bold text-slate-900 dark:text-slate-100 text-sm sm:text-base tracking-tight" style={{ fontFamily: 'var(--font-display)' }}>
+          <ChevronRight className="hidden sm:inline w-3.5 h-3.5 text-slate-300 dark:text-slate-600 shrink-0" />
+          <span className="font-bold text-slate-900 dark:text-slate-100 text-sm sm:text-base tracking-tight truncate" style={{ fontFamily: 'var(--font-display)' }}>
             {title}
           </span>
         </div>
       </div>
 
       {/* Right Controls */}
-      <div className="flex items-center space-x-3 relative" ref={dropdownRef}>
+      <div className="flex items-center space-x-2.5 sm:space-x-3 relative shrink-0" ref={dropdownRef}>
         {/* Notifications button with Bell icon */}
         <button 
           onClick={() => {
             setShowDropdown(!showDropdown)
             if (!showDropdown) fetchNotifications()
           }}
-          className={`relative p-2 rounded-lg text-xs font-semibold transition-all border ${
+          aria-label="Notifications"
+          className={`relative h-10 w-10 flex items-center justify-center rounded-xl text-xs font-semibold transition-all border ${
             showDropdown
               ? 'bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800'
               : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 bg-slate-50 dark:bg-slate-800 border-slate-200/80 dark:border-slate-700'
           }`}
           title="Notifications"
         >
-          <Bell className="w-4 h-4" />
+          <Bell className="w-4.5 h-4.5" />
           {unreadCount > 0 && (
             <span className="absolute -top-1 -right-1 h-4 min-w-4 px-1 rounded-full text-[9px] font-black flex items-center justify-center bg-rose-500 text-white shadow-xs animate-pulse">
               {unreadCount}
@@ -235,7 +236,7 @@ export function Topbar({ onMenuClick }) {
         {/* Notifications Dropdown */}
         {showDropdown && (
           <div 
-            className="absolute top-12 right-0 w-80 max-h-[420px] rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-xl z-50 flex flex-col overflow-hidden"
+            className="absolute top-12 right-0 w-[calc(100vw-32px)] sm:w-80 max-w-[360px] max-h-[420px] rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-2xl z-50 flex flex-col overflow-hidden"
           >
             {/* Header */}
             <div className="p-3.5 border-b border-slate-100 dark:border-slate-700/80 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/80">

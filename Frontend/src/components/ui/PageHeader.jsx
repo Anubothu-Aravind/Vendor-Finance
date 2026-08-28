@@ -36,8 +36,8 @@ export function PageHeader({
         )}
 
         {/* Page Title & Badges */}
-        <div className="flex items-center gap-3 flex-wrap">
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100 leading-tight" style={{ fontFamily: 'var(--font-display)' }}>
+        <div className="flex items-center gap-2.5 sm:gap-3 flex-wrap">
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100 leading-tight" style={{ fontFamily: 'var(--font-display)' }}>
             {title}
           </h1>
           {badge && <div>{badge}</div>}
@@ -45,7 +45,7 @@ export function PageHeader({
 
         {/* Subtitle / Description */}
         {description && (
-          <p className="text-sm sm:text-base text-slate-500 dark:text-slate-400 font-normal leading-relaxed max-w-3xl">
+          <p className="text-xs sm:text-sm md:text-base text-slate-500 dark:text-slate-400 font-normal leading-relaxed max-w-3xl">
             {description}
           </p>
         )}
@@ -53,7 +53,7 @@ export function PageHeader({
 
       {/* Action Buttons Slot */}
       {children && (
-        <div className="flex items-center gap-3 shrink-0 flex-wrap">
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0 flex-wrap w-full sm:w-auto">
           {children}
         </div>
       )}

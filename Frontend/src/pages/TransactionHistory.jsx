@@ -161,7 +161,7 @@ export function TransactionHistory() {
       />
 
       {/* KPI Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 sm:gap-5">
         <KpiCard
           title="Total Transaction Volume"
           value={loading ? <Skeleton className="h-8 w-32" /> : `₹${fmt(totalVolume)}`}
@@ -196,7 +196,7 @@ export function TransactionHistory() {
         isFiltered={search !== '' || partyFilter !== 'ALL' || typeFilter !== 'ALL' || showDeleted}
         onReset={() => { setSearch(''); setPartyFilter('ALL'); setTypeFilter('ALL'); setShowDeleted(false); }}
       >
-        <div className="w-44">
+        <div className="w-full sm:w-44">
           <DropdownSelect
             value={partyFilter}
             onChange={setPartyFilter}
@@ -207,7 +207,7 @@ export function TransactionHistory() {
             ]}
           />
         </div>
-        <div className="w-52">
+        <div className="w-full sm:w-52">
           <DropdownSelect
             value={typeFilter}
             onChange={setTypeFilter}
@@ -276,7 +276,57 @@ export function TransactionHistory() {
           </div>
         ) : (
           <>
-            <div ref={tableContainerRef} className="overflow-x-auto">
+            {/* Mobile Cards View (< md) */}
+            <div className="block md:hidden divide-y divide-slate-100 dark:divide-slate-700/50">
+              {pagination.paginatedItems.map((t, i) => (
+                <div 
+                  key={t.id || i}
+                  onClick={() => {
+                    if (t.isFinancier && t.partyId) {
+                      navigate(`/financiers/${t.partyId}`)
+                    } else if (t.referenceId) {
+                      let docType = 'payment'
+                      if (t.rawType === 'BILL_POSTED') docType = 'bill'
+                      else if (t.rawType === 'LOAN_DRAWDOWN') docType = 'loan'
+                      else if (t.rawType === 'LOAN_REPAYMENT' || t.rawType === 'REPAYMENT_PRINCIPAL' || t.rawType === 'REPAYMENT_INTEREST') docType = 'repayment'
+                      setPrintDoc({ type: docType, id: t.referenceId })
+                    }
+                  }}
+                  className={`p-4 space-y-2.5 hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors cursor-pointer ${t.status === 'Deleted' ? 'opacity-50' : ''}`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-slate-500">{t.date}</span>
+                    <Badge variant={getTxBadgeVariant(t.rawType)} dot>
+                      {toTitleCase(t.type)}
+                    </Badge>
+                  </div>
+
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">{toTitleCase(t.party)}</p>
+                      <p className="text-xs font-mono text-slate-400 font-semibold">{t.ref}</p>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-sm font-bold text-slate-900 dark:text-slate-100 tabular-nums block">
+                        ₹{fmt(t.amount)}
+                      </span>
+                      <Badge variant={t.status === 'Active' ? 'success' : 'danger'} dot>
+                        {toTitleCase(t.status)}
+                      </Badge>
+                    </div>
+                  </div>
+
+                  {t.description && (
+                    <p className="text-xs text-slate-500 truncate pt-1 border-t border-slate-100 dark:border-slate-800/60">
+                      {toTitleCase(t.description)}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop Table (>= md) */}
+            <div ref={tableContainerRef} className="hidden md:block overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead className="bg-slate-50/90 dark:bg-slate-800/60 border-b border-slate-200/80 dark:border-slate-700 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                   <tr>

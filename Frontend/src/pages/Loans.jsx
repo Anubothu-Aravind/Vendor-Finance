@@ -283,8 +283,8 @@ export function Loans() {
         description={`${activeLoans.length} active facilities · ₹${fmt(totalExposure)} total pending exposure`}
         breadcrumbs={[{ label: 'Loans' }]}
       >
-        <div className="flex items-center gap-3">
-          <div className="w-44">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 w-full sm:w-auto">
+          <div className="w-full sm:w-48">
             <DropdownSelect
               value={sortBy}
               onChange={setSortBy}
@@ -297,7 +297,7 @@ export function Loans() {
               ]}
             />
           </div>
-          <Button onClick={handleOpenAdd} className="shadow-sm">
+          <Button onClick={handleOpenAdd} className="shadow-sm justify-center">
             <Plus className="w-4 h-4" />
             <span>Add Loan</span>
           </Button>
@@ -305,7 +305,7 @@ export function Loans() {
       </PageHeader>
 
       {/* KPI Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 sm:gap-5">
         <KpiCard
           title="Active Loans"
           value={loading ? <Skeleton className="h-8 w-16" /> : String(activeLoans.length)}
@@ -337,7 +337,7 @@ export function Loans() {
           <EmptyState icon="search" title="Error Loading Loans" description={error} />
         </Card>
       ) : loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
           {Array.from({ length: 4 }).map((_, idx) => (
             <SkeletonCard key={idx} className="h-48" />
           ))}
@@ -353,7 +353,7 @@ export function Loans() {
         </Card>
       ) : (
         <div className="space-y-5" ref={cardContainerRef}>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
             {pagination.paginatedItems.map((loan, i) => (
               <motion.div 
                 key={loan._id || loan.id} 
@@ -361,13 +361,13 @@ export function Loans() {
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: Math.min(i * 0.03, 0.3), duration: 0.2 }}
-                className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200/80 dark:border-slate-700 p-6 hover:shadow-md hover:border-slate-300 dark:hover:border-slate-600 transition-all relative group cursor-pointer flex flex-col justify-between"
+                className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200/80 dark:border-slate-700 p-4 sm:p-6 hover:shadow-md hover:border-slate-300 dark:hover:border-slate-600 transition-all relative group cursor-pointer flex flex-col justify-between"
               >
                 <div>
                   <div className="flex justify-between items-start mb-4">
                     <div>
                       <p className="text-xs font-bold font-mono uppercase tracking-wider text-slate-400">Note #{loan.noteNo || '—'}</p>
-                      <h3 className={`text-lg font-bold mt-1 ${loan.isOrphaned ? 'text-slate-400 italic' : 'text-slate-900 dark:text-slate-100'}`}>
+                      <h3 className={`text-base sm:text-lg font-bold mt-1 ${loan.isOrphaned ? 'text-slate-400 italic' : 'text-slate-900 dark:text-slate-100'}`}>
                         {loan.isOrphaned ? 'Deleted Financier' : toTitleCase(loan.financier)}
                       </h3>
                       <p className="text-xs text-slate-400 mt-1">{loan.rate}% p.a. · Issued: {loan.loanDate}</p>
@@ -377,18 +377,18 @@ export function Loans() {
                     </Badge>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-3 p-3.5 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-700/60 mb-4 text-xs">
+                  <div className="grid grid-cols-3 gap-2 sm:gap-3 p-3 sm:p-3.5 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-700/60 mb-4 text-xs">
                     <div>
-                      <p className="text-xs text-slate-400 font-bold uppercase mb-1">Principal</p>
-                      <p className="text-sm font-bold text-slate-900 dark:text-slate-100 tabular-nums">₹{fmt(loan.amount)}</p>
+                      <p className="text-[10px] sm:text-xs text-slate-400 font-bold uppercase mb-1">Principal</p>
+                      <p className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100 tabular-nums">₹{fmt(loan.amount)}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-slate-400 font-bold uppercase mb-1">Repaid</p>
-                      <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">₹{fmt(loan.repaid)}</p>
+                      <p className="text-[10px] sm:text-xs text-slate-400 font-bold uppercase mb-1">Repaid</p>
+                      <p className="text-xs sm:text-sm font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">₹{fmt(loan.repaid)}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-slate-400 font-bold uppercase mb-1">Pending</p>
-                      <p className={`text-sm font-bold tabular-nums ${loan.pending > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600'}`}>
+                      <p className="text-[10px] sm:text-xs text-slate-400 font-bold uppercase mb-1">Pending</p>
+                      <p className={`text-xs sm:text-sm font-bold tabular-nums ${loan.pending > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600'}`}>
                         {loan.pending > 0 ? `₹${fmt(loan.pending)}` : 'Nil'}
                       </p>
                     </div>
@@ -407,26 +407,29 @@ export function Loans() {
                 </div>
 
                 <div className="flex justify-between items-center pt-3.5 border-t border-slate-100 dark:border-slate-700/60">
-                  <span className="text-xs text-slate-400 truncate max-w-[240px]" title={loan.remarks}>{loan.remarks || '—'}</span>
+                  <span className="text-xs text-slate-400 truncate max-w-[160px] sm:max-w-[240px]" title={loan.remarks}>{loan.remarks || '—'}</span>
                   <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
                     <button
                       onClick={() => handleOpenPreview(loan)}
-                      className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                      className="h-9 w-9 flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
                       title="View Details"
+                      aria-label="View Details"
                     >
                       <Eye className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => handleOpenEdit(loan)}
-                      className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                      className="h-9 w-9 flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
                       title="Edit Loan"
+                      aria-label="Edit Loan"
                     >
                       <Edit2 className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => handleDelete(loan.id)}
-                      className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors"
+                      className="h-9 w-9 flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors"
                       title="Delete Loan"
+                      aria-label="Delete Loan"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>

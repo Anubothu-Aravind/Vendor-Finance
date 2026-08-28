@@ -317,8 +317,9 @@ export function RunningLedger() {
       </PageHeader>
 
       {/* KPI Stats when party selected */}
+      {/* KPI Stats when party selected */}
       {party && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 sm:gap-5">
           <KpiCard
             title="Total Debits (Liabilities)"
             value={`₹${fmt(totalDebit)}`}
@@ -354,7 +355,7 @@ export function RunningLedger() {
         isFiltered={search !== '' || fromDate !== '' || toDate !== ''}
         onReset={() => { setSearch(''); handleClearDates(); }}
       >
-        <div className="w-72">
+        <div className="w-full sm:w-72">
           {partiesLoading ? (
             <Skeleton className="h-10 w-full rounded-xl" />
           ) : (
@@ -366,13 +367,15 @@ export function RunningLedger() {
             />
           )}
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-bold uppercase tracking-wider text-slate-400">From:</span>
-          <CustomDatePicker value={fromDate} onChange={handleFromDateChange} />
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-bold uppercase tracking-wider text-slate-400">To:</span>
-          <CustomDatePicker value={toDate} onChange={handleToDateChange} />
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          <div className="flex items-center gap-2 flex-1 sm:flex-initial min-w-[140px]">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">From:</span>
+            <CustomDatePicker value={fromDate} onChange={handleFromDateChange} />
+          </div>
+          <div className="flex items-center gap-2 flex-1 sm:flex-initial min-w-[140px]">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">To:</span>
+            <CustomDatePicker value={toDate} onChange={handleToDateChange} />
+          </div>
         </div>
       </FilterToolbar>
 

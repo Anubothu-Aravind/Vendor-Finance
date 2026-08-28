@@ -278,19 +278,19 @@ export function FinancierProfile() {
           { label: toTitleCase(profile.name) }
         ]}
       >
-        <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => setShowEditModal(true)}>
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-2.5 w-full sm:w-auto">
+          <Button variant="outline" onClick={() => setShowEditModal(true)} className="justify-center">
             <Edit2 className="w-4 h-4" />
-            <span>Edit</span>
+            <span>Edit Profile</span>
           </Button>
-          <Button onClick={() => { setRepayStep('input'); setShowRepayModal(true); }}>
+          <Button onClick={() => { setRepayStep('input'); setShowRepayModal(true); }} className="justify-center">
             <span>Record Repayment</span>
           </Button>
         </div>
       </PageHeader>
 
       {/* KPI Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3.5 sm:gap-5">
         <KpiCard
           title="Total Loans"
           value={String(totals.totalLoans)}
@@ -332,10 +332,10 @@ export function FinancierProfile() {
           iconBg="bg-emerald-50 dark:bg-emerald-950/40 border-emerald-100 dark:border-emerald-900/40"
         />
         <KpiCard
-          title="Pending Exposure"
-          value={`₹${fmt(totals.totalPending)}`}
-          subtitle="Remaining principal"
-          icon={AlertCircle}
+          title="Outstanding"
+          value={`₹${fmt(totals.totalOutstanding)}`}
+          subtitle="Remaining balance"
+          icon={DollarSign}
           iconColor="text-rose-600 dark:text-rose-400"
           iconBg="bg-rose-50 dark:bg-rose-950/40 border-rose-100 dark:border-rose-900/40"
         />
@@ -347,7 +347,7 @@ export function FinancierProfile() {
           <CardTitle>Financier Details</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 text-sm">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 text-sm">
             <div>
               <span className="text-xs text-slate-400 font-semibold block mb-1">Phone Number</span>
               <span className="font-semibold text-slate-900 dark:text-slate-100 font-mono text-sm">{profile.phone || '—'}</span>
@@ -392,38 +392,78 @@ export function FinancierProfile() {
               />
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-slate-50/90 dark:bg-slate-800/60 border-b border-slate-200/80 dark:border-slate-700 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  <tr>
-                    <th className="px-6 py-3.5">Note #</th>
-                    <th className="px-6 py-3.5">Date</th>
-                    <th className="px-6 py-3.5 text-right">Loan Amount</th>
-                    <th className="px-6 py-3.5 text-right">Principal Paid</th>
-                    <th className="px-6 py-3.5 text-right">Outstanding</th>
-                    <th className="px-6 py-3.5">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
-                  {loans.map((l, i) => (
-                    <tr key={l.id || i} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors h-16">
-                      <td className="px-6 py-4 font-mono font-bold text-slate-900 dark:text-slate-100 whitespace-nowrap">{l.noteNo}</td>
-                      <td className="px-6 py-4 text-slate-500 dark:text-slate-400 font-medium whitespace-nowrap">{l.date}</td>
-                      <td className="px-6 py-4 text-slate-900 dark:text-slate-100 text-right font-bold tabular-nums whitespace-nowrap">₹{fmt(l.amount)}</td>
-                      <td className="px-6 py-4 text-emerald-600 dark:text-emerald-400 text-right font-bold tabular-nums whitespace-nowrap">₹{fmt(l.paid)}</td>
-                      <td className={`px-6 py-4 text-right font-bold tabular-nums whitespace-nowrap ${l.outstanding > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-400 dark:text-slate-500'}`}>
-                        ₹{fmt(l.outstanding)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <Badge variant={String(l.status).toLowerCase() === 'active' ? 'warning' : 'success'} dot>
-                          {toTitleCase(l.status)}
-                        </Badge>
-                      </td>
+            <>
+              {/* Mobile Cards View (< md) */}
+              <div className="block md:hidden divide-y divide-slate-100 dark:divide-slate-700/50">
+                {loans.map((l, i) => (
+                  <div key={l.id || i} className="p-4 space-y-2.5 hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono font-bold text-sm text-emerald-600 dark:text-emerald-400">
+                        {l.noteNo}
+                      </span>
+                      <Badge variant={String(l.status).toLowerCase() === 'active' ? 'warning' : 'success'} dot>
+                        {toTitleCase(l.status)}
+                      </Badge>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2 p-2.5 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-800/60 text-xs">
+                      <div>
+                        <span className="text-[10px] text-slate-400 block uppercase font-bold">Principal</span>
+                        <span className="font-bold text-slate-900 dark:text-slate-100 tabular-nums">₹{fmt(l.amount)}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 block uppercase font-bold">Paid</span>
+                        <span className="font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">₹{fmt(l.paid)}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 block uppercase font-bold">Pending</span>
+                        <span className={`font-bold tabular-nums ${l.outstanding > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-400'}`}>
+                          ₹{fmt(l.outstanding)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between text-xs text-slate-500">
+                      <span>Drawdown: <span className="font-medium text-slate-700 dark:text-slate-300">{l.date}</span></span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Desktop Table (>= md) */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-slate-50/90 dark:bg-slate-800/60 border-b border-slate-200/80 dark:border-slate-700 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    <tr>
+                      <th className="px-6 py-3.5">Note #</th>
+                      <th className="px-6 py-3.5">Date</th>
+                      <th className="px-6 py-3.5 text-right">Loan Amount</th>
+                      <th className="px-6 py-3.5 text-right">Principal Paid</th>
+                      <th className="px-6 py-3.5 text-right">Outstanding</th>
+                      <th className="px-6 py-3.5">Status</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
+                    {loans.map((l, i) => (
+                      <tr key={l.id || i} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors h-16">
+                        <td className="px-6 py-4 font-mono font-bold text-slate-900 dark:text-slate-100 whitespace-nowrap">{l.noteNo}</td>
+                        <td className="px-6 py-4 text-slate-500 dark:text-slate-400 font-medium whitespace-nowrap">{l.date}</td>
+                        <td className="px-6 py-4 text-slate-900 dark:text-slate-100 text-right font-bold tabular-nums whitespace-nowrap">₹{fmt(l.amount)}</td>
+                        <td className="px-6 py-4 text-emerald-600 dark:text-emerald-400 text-right font-bold tabular-nums whitespace-nowrap">₹{fmt(l.paid)}</td>
+                        <td className={`px-6 py-4 text-right font-bold tabular-nums whitespace-nowrap ${l.outstanding > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-400 dark:text-slate-500'}`}>
+                          ₹{fmt(l.outstanding)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <Badge variant={String(l.status).toLowerCase() === 'active' ? 'warning' : 'success'} dot>
+                            {toTitleCase(l.status)}
+                          </Badge>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>

@@ -382,7 +382,7 @@ export function FinancierPayments() {
       </PageHeader>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 sm:gap-5">
         <KpiCard
           title="Total Repaid"
           value={loading ? <Skeleton className="h-8 w-32" /> : `₹${fmt(totalRepaid)}`}
@@ -417,7 +417,7 @@ export function FinancierPayments() {
         isFiltered={search !== '' || modeFilter !== 'ALL'}
         onReset={() => { setSearch(''); setModeFilter('ALL') }}
       >
-        <div className="w-48">
+        <div className="w-full sm:w-48">
           <DropdownSelect
             value={modeFilter}
             onChange={setModeFilter}
@@ -466,7 +466,7 @@ export function FinancierPayments() {
               <EmptyState 
                 icon="wallet" 
                 title="No Repayments Recorded" 
-                description="Record your first repayment against a financier loan." 
+                description="Record your first financier repayment to track loan settlements." 
                 action={{ label: "Record Repayment", onClick: handleOpenAdd }} 
               />
             ) : (
@@ -479,7 +479,80 @@ export function FinancierPayments() {
           </div>
         ) : (
           <>
-            <div ref={tableContainerRef} className="overflow-x-auto">
+            {/* Mobile Cards View (< md) */}
+            <div className="block md:hidden divide-y divide-slate-100 dark:divide-slate-700/50">
+              {pagination.paginatedItems.map((r, i) => (
+                <div 
+                  key={r._id || r.id} 
+                  onClick={() => handleOpenPreview(r)} 
+                  className="p-4 space-y-3 hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors cursor-pointer"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className={`h-9 w-9 rounded-xl border flex items-center justify-center text-xs font-bold shrink-0 shadow-2xs ${avatarColors[i % avatarColors.length]}`}>
+                        {initials(r.financier)}
+                      </div>
+                      <div className="min-w-0">
+                        <span className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate block">{toTitleCase(r.financier)}</span>
+                        <p className="text-xs font-mono text-emerald-600 dark:text-emerald-400 font-bold">{r.ref}</p>
+                      </div>
+                    </div>
+                    <Badge variant={getModeBadgeVariant(r.mode)} dot>
+                      {toTitleCase(r.mode)}
+                    </Badge>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs py-2 px-3 rounded-lg bg-slate-50/80 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800/60">
+                    <div>
+                      <span className="text-slate-400 block text-[10px] uppercase font-semibold">Repayment Date</span>
+                      <span className="font-medium text-slate-700 dark:text-slate-300 block">{r.date}</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-slate-400 block text-[10px] uppercase font-semibold">Amount Repaid</span>
+                      <span className="font-bold text-sm text-emerald-600 dark:text-emerald-400 tabular-nums block">
+                        ₹{fmt(r.amount)}
+                      </span>
+                    </div>
+                    {r.remarks && (
+                      <div className="col-span-2 pt-1 border-t border-slate-200/40 dark:border-slate-700/40 text-[11px] text-slate-500 truncate">
+                        <span className="text-slate-400 font-medium">Remarks: </span>
+                        <span>{r.remarks}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-end gap-1.5 pt-1" onClick={e => e.stopPropagation()}>
+                    <button
+                      onClick={() => handleOpenPreview(r)}
+                      className="h-9 px-3 rounded-lg text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 text-xs font-semibold flex items-center gap-1 transition-colors"
+                      title="View Details"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>View</span>
+                    </button>
+                    <button
+                      onClick={() => handleOpenEdit(r)}
+                      className="h-9 w-9 flex items-center justify-center rounded-lg text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white bg-slate-100 dark:bg-slate-700 transition-colors"
+                      title="Edit Repayment"
+                      aria-label="Edit Repayment"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(r.id)}
+                      className="h-9 w-9 flex items-center justify-center rounded-lg text-rose-500 hover:text-rose-700 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 transition-colors"
+                      title="Delete Repayment"
+                      aria-label="Delete Repayment"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop Table (>= md) */}
+            <div ref={tableContainerRef} className="hidden md:block overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead className="bg-slate-50/90 dark:bg-slate-800/60 border-b border-slate-200/80 dark:border-slate-700 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                   <tr>

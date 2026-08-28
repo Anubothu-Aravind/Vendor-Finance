@@ -379,7 +379,83 @@ export function Vendors() {
           </div>
         ) : (
           <>
-            <div ref={tableContainerRef} className="overflow-x-auto">
+            {/* Mobile Cards View (< md) */}
+            <div className="block md:hidden divide-y divide-slate-100 dark:divide-slate-700/50">
+              {pagination.paginatedItems.map((v, i) => (
+                <div 
+                  key={v._id || v.id} 
+                  onClick={() => handleOpenPreview(v)}
+                  className="p-4 space-y-3 hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors cursor-pointer"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className={`h-10 w-10 rounded-xl border flex items-center justify-center text-xs font-bold shrink-0 shadow-2xs ${avatarColors[i % avatarColors.length]}`}>
+                        {initials(v.name || 'V')}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">{toTitleCase(v.name)}</p>
+                        <p className="text-xs text-slate-400 font-mono">GST: {v.gstin || '—'}</p>
+                      </div>
+                    </div>
+                    <Badge variant="neutral">{toTitleCase(v.type || 'Vendor')}</Badge>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs py-2 px-3 rounded-lg bg-slate-50/80 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800/60">
+                    <div>
+                      <span className="text-slate-400 block text-[10px] uppercase font-semibold">Category</span>
+                      <span className="font-medium text-slate-700 dark:text-slate-300 truncate block">{toTitleCase(v.category || 'General')}</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-slate-400 block text-[10px] uppercase font-semibold">Outstanding</span>
+                      <span className={`font-bold text-sm tabular-nums ${v.outstanding > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-500'}`}>
+                        {v.outstanding > 0 ? `₹${fmt(v.outstanding)}` : 'Clear'}
+                      </span>
+                    </div>
+                    {v.phone && (
+                      <div className="col-span-2 pt-1 border-t border-slate-200/40 dark:border-slate-700/40 flex items-center justify-between text-[11px] text-slate-500">
+                        <span>Phone: <span className="font-mono font-medium text-slate-700 dark:text-slate-300">{v.phone}</span></span>
+                        {v.email && <span className="truncate max-w-[140px]">{v.email}</span>}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1" onClick={e => e.stopPropagation()}>
+                    <Badge variant={String(v.status).toLowerCase() === 'active' ? 'success' : 'neutral'} dot>
+                      {toTitleCase(v.status || 'Active')}
+                    </Badge>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => handleOpenPreview(v)}
+                        className="h-9 px-3 rounded-lg text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 text-xs font-semibold flex items-center gap-1 transition-colors"
+                        title="View Details"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>View</span>
+                      </button>
+                      <button
+                        onClick={() => handleOpenEdit(v)}
+                        className="h-9 w-9 flex items-center justify-center rounded-lg text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white bg-slate-100 dark:bg-slate-700 transition-colors"
+                        title="Edit Vendor"
+                        aria-label="Edit Vendor"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(v.id)}
+                        className="h-9 w-9 flex items-center justify-center rounded-lg text-rose-500 hover:text-rose-700 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 transition-colors"
+                        title="Delete Vendor"
+                        aria-label="Delete Vendor"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop Table (>= md) */}
+            <div ref={tableContainerRef} className="hidden md:block overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead className="bg-slate-50/90 dark:bg-slate-800/60 border-b border-slate-200/80 dark:border-slate-700 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                   <tr>

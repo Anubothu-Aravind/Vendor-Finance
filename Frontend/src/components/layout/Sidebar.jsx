@@ -16,7 +16,8 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
-  LogOut
+  LogOut,
+  X
 } from 'lucide-react'
 import { useAuth } from '../../hooks/AuthContext'
 import { usePreferences } from '../../hooks/usePreferences'
@@ -85,27 +86,43 @@ export function Sidebar({ onClose }) {
 
   return (
     <aside
-      className="sidebar-bg flex flex-col min-h-screen h-full sticky top-0 shrink-0 transition-all duration-300"
-      style={{ borderRight: '1px solid rgba(255,255,255,0.06)', width: sidebarCollapsed ? '68px' : '236px' }}
+      className="sidebar-bg flex flex-col min-h-screen h-full sticky top-0 shrink-0 transition-all duration-300 w-full md:w-[236px]"
+      style={{
+        borderRight: '1px solid rgba(255,255,255,0.06)',
+        width: typeof window !== 'undefined' && window.innerWidth >= 768 ? (sidebarCollapsed ? '68px' : '236px') : '100%'
+      }}
     >
       {/* Brand Header */}
       <div
-        className={`h-16 flex items-center shrink-0 ${sidebarCollapsed ? 'justify-center px-0' : 'px-5 justify-between'}`}
+        className={`h-16 flex items-center shrink-0 ${sidebarCollapsed ? 'justify-between md:justify-center px-4 md:px-0' : 'px-5 justify-between'}`}
         style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}
       >
         {sidebarCollapsed ? (
-          <div
-            onClick={() => setSidebarCollapsed(false)}
-            className="h-10 w-10 rounded-xl flex items-center justify-center font-black text-sm cursor-pointer hover:opacity-80 transition-opacity overflow-hidden shadow-sm"
-            style={{ background: companyProfile?.logo ? '#fff' : 'var(--gradient-primary)', color: '#fff', fontFamily: 'var(--font-display)' }}
-            title="Expand Sidebar"
-          >
-            {companyProfile?.logo ? (
-              <img src={companyProfile.logo} alt="Logo" className="h-full w-full object-contain p-0.5" />
-            ) : (
-              brandInitial
+          <>
+            <div
+              onClick={() => setSidebarCollapsed(false)}
+              className="h-10 w-10 rounded-xl flex items-center justify-center font-black text-sm cursor-pointer hover:opacity-80 transition-opacity overflow-hidden shadow-sm"
+              style={{ background: companyProfile?.logo ? '#fff' : 'var(--gradient-primary)', color: '#fff', fontFamily: 'var(--font-display)' }}
+              title="Expand Sidebar"
+            >
+              {companyProfile?.logo ? (
+                <img src={companyProfile.logo} alt="Logo" className="h-full w-full object-contain p-0.5" />
+              ) : (
+                brandInitial
+              )}
+            </div>
+            {/* Mobile-only close button when collapsed */}
+            {onClose && (
+              <button
+                type="button"
+                onClick={onClose}
+                className="md:hidden p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+                aria-label="Close navigation drawer"
+              >
+                <X className="w-5 h-5" />
+              </button>
             )}
-          </div>
+          </>
         ) : (
           <>
             <div className="flex items-center gap-3 min-w-0">
@@ -128,16 +145,28 @@ export function Sidebar({ onClose }) {
                 </p>
               </div>
             </div>
-            <button
-              onClick={() => setSidebarCollapsed(true)}
-              className="text-xs font-semibold px-2 py-1 rounded-lg transition-all shrink-0"
-              style={{ color: 'rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.05)' }}
-              onMouseEnter={e => e.currentTarget.style.color = 'rgba(255,255,255,0.85)'}
-              onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.3)'}
-              title="Collapse"
-            >
-              ‹
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setSidebarCollapsed(true)}
+                className="hidden md:inline-flex text-xs font-semibold px-2 py-1 rounded-lg transition-all shrink-0"
+                style={{ color: 'rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.05)' }}
+                onMouseEnter={e => e.currentTarget.style.color = 'rgba(255,255,255,0.85)'}
+                onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.3)'}
+                title="Collapse"
+              >
+                ‹
+              </button>
+              {onClose && (
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="md:hidden p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+                  aria-label="Close navigation drawer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              )}
+            </div>
           </>
         )}
       </div>
@@ -167,7 +196,7 @@ export function Sidebar({ onClose }) {
                     className={({ isActive }) => [
                       'flex items-center rounded-xl text-sm font-semibold transition-all duration-150 relative group',
                       isActive ? 'sidebar-active-indicator' : '',
-                      sidebarCollapsed ? 'justify-center h-10 w-full' : 'px-3 py-2.5 gap-3',
+                      sidebarCollapsed ? 'justify-center h-10 w-full' : 'px-3.5 py-3 md:py-2.5 gap-3 min-h-[44px] md:min-h-0',
                     ].join(' ')}
                     style={({ isActive }) => ({
                       background: isActive ? 'rgba(0, 200, 150, 0.12)' : 'transparent',

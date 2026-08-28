@@ -83,30 +83,69 @@ export default function Pagination({
       </div>
 
       {/* MOBILE CONTROLS (< sm screens) */}
-      <div className="flex sm:hidden items-center justify-between w-full pt-1 border-t border-gray-100 dark:border-slate-800/60">
-        <button
-          type="button"
-          onClick={onPrevPage}
-          disabled={isFirstPage || isLoading}
-          aria-label="Previous Page"
-          className="px-3 py-1.5 rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300 font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-all"
-        >
-          Previous
-        </button>
+      <div className="flex sm:hidden flex-col gap-2.5 w-full pt-2 border-t border-gray-100 dark:border-slate-800/60">
+        <div className="flex items-center justify-between w-full">
+          <button
+            type="button"
+            onClick={onPrevPage}
+            disabled={isFirstPage || isLoading}
+            aria-label="Previous Page"
+            className="h-10 px-3.5 rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300 font-semibold text-xs disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-all flex items-center justify-center shadow-2xs"
+          >
+            Previous
+          </button>
 
-        <span className="font-medium text-gray-600 dark:text-gray-400">
-          Page <span className="font-bold text-gray-900 dark:text-white">{currentPage}</span> / {totalPages}
-        </span>
+          <span className="font-medium text-xs text-gray-600 dark:text-gray-400">
+            Page <span className="font-bold text-gray-900 dark:text-white">{currentPage}</span> / {totalPages}
+          </span>
 
-        <button
-          type="button"
-          onClick={onNextPage}
-          disabled={isLastPage || isLoading}
-          aria-label="Next Page"
-          className="px-3 py-1.5 rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300 font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-all"
-        >
-          Next
-        </button>
+          <button
+            type="button"
+            onClick={onNextPage}
+            disabled={isLastPage || isLoading}
+            aria-label="Next Page"
+            className="h-10 px-3.5 rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300 font-semibold text-xs disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-all flex items-center justify-center shadow-2xs"
+          >
+            Next
+          </button>
+        </div>
+
+        <div className="flex items-center justify-between w-full">
+          <DropdownSelect
+            value={pageSize}
+            onChange={(val) => onPageSizeChange?.(Number(val))}
+            options={pageSizeOptions.map((opt) => ({
+              value: opt,
+              label: `${opt} / page`
+            }))}
+            dropUp={true}
+            size="sm"
+            className="w-28"
+          />
+
+          {totalPages > 3 && (
+            <form onSubmit={handleJumpSubmit} className="flex items-center gap-1.5">
+              <span className="text-[11px] text-gray-400">Go to:</span>
+              <input
+                type="number"
+                min={1}
+                max={totalPages}
+                value={jumpInput}
+                onChange={(e) => setJumpInput(e.target.value)}
+                placeholder={String(currentPage)}
+                aria-label="Jump to Page Number"
+                className="w-12 h-8 px-1 text-center text-xs border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-800 dark:text-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-brand-primary"
+              />
+              <button
+                type="submit"
+                disabled={!jumpInput || isLoading}
+                className="h-8 px-2 text-xs font-semibold rounded-md border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 disabled:opacity-40 transition-all"
+              >
+                Go
+              </button>
+            </form>
+          )}
+        </div>
       </div>
 
       {/* DESKTOP CONTROLS (>= sm screens) */}

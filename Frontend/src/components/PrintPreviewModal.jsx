@@ -567,24 +567,24 @@ export function PrintPreviewModal({ type, id, onClose }) {
         }
       `}} />
 
-      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-[1240px] h-[92vh] flex flex-col overflow-hidden border border-slate-200 dark:border-slate-700 print-modal-dialog">
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-[1240px] h-[95vh] sm:h-[92vh] flex flex-col overflow-hidden border border-slate-200 dark:border-slate-700 print-modal-dialog">
         
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50 no-print">
+        <div className="px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50 no-print">
           <div>
-            <h2 className="text-lg font-bold text-slate-800 dark:text-white">A4 Invoice & Voucher Template Designer</h2>
-            <p className="text-xs text-slate-500">Edit any heading or text label directly on the document by clicking and typing!</p>
+            <h2 className="text-base sm:text-lg font-bold text-slate-800 dark:text-white">A4 Invoice & Voucher Designer</h2>
+            <p className="text-[11px] sm:text-xs text-slate-500">Edit any heading or text label directly on the document by clicking and typing!</p>
           </div>
-          <button onClick={onClose} className="p-1 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition">
+          <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition" aria-label="Close modal">
             <X size={20} />
           </button>
         </div>
 
         {/* Content */}
-        <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden">
           
-          {/* Settings Panel (Left Column) — Fixed width with 24px padding-left */}
-          <div className="w-[320px] shrink-0 border-r border-slate-200 dark:border-slate-700 px-6 py-5 overflow-y-auto overflow-x-hidden space-y-5 bg-slate-50/50 dark:bg-slate-900/40 text-left box-border no-print">
+          {/* Settings Panel (Left Column) */}
+          <div className="w-full lg:w-[320px] lg:shrink-0 border-b lg:border-b-0 lg:border-r border-slate-200 dark:border-slate-700 px-4 sm:px-6 py-4 sm:py-5 overflow-y-visible lg:overflow-y-auto overflow-x-hidden space-y-5 bg-slate-50/50 dark:bg-slate-900/40 text-left box-border no-print">
 
             {/* Core fields */}
             <div>
@@ -753,13 +753,13 @@ export function PrintPreviewModal({ type, id, onClose }) {
           </div>
 
           {/* Interactive Editable A4 Preview (Right Column) */}
-          <div className="flex-1 overflow-auto bg-slate-100 dark:bg-slate-900 p-8 flex items-start justify-center relative print-preview-column">
+          <div className="flex-1 overflow-auto bg-slate-100 dark:bg-slate-900 p-2 sm:p-6 lg:p-8 flex items-start justify-center relative print-preview-column">
             <div 
-              className={`printable-preview-content w-[800px] bg-white text-slate-900 rounded-lg shadow-xl p-8 leading-tight origin-top transition-colors ${
+              className={`printable-preview-content w-full max-w-[800px] bg-white text-slate-900 rounded-lg shadow-xl p-4 sm:p-8 leading-tight origin-top transition-colors ${
                 settings.fontSize === 'small' ? 'text-xs' : settings.fontSize === 'large' ? 'text-base' : 'text-sm'
               }`} 
               style={{ 
-                transform: 'scale(0.85)',
+                transform: typeof window !== 'undefined' && window.innerWidth < 640 ? 'scale(0.95)' : 'scale(0.85)',
                 fontFamily: settings.fontFamily || 'Inter, sans-serif',
                 border: getPreviewBorders(settings).outer
               }}
@@ -1317,16 +1317,16 @@ export function PrintPreviewModal({ type, id, onClose }) {
         </div>
 
         {/* Footer actions */}
-        <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-700 flex justify-end space-x-2.5 bg-slate-50 dark:bg-slate-800/50 no-print">
+        <div className="px-4 sm:px-6 py-3.5 sm:py-4 border-t border-slate-200 dark:border-slate-700 flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-2.5 bg-slate-50 dark:bg-slate-800/50 no-print">
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-200 text-sm font-semibold rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition"
+            className="w-full sm:w-auto px-4 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-200 text-sm font-semibold rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition"
           >
             Cancel
           </button>
           <button
             onClick={handlePrint}
-            className="flex items-center space-x-1.5 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg shadow-sm transition"
+            className="w-full sm:w-auto flex items-center justify-center space-x-1.5 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg shadow-sm transition"
           >
             <Printer size={16} />
             <span>Print Document</span>

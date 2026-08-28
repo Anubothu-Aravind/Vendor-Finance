@@ -170,10 +170,10 @@ export function Dashboard() {
       />
 
       {/* KPI Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3.5 sm:gap-5">
         {loading ? (
           Array.from({ length: 6 }).map((_, idx) => (
-            <div key={idx} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200/80 dark:border-slate-700 p-5 flex flex-col justify-between h-[125px] shadow-xs">
+            <div key={idx} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200/80 dark:border-slate-700 p-4 sm:p-5 flex flex-col justify-between h-[125px] shadow-xs">
               <Skeleton className="h-4 w-24 mb-2" />
               <Skeleton className="h-8 w-28 mb-2" />
               <Skeleton className="h-3.5 w-20" />
@@ -199,7 +199,7 @@ export function Dashboard() {
       <AlertsWidget />
 
       {/* Charts & Top Outstandings Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
         {/* Outstanding Breakdown Chart */}
         <Card className="flex flex-col">
           <CardHeader>
@@ -387,37 +387,68 @@ export function Dashboard() {
                   <EmptyState icon="receipt" title="No Recent Transactions" description="Transactions will appear here once bills or payments are recorded" />
                 </div>
               ) : (
-                <table className="w-full text-left text-sm">
-                  <thead className="bg-slate-50/90 dark:bg-slate-800/60 border-b border-slate-200/80 dark:border-slate-700 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                    <tr>
-                      <th className="px-6 py-3.5">Date</th>
-                      <th className="px-6 py-3.5">Type</th>
-                      <th className="px-6 py-3.5">Party</th>
-                      <th className="px-6 py-3.5">Reference</th>
-                      <th className="px-6 py-3.5 text-right">Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
+                <>
+                  {/* Mobile Cards List (< md) */}
+                  <div className="block md:hidden divide-y divide-slate-100 dark:divide-slate-700/50">
                     {recentTransactions.map((txn, idx) => (
-                      <tr key={idx} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors h-13">
-                        <td className="px-6 py-3.5 font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">{txn.date}</td>
-                        <td className="px-6 py-3.5 whitespace-nowrap">
-                          <Badge
-                            variant={txn.type.includes('PAID') || txn.type.includes('REPAYMENT') ? 'success' : 'info'}
-                            dot
-                          >
-                            {toTitleCase(txn.type.replace(/_/g, ' '))}
-                          </Badge>
-                        </td>
-                        <td className="px-6 py-3.5 font-semibold text-slate-900 dark:text-slate-100">{toTitleCase(txn.party)}</td>
-                        <td className="px-6 py-3.5 font-mono text-xs text-slate-400 dark:text-slate-500 font-semibold">{txn.ref}</td>
-                        <td className="px-6 py-3.5 text-right font-bold text-slate-900 dark:text-slate-100 tabular-nums whitespace-nowrap">
-                          ₹{fmt(txn.amount)}
-                        </td>
-                      </tr>
+                      <div key={idx} className="p-4 space-y-2 hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-semibold text-sm text-slate-900 dark:text-slate-100 truncate">
+                            {toTitleCase(txn.party)}
+                          </span>
+                          <span className="font-bold text-sm text-slate-900 dark:text-slate-100 tabular-nums shrink-0">
+                            ₹{fmt(txn.amount)}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 gap-2">
+                          <div className="flex items-center gap-2">
+                            <Badge
+                              variant={txn.type.includes('PAID') || txn.type.includes('REPAYMENT') ? 'success' : 'info'}
+                              dot
+                            >
+                              {toTitleCase(txn.type.replace(/_/g, ' '))}
+                            </Badge>
+                            <span className="font-mono text-[11px] text-slate-400">{txn.ref}</span>
+                          </div>
+                          <span className="whitespace-nowrap">{txn.date}</span>
+                        </div>
+                      </div>
                     ))}
-                  </tbody>
-                </table>
+                  </div>
+
+                  {/* Desktop Table (>= md) */}
+                  <table className="hidden md:table w-full text-left text-sm">
+                    <thead className="bg-slate-50/90 dark:bg-slate-800/60 border-b border-slate-200/80 dark:border-slate-700 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      <tr>
+                        <th className="px-6 py-3.5">Date</th>
+                        <th className="px-6 py-3.5">Type</th>
+                        <th className="px-6 py-3.5">Party</th>
+                        <th className="px-6 py-3.5">Reference</th>
+                        <th className="px-6 py-3.5 text-right">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
+                      {recentTransactions.map((txn, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors h-13">
+                          <td className="px-6 py-3.5 font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">{txn.date}</td>
+                          <td className="px-6 py-3.5 whitespace-nowrap">
+                            <Badge
+                              variant={txn.type.includes('PAID') || txn.type.includes('REPAYMENT') ? 'success' : 'info'}
+                              dot
+                            >
+                              {toTitleCase(txn.type.replace(/_/g, ' '))}
+                            </Badge>
+                          </td>
+                          <td className="px-6 py-3.5 font-semibold text-slate-900 dark:text-slate-100">{toTitleCase(txn.party)}</td>
+                          <td className="px-6 py-3.5 font-mono text-xs text-slate-400 dark:text-slate-500 font-semibold">{txn.ref}</td>
+                          <td className="px-6 py-3.5 text-right font-bold text-slate-900 dark:text-slate-100 tabular-nums whitespace-nowrap">
+                            ₹{fmt(txn.amount)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </>
               )}
             </div>
           </CardContent>

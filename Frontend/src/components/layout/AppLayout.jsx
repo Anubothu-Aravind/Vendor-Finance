@@ -31,7 +31,8 @@ export function AppLayout() {
       <div
         className={`
           fixed inset-y-0 left-0 z-50 md:static md:z-auto md:flex
-          transform transition-transform duration-300 ease-in-out
+          w-72 max-w-[85vw] md:w-auto
+          transform transition-transform duration-300 ease-in-out shadow-2xl md:shadow-none
           ${mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
         `}
       >
@@ -44,7 +45,7 @@ export function AppLayout() {
         <Topbar onMenuClick={() => setMobileSidebarOpen(true)} />
 
         {/* Scrollable View Canvas */}
-        <main className="flex-1 overflow-y-auto p-4 md:p-8 pb-20 relative">
+        <main className="flex-1 overflow-y-auto p-3.5 sm:p-5 md:p-6 lg:p-8 pb-24 relative">
           <AnimatePresence mode="wait">
             <motion.div
               key={location.pathname}

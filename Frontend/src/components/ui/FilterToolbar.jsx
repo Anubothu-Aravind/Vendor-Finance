@@ -13,14 +13,14 @@ export function FilterToolbar({
 }) {
   return (
     <div className={cn(
-      'bg-white dark:bg-slate-800 p-3.5 sm:p-4 rounded-xl border border-slate-200/80 dark:border-slate-700/70 shadow-xs flex flex-wrap items-center justify-between gap-3 mb-6',
+      'bg-white dark:bg-slate-800 p-3 sm:p-4 rounded-xl border border-slate-200/80 dark:border-slate-700/70 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6',
       className
     )}>
       {/* Left side: Search input + custom filters */}
-      <div className="flex flex-wrap items-center gap-3 flex-1 min-w-[280px]">
+      <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2.5 sm:gap-3 flex-1 min-w-0">
         {/* Search Input */}
         {onSearchChange && (
-          <div className="relative flex-1 min-w-[220px] max-w-md">
+          <div className="relative w-full sm:w-auto sm:flex-1 sm:min-w-[220px] sm:max-w-md">
             <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
             <input
               type="text"
@@ -51,7 +51,7 @@ export function FilterToolbar({
         <button
           type="button"
           onClick={onReset}
-          className="inline-flex items-center gap-1.5 h-10 px-3.5 text-xs font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100 bg-slate-100 dark:bg-slate-700/60 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors cursor-pointer shrink-0 shadow-2xs"
+          className="inline-flex items-center justify-center gap-1.5 h-10 px-3.5 text-xs font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100 bg-slate-100 dark:bg-slate-700/60 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors cursor-pointer w-full sm:w-auto shrink-0 shadow-2xs"
         >
           <RotateCcw className="w-3.5 h-3.5" />
           <span>Reset Filters</span>

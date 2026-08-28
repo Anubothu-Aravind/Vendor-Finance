@@ -346,15 +346,19 @@ export function Reports() {
         description="Bespoke executive financial intelligence and dynamic interactive graphs"
         breadcrumbs={[{ label: 'Reports' }]}
       >
-        <div className="flex items-center gap-2 bg-white dark:bg-slate-800 border border-slate-200/90 dark:border-slate-700/80 rounded-xl p-1.5 shadow-xs">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider pl-2">From:</span>
-          <CustomDatePicker value={fromDate} onChange={setFromDate} placeholder="Start date" />
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">To:</span>
-          <CustomDatePicker value={toDate} onChange={setToDate} placeholder="End date" align="right" />
+        <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 bg-white dark:bg-slate-800 border border-slate-200/90 dark:border-slate-700/80 rounded-xl p-1.5 shadow-xs w-full sm:w-auto">
+          <div className="flex items-center gap-1.5 flex-1 sm:flex-initial">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider pl-1 sm:pl-2">From:</span>
+            <CustomDatePicker value={fromDate} onChange={setFromDate} placeholder="Start date" />
+          </div>
+          <div className="flex items-center gap-1.5 flex-1 sm:flex-initial">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">To:</span>
+            <CustomDatePicker value={toDate} onChange={setToDate} placeholder="End date" align="right" />
+          </div>
           {(fromDate || toDate) && (
             <button
               onClick={() => { setFromDate(''); setToDate('') }}
-              className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 px-2 hover:underline"
+              className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 px-2 py-1 hover:underline ml-auto sm:ml-0"
             >
               Clear
             </button>
@@ -363,12 +367,12 @@ export function Reports() {
       </PageHeader>
 
       {/* Tabs */}
-      <div className="flex items-center gap-1.5 overflow-x-auto p-1 bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl w-fit">
+      <div className="flex items-center gap-1.5 overflow-x-auto p-1.5 bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl w-full sm:w-fit max-w-full scrollbar-none">
         {tabs.map(tab => (
           <button 
             key={tab} 
             onClick={() => handleTabChange(tab)}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+            className={`min-h-[40px] px-3.5 py-2 rounded-lg text-xs font-semibold transition-all whitespace-nowrap shrink-0 ${
               activeTab === tab 
                 ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-xs' 
                 : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'

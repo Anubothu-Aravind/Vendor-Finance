@@ -256,18 +256,15 @@ export function Setup() {
       </button>
 
       {/* Setup Card */}
-      <div style={{
-        width: '100%',
-        maxWidth: '440px',
-        background: colors.cardBg,
-        border: colors.cardBorder,
-        borderRadius: '16px',
-        boxShadow: isDark ? '0 10px 30px rgba(0,0,0,0.25)' : '0 10px 30px rgba(0,0,0,0.05)',
-        padding: '36px',
-        boxSizing: 'border-box',
-        position: 'relative',
-        animation: shake ? 'setup-shake 0.45s ease' : 'none',
-      }}>
+      <div 
+        className="w-full max-w-[440px] p-6 sm:p-9 rounded-2xl border relative transition-all"
+        style={{
+          background: colors.cardBg,
+          borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+          boxShadow: isDark ? '0 10px 30px rgba(0,0,0,0.25)' : '0 10px 30px rgba(0,0,0,0.05)',
+          animation: shake ? 'setup-shake 0.45s ease' : 'none',
+        }}
+      >
         
         {/* Logo and Step Indicator */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '32px' }}>

@@ -2500,11 +2500,11 @@ export function Settings() {
       />
 
       {/* Main Two-Column Layout */}
-      <div className="flex flex-col md:flex-row gap-8 items-start relative">
-        {/* Left Column Tab Bar (Sticky) */}
-        <aside className="w-full md:w-56 shrink-0 md:sticky md:top-20 space-y-6 flex md:flex-col flex-row overflow-x-auto md:overflow-x-visible whitespace-nowrap bg-white dark:bg-slate-800/80 p-3 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 shadow-xs">
+      <div className="flex flex-col md:flex-row gap-6 md:gap-8 items-start relative">
+        {/* Left Column Tab Bar (Sticky on desktop, horizontal scroll on mobile) */}
+        <aside className="w-full md:w-56 shrink-0 md:sticky md:top-20 md:space-y-6 flex md:flex-col flex-row overflow-x-auto md:overflow-x-visible whitespace-nowrap bg-white dark:bg-slate-800/80 p-2 sm:p-3 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 shadow-xs scrollbar-none gap-2 md:gap-0">
           {groups.map((group, gIdx) => (
-            <div key={gIdx} className="space-y-1 flex flex-col w-full">
+            <div key={gIdx} className="space-y-1 flex md:flex-col flex-row shrink-0 md:w-full">
               <h3 className="hidden md:block text-[10px] font-bold tracking-wider text-slate-400 uppercase px-2 mb-1">
                 {group.title}
               </h3>
@@ -2516,7 +2516,7 @@ export function Settings() {
                     <button
                       key={tab.id}
                       onClick={() => handleTabClick(tab.id)}
-                      className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold w-full transition-all text-left ${
+                      className={`flex items-center gap-2 px-3 py-2.5 md:py-2 rounded-xl text-xs font-semibold min-h-[40px] md:min-h-0 md:w-full transition-all text-left shrink-0 ${
                         isActive
                           ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-bold border border-emerald-200/70 dark:border-emerald-800/50 shadow-xs'
                           : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-700/50 border border-transparent'
@@ -2532,8 +2532,8 @@ export function Settings() {
           ))}
         </aside>
 
-        {/* Right Column Tab Content (Scrolls independently) */}
-        <div className="flex-1 w-full min-w-0 min-h-[450px] bg-white dark:bg-slate-800/80 p-6 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 shadow-xs">
+        {/* Right Column Tab Content */}
+        <div className="flex-1 w-full min-w-0 min-h-[450px] bg-white dark:bg-slate-800/80 p-4 sm:p-6 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 shadow-xs">
           {renderActiveTabContent()}
         </div>
       </div>
@@ -2992,7 +2992,7 @@ export function Settings() {
                         return (
                           <label
                             key={item.id}
-                            className={`flex items-center space-x-2.5 p-2 rounded-lg cursor-pointer transition-all border ${
+                            className={`flex items-center space-x-3 px-3 py-2.5 rounded-xl cursor-pointer transition-all border min-h-[44px] ${
                               isChecked
                                 ? 'bg-brand-primary/5 border-brand-primary/30 text-brand-primary font-semibold'
                                 : 'border-transparent hover:bg-gray-100/50 dark:hover:bg-slate-800/50 text-gray-700 dark:text-gray-300'
@@ -3002,7 +3002,7 @@ export function Settings() {
                               type="checkbox"
                               checked={isChecked}
                               onChange={() => handleTogglePermission(item.id)}
-                              className="rounded border-gray-300 text-brand-primary focus:ring-brand-primary h-4 w-4"
+                              className="rounded border-gray-300 text-brand-primary focus:ring-brand-primary h-4 w-4 shrink-0"
                             />
                             <span className="text-xs">{item.label}</span>
                           </label>

@@ -239,7 +239,7 @@ export function Financiers() {
       </PageHeader>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 sm:gap-5">
         <KpiCard
           title="Total Financiers"
           value={loading ? <Skeleton className="h-8 w-16" /> : String(financiers.length)}
@@ -274,7 +274,7 @@ export function Financiers() {
         isFiltered={search !== '' || statusFilter !== 'ALL'}
         onReset={() => { setSearch(''); setStatusFilter('ALL') }}
       >
-        <div className="w-48">
+        <div className="w-full sm:w-48">
           <DropdownSelect
             value={statusFilter}
             onChange={setStatusFilter}
@@ -333,7 +333,81 @@ export function Financiers() {
           </div>
         ) : (
           <>
-            <div ref={tableContainerRef} className="overflow-x-auto">
+            {/* Mobile Cards View (< md) */}
+            <div className="block md:hidden divide-y divide-slate-100 dark:divide-slate-700/50">
+              {pagination.paginatedItems.map((f, i) => (
+                <div 
+                  key={f._id || f.id} 
+                  onClick={() => navigate(`/financiers/${f.id}`)} 
+                  className="p-4 space-y-3 hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors cursor-pointer"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className={`h-10 w-10 rounded-xl border flex items-center justify-center text-xs font-bold shrink-0 shadow-2xs ${avatarColors[i % avatarColors.length]}`}>
+                        {initials(f.name)}
+                      </div>
+                      <div className="min-w-0">
+                        <span className="text-sm font-bold text-slate-900 dark:text-slate-100 block truncate">
+                          {toTitleCase(f.name)}
+                        </span>
+                        {f.phone && <p className="text-xs text-slate-500 font-mono">{f.phone}</p>}
+                      </div>
+                    </div>
+                    <Badge variant={String(f.status).toLowerCase() === 'active' ? 'success' : 'neutral'} dot>
+                      {toTitleCase(f.status || 'Active')}
+                    </Badge>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs py-2 px-3 rounded-lg bg-slate-50/80 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800/60">
+                    <div>
+                      <span className="text-slate-400 block text-[10px] uppercase font-semibold">Active Loans</span>
+                      <span className="font-bold text-sm text-slate-900 dark:text-slate-100 block">{f.loansCount || 0} Loans</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-slate-400 block text-[10px] uppercase font-semibold">Outstanding Exposure</span>
+                      <span className="font-bold text-sm text-rose-600 dark:text-rose-400 tabular-nums block">
+                        ₹{fmt(f.outstanding)}
+                      </span>
+                    </div>
+                    {f.address && (
+                      <div className="col-span-2 pt-1 border-t border-slate-200/40 dark:border-slate-700/40 text-[11px] text-slate-500 truncate">
+                        <span>Address: {f.address}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-end gap-1.5 pt-1" onClick={e => e.stopPropagation()}>
+                    <button
+                      onClick={() => navigate(`/financiers/${f.id}`)}
+                      className="h-9 px-3 rounded-lg text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 text-xs font-semibold flex items-center gap-1 transition-colors"
+                      title="View Profile & Loans"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>Profile</span>
+                    </button>
+                    <button
+                      onClick={() => handleOpenEdit(f)}
+                      className="h-9 w-9 flex items-center justify-center rounded-lg text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white bg-slate-100 dark:bg-slate-700 transition-colors"
+                      title="Edit Financier"
+                      aria-label="Edit Financier"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(f.id)}
+                      className="h-9 w-9 flex items-center justify-center rounded-lg text-rose-500 hover:text-rose-700 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 transition-colors"
+                      title="Delete Financier"
+                      aria-label="Delete Financier"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop Table (>= md) */}
+            <div ref={tableContainerRef} className="hidden md:block overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead className="bg-slate-50/90 dark:bg-slate-800/60 border-b border-slate-200/80 dark:border-slate-700 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                   <tr>

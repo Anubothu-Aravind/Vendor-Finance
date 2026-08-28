@@ -115,17 +115,17 @@ export function OutstandingStatement() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <KpiCard
           title="Total Outstanding"
-          value={loading ? <Skeleton className="h-7 w-28" /> : `₹${fmt(kpis.totalOutstanding)}`}
-          subtitle={`${kpis.vendorCount + kpis.financierCount} accounts with pending balance`}
+          value={loading ? <Skeleton className="h-8 w-32" /> : `₹${fmt(kpis.totalOutstanding)}`}
+          subtitle={`Across ${kpis.totalEntities} entities`}
           icon={DollarSign}
           iconColor="text-rose-600 dark:text-rose-400"
           iconBg="bg-rose-50 dark:bg-rose-950/40 border-rose-100 dark:border-rose-900/40"
         />
         <KpiCard
-          title="Vendor Payables"
-          value={loading ? <Skeleton className="h-8 w-32" /> : `₹${fmt(kpis.vendorPayables)}`}
-          subtitle={`${kpis.vendorCount} vendors awaiting payment`}
-          icon={Building2}
+          title="Vendor Outstanding"
+          value={loading ? <Skeleton className="h-8 w-32" /> : `₹${fmt(kpis.vendorOutstanding)}`}
+          subtitle={`${kpis.vendorCount} supplier payable balances`}
+          icon={ArrowUpRight}
           iconColor="text-emerald-600 dark:text-emerald-400"
           iconBg="bg-emerald-50 dark:bg-emerald-950/40 border-emerald-100 dark:border-emerald-900/40"
         />
@@ -147,7 +147,7 @@ export function OutstandingStatement() {
         isFiltered={search !== '' || typeFilter !== 'ALL'}
         onReset={() => { setSearch(''); setTypeFilter('ALL') }}
       >
-        <div className="w-48">
+        <div className="w-full sm:w-48">
           <DropdownSelect
             value={typeFilter}
             onChange={setTypeFilter}
@@ -207,7 +207,58 @@ export function OutstandingStatement() {
           </div>
         ) : (
           <>
-            <div ref={tableContainerRef} className="overflow-x-auto">
+            {/* Mobile Cards View (< md) */}
+            <div className="block md:hidden divide-y divide-slate-100 dark:divide-slate-700/50">
+              {pagination.paginatedItems.map((p) => (
+                <div 
+                  key={p.id} 
+                  onClick={() => handleRowClick(p)}
+                  className="p-4 space-y-3 hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors cursor-pointer"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className={`h-9 w-9 rounded-xl border flex items-center justify-center text-xs font-bold shrink-0 shadow-2xs ${avatarColors[p.idx % avatarColors.length]}`}>
+                        {initials(p.name)}
+                      </div>
+                      <div className="min-w-0">
+                        <span className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate block">{toTitleCase(p.name)}</span>
+                        <span className="text-xs text-slate-500">{p.items || 0} items active</span>
+                      </div>
+                    </div>
+                    <PartyTypeBadge type={p.type} />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs py-2 px-3 rounded-lg bg-slate-50/80 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800/60">
+                    <div>
+                      <span className="text-slate-400 block text-[10px] uppercase font-semibold">Total / Settled</span>
+                      <span className="font-medium text-slate-700 dark:text-slate-300 block">₹{fmt(p.total)} / ₹{fmt(p.paid)}</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-slate-400 block text-[10px] uppercase font-semibold">Outstanding</span>
+                      <span className="font-bold text-sm text-rose-600 dark:text-rose-400 tabular-nums block">
+                        ₹{fmt(p.outstanding)}
+                      </span>
+                    </div>
+                    <div className="col-span-2 pt-1 border-t border-slate-200/40 dark:border-slate-700/40 flex items-center justify-between text-[11px] text-slate-500">
+                      <span>Due: <span className="font-mono">{p.oldestDue}</span></span>
+                      {p.daysOverdue ? (
+                        <span className="font-bold text-rose-600 dark:text-rose-400">{p.daysOverdue}d overdue</span>
+                      ) : (
+                        <span className="text-slate-400">On time</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end text-xs font-semibold text-emerald-600 dark:text-emerald-400 gap-1 pt-1">
+                    <span>Inspect Ledger</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop Table (>= md) */}
+            <div ref={tableContainerRef} className="hidden md:block overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead className="bg-slate-50/90 dark:bg-slate-800/60 border-b border-slate-200/80 dark:border-slate-700 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                   <tr>
