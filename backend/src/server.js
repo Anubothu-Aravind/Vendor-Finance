@@ -72,6 +72,7 @@ const apiLimiter = rateLimit({
   max: 500, // Max 500 requests per 15 min per IP
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => req.path === '/events' || req.path === '/health',
   message: {
     success: false,
     message: 'Too many API requests. Please slow down.'
