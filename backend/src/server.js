@@ -17,6 +17,11 @@ const PORT = process.env.PORT || 5001
 // Initialize Express App
 const app = express()
 
+// Trust the first reverse proxy hop (Render cloud load balancer / reverse proxy)
+// Allows Express and express-rate-limit to accurately resolve the client IP from X-Forwarded-For
+// and prevents ERR_ERL_UNEXPECTED_X_FORWARDED_FOR validation errors.
+app.set('trust proxy', 1)
+
 // 1. Helmet HTTP Security Headers
 app.use(helmet({
   contentSecurityPolicy: false, // Disabled for local dev assets / inline styles

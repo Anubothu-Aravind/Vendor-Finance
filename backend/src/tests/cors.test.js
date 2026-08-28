@@ -56,5 +56,45 @@ test('CORS Configuration and Allowlist Tests', async (t) => {
     assert.ok(corsOptions.methods.includes('DELETE'))
     assert.ok(corsOptions.methods.includes('OPTIONS'))
   })
+
+  await t.test('Reverse Proxy: Express with trust proxy = 1 parses client IP and allows express-rate-limit', async () => {
+    const expressModule = (await import('express')).default
+    const rateLimitModule = (await import('express-rate-limit')).default
+    const http = await import('node:http')
+
+    const app = expressModule()
+    app.set('trust proxy', 1)
+
+    const limiter = rateLimitModule({
+      windowMs: 60 * 1000,
+      max: 5,
+      standardHeaders: true,
+      legacyHeaders: false
+    })
+
+    app.use('/test-proxy', limiter)
+    app.get('/test-proxy', (req, res) => {
+      res.json({ success: true, ip: req.ip })
+    })
+
+    const server = http.createServer(app)
+    await new Promise((resolve) => server.listen(0, resolve))
+    const port = server.address().port
+
+    try {
+      const clientIp = '203.0.113.195'
+      const response = await fetch(`http://127.0.0.1:${port}/test-proxy`, {
+        headers: {
+          'X-Forwarded-For': clientIp
+        }
+      })
+      assert.equal(response.status, 200)
+      const body = await response.json()
+      assert.equal(body.success, true)
+      assert.equal(body.ip, clientIp)
+    } finally {
+      server.close()
+    }
+  })
 })
 
