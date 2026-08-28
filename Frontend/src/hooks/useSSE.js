@@ -3,44 +3,69 @@ import { API_BASE_URL } from '../utils/api'
 
 export function useSSE() {
   useEffect(() => {
-    // Construct absolute or relative URL for EventSource
     const sseUrl = `${API_BASE_URL}/events`
-    console.log('[SSE] Connecting to event stream at:', sseUrl)
-    
-    let eventSource
-    try {
-      eventSource = new EventSource(sseUrl, { withCredentials: true })
+    let eventSource = null
+    let isMounted = true
+    let reconnectTimeout = null
 
-      eventSource.onopen = () => {
-        console.log('[SSE] Connection opened successfully.')
-      }
+    function connect() {
+      if (!isMounted) return
 
-      eventSource.onmessage = (event) => {
-        try {
-          const payload = JSON.parse(event.data)
-          console.log('[SSE] Received event payload:', payload)
-          
-          if (payload.type === 'data-changed') {
-            // Broadcast custom window-wide event
-            const customEvent = new CustomEvent('api-data-changed', { detail: payload.data })
-            window.dispatchEvent(customEvent)
-          }
-        } catch (err) {
-          console.error('[SSE] Failed to parse message data:', err)
+      try {
+        eventSource = new EventSource(sseUrl, { withCredentials: true })
+
+        eventSource.onopen = () => {
+          // Connection opened / restored
         }
-      }
 
-      eventSource.onerror = (err) => {
-        console.error('[SSE] Connection encountered an error or disconnected:', err)
+        eventSource.onmessage = (event) => {
+          try {
+            const payload = JSON.parse(event.data)
+            if (payload.type === 'data-changed') {
+              // Broadcast window-wide data refresh event to active pages & components
+              const customEvent = new CustomEvent('api-data-changed', { detail: payload.data })
+              window.dispatchEvent(customEvent)
+            }
+          } catch {
+            // Ignored for comments / heartbeat pings
+          }
+        }
+
+        eventSource.onerror = () => {
+          if (!isMounted) return
+
+          // If the browser is in the middle of native auto-reconnect (readyState === CONNECTING),
+          // let EventSource handle it naturally without recreating instances.
+          if (eventSource && eventSource.readyState === EventSource.CLOSED) {
+            eventSource.close()
+            eventSource = null
+
+            // Retry connection after a controlled 5s delay
+            clearTimeout(reconnectTimeout)
+            reconnectTimeout = setTimeout(() => {
+              if (isMounted) connect()
+            }, 5000)
+          }
+        }
+      } catch (err) {
+        // Fallback retry if initial construction throws
+        clearTimeout(reconnectTimeout)
+        reconnectTimeout = setTimeout(() => {
+          if (isMounted) connect()
+        }, 5000)
       }
-    } catch (err) {
-      console.error('[SSE] Failed to instantiate EventSource:', err)
     }
 
+    connect()
+
     return () => {
+      isMounted = false
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout)
+      }
       if (eventSource) {
-        console.log('[SSE] Closing connection.')
         eventSource.close()
+        eventSource = null
       }
     }
   }, [])

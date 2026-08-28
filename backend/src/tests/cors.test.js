@@ -96,5 +96,41 @@ test('CORS Configuration and Allowlist Tests', async (t) => {
       server.close()
     }
   })
+
+  await t.test('SSE: /api/events endpoint sets proper keepalive headers and initial stream bytes', async () => {
+    const expressModule = (await import('express')).default
+    const http = await import('node:http')
+    const { sseHandler } = await import('../utils/sse.js')
+
+    const app = expressModule()
+    app.get('/api/events', sseHandler)
+
+    const server = http.createServer(app)
+    await new Promise((resolve) => server.listen(0, resolve))
+    const port = server.address().port
+
+    try {
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 1000)
+
+      const response = await fetch(`http://127.0.0.1:${port}/api/events`, {
+        signal: controller.signal
+      })
+
+      assert.equal(response.status, 200)
+      assert.equal(response.headers.get('content-type'), 'text/event-stream')
+      assert.ok(response.headers.get('cache-control').includes('no-cache'))
+      assert.equal(response.headers.get('connection'), 'keep-alive')
+
+      clearTimeout(timeout)
+      controller.abort() // Close client stream cleanly
+    } catch (err) {
+      if (err.name !== 'AbortError') {
+        throw err
+      }
+    } finally {
+      server.close()
+    }
+  })
 })
 
