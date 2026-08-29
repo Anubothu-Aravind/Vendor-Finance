@@ -146,6 +146,7 @@ exports.login = async (req, res, next) => {
     res.status(200).json({
       success: true,
       accessToken,
+      refreshToken,
       user: {
         id: user._id,
         name: user.name,
@@ -162,7 +163,7 @@ exports.login = async (req, res, next) => {
 
 exports.refresh = async (req, res, next) => {
   try {
-    const refreshToken = req.cookies.refreshToken
+    const refreshToken = req.cookies?.refreshToken || req.body?.refreshToken || req.headers['x-refresh-token']
     if (!refreshToken) {
       return res.status(401).json({ success: false, message: 'Refresh token not found' })
     }
@@ -187,6 +188,8 @@ exports.refresh = async (req, res, next) => {
     }
 
     const accessToken = jwt.sign(tokenPayload, ACCESS_SECRET, { expiresIn: '24h' })
+    const newRefreshToken = jwt.sign(tokenPayload, REFRESH_SECRET, { expiresIn: '30d' })
+
     const isProd = process.env.NODE_ENV === 'production'
     const sameSiteMode = process.env.COOKIE_SAME_SITE || (isProd ? 'none' : 'lax')
     const secureCookie = isProd || sameSiteMode === 'none'
@@ -198,9 +201,17 @@ exports.refresh = async (req, res, next) => {
       maxAge: 15 * 60 * 1000 // 15 minutes (short-lived)
     })
 
+    res.cookie('refreshToken', newRefreshToken, {
+      httpOnly: true,
+      secure: secureCookie,
+      sameSite: sameSiteMode,
+      maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
+    })
+
     res.status(200).json({
       success: true,
       accessToken,
+      refreshToken: newRefreshToken,
       user: {
         id: user._id,
         name: user.name,

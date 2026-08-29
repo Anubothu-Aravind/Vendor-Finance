@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useNavigate, useBlocker, useBeforeUnload } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import { 
   User, Store, Building2, Coins, CreditCard, Database, Palette, Info, 
   Search, Plus, Trash2, Edit2, X, Check, Upload, RefreshCw,
@@ -164,8 +165,9 @@ function AppearanceTab({ preferences, setPreferences, confirm, showToast }) {
 }
 
 export function Settings() {
+  const queryClient = useQueryClient()
   const { preferences, setPreferences, applyGradient, formatCurrency, formatDate } = usePreferences()
-  const { updateCompanyProfile } = useCompanyProfile()
+  const { updateCompanyProfile, fetchCompanyProfile } = useCompanyProfile()
   const { silentRefresh, user: currentUser } = useAuth()
   const [activeTab, setActiveTab] = useState('profile')
   const toast = useToast()
@@ -1327,12 +1329,31 @@ export function Settings() {
         if (restored.repayments) countParts.push(`${restored.repayments} repayments`)
         if (restored.cheques) countParts.push(`${restored.cheques} cheques`)
         
-        const summary = countParts.length > 0 ? `Restored: ${countParts.join(' · ')}` : 'Data restored successfully'
+        const summary = countParts.length > 0 ? `Backup restored successfully: ${countParts.join(' · ')}` : 'Backup restored successfully'
         showToast(summary, 'success')
         setShowRestoreModal(false)
         setRestoreFile(null)
         setParsedRestoreData(null)
         if (restoreFileInputRef.current) restoreFileInputRef.current.value = ''
+
+        // Invalidate and reset all queries across the application to force immediate re-fetch
+        try {
+          if (queryClient) {
+            await queryClient.invalidateQueries()
+            queryClient.resetQueries()
+          }
+        } catch {}
+
+        try {
+          if (fetchCompanyProfile) {
+            await fetchCompanyProfile()
+          }
+        } catch {}
+
+        try {
+          window.dispatchEvent(new CustomEvent('vastrams:data-restored'))
+        } catch {}
+
         navigate('/') // redirect to dashboard!
       }
     } catch (err) {

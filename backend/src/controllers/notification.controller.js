@@ -3,7 +3,7 @@ const Loan = require('../models/Loan')
 
 exports.getNotifications = async (req, res, next) => {
   try {
-    const userId = req.user.id
+    const userId = req.user._id || req.user.id
     const now = new Date()
     const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
 
@@ -64,7 +64,7 @@ exports.getNotifications = async (req, res, next) => {
 exports.markAsRead = async (req, res, next) => {
   try {
     const { id } = req.params
-    const userId = req.user.id
+    const userId = req.user._id || req.user.id
 
     const notification = await Notification.findOneAndUpdate(
       { _id: id, userId },
@@ -88,7 +88,7 @@ exports.markAsRead = async (req, res, next) => {
 
 exports.markAllAsRead = async (req, res, next) => {
   try {
-    const userId = req.user.id
+    const userId = req.user._id || req.user.id
 
     await Notification.updateMany(
       { userId, read: false },
@@ -107,7 +107,7 @@ exports.markAllAsRead = async (req, res, next) => {
 exports.deleteNotification = async (req, res, next) => {
   try {
     const { id } = req.params
-    const userId = req.user.id
+    const userId = req.user._id || req.user.id
 
     const result = await Notification.findOneAndDelete({ _id: id, userId })
     if (!result) {

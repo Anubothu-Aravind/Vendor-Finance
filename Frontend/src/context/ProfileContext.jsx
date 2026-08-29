@@ -53,6 +53,15 @@ export function ProfileProvider({ children }) {
     fetchCompanyProfile()
   }, [fetchCompanyProfile])
 
+  // Refetch profile on global restore events
+  useEffect(() => {
+    const handleDataRestored = () => {
+      fetchCompanyProfile()
+    }
+    window.addEventListener('vastrams:data-restored', handleDataRestored)
+    return () => window.removeEventListener('vastrams:data-restored', handleDataRestored)
+  }, [fetchCompanyProfile])
+
   // Update browser favicon dynamically when company logo is set
   useEffect(() => {
     if (companyProfile.logo) {

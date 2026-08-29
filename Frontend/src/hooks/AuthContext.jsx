@@ -1,10 +1,10 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import axios from 'axios'
-import { API_BASE_URL } from '../utils/api'
+import { API_BASE_URL, setAuthToken, getAuthToken, getRefreshToken } from '../utils/api'
 
 const AuthContext = createContext(null)
 
-// Create a dedicated axios instance for auth actions targeting the backend API URL
+// Dedicated axios instance for auth actions targeting the backend API URL
 const authApi = axios.create({
   baseURL: API_BASE_URL,
   withCredentials: true,
@@ -12,6 +12,18 @@ const authApi = axios.create({
     'Content-Type': 'application/json'
   }
 })
+
+// Attach Bearer token to authApi requests if available
+authApi.interceptors.request.use(
+  (config) => {
+    const token = getAuthToken()
+    if (token && !config.headers.Authorization) {
+      config.headers.Authorization = `Bearer ${token}`
+    }
+    return config
+  },
+  (error) => Promise.reject(error)
+)
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
@@ -30,21 +42,40 @@ export function AuthProvider({ children }) {
       console.error('Logout request failed:', err)
     } finally {
       setUser(null)
-      try { localStorage.removeItem('vastrams_user_cache') } catch {}
+      setAuthToken(null, null)
+      try {
+        localStorage.removeItem('vastrams_user_cache')
+        localStorage.removeItem('vastrams_access_token')
+        localStorage.removeItem('vastrams_refresh_token')
+      } catch {}
     }
   }, [])
 
   const silentRefresh = useCallback(async () => {
     try {
-      const res = await authApi.post('/auth/refresh')
+      const rfToken = getRefreshToken()
+      const token = getAuthToken()
+      
+      const res = await authApi.post('/auth/refresh', 
+        { refreshToken: rfToken },
+        { 
+          headers: { 
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+            ...(rfToken ? { 'x-refresh-token': rfToken } : {})
+          } 
+        }
+      )
+
       if (res.data && res.data.success) {
-        const u = res.data.user
+        const { accessToken, refreshToken: newRfToken, user: u } = res.data
+        if (accessToken) {
+          setAuthToken(accessToken, newRfToken || rfToken)
+        }
         if (u) {
           setUser(u)
           try { localStorage.setItem('vastrams_user_cache', JSON.stringify(u)) } catch {}
           return true
         }
-        // Fallback in case user object was not included in refresh response
         const meRes = await authApi.get('/auth/me')
         if (meRes.data && meRes.data.success && meRes.data.user) {
           setUser(meRes.data.user)
@@ -53,16 +84,27 @@ export function AuthProvider({ children }) {
         }
       }
     } catch (err) {
-      setUser(null)
-      try { localStorage.removeItem('vastrams_user_cache') } catch {}
+      if (err.response?.status === 401) {
+        setUser(null)
+        setAuthToken(null, null)
+        try {
+          localStorage.removeItem('vastrams_user_cache')
+          localStorage.removeItem('vastrams_access_token')
+          localStorage.removeItem('vastrams_refresh_token')
+        } catch {}
+      }
     }
     return false
   }, [])
 
-  // On mount: attempt initial silent refresh once
+  // On mount: sync initial auth header and attempt initial silent refresh
   useEffect(() => {
     let isMounted = true
     const initAuth = async () => {
+      const currentToken = getAuthToken()
+      if (currentToken) {
+        setAuthToken(currentToken, getRefreshToken())
+      }
       await silentRefresh()
       if (isMounted) {
         setLoading(false)
@@ -70,14 +112,13 @@ export function AuthProvider({ children }) {
     }
     initAuth()
     return () => { isMounted = false }
-  }, [])
+  }, [silentRefresh])
 
-  // Set up token refresh timer (every 10 minutes before 15-minute cookie expiration)
+  // Set up token refresh timer (every 10 minutes before 15-minute token expiration)
   useEffect(() => {
     if (!user) return
 
     const interval = setInterval(async () => {
-      console.log('[AuthContext] Refreshing session cookie automatically...')
       await silentRefresh()
     }, 10 * 60 * 1000)
 
@@ -91,7 +132,14 @@ export function AuthProvider({ children }) {
         if (res.data.requiresSetup) {
           return { success: true, requiresSetup: true, setupToken: res.data.setupToken }
         }
-        setUser(res.data.user)
+        const { accessToken, refreshToken, user: u } = res.data
+        if (accessToken) {
+          setAuthToken(accessToken, refreshToken)
+        }
+        if (u) {
+          setUser(u)
+          try { localStorage.setItem('vastrams_user_cache', JSON.stringify(u)) } catch {}
+        }
         return { success: true }
       }
       return { success: false, message: 'Invalid server response' }

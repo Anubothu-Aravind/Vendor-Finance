@@ -1,10 +1,6 @@
 import axios from 'axios'
 import { navigateToError } from './errorNavigation'
 
-export const setAuthToken = () => {
-  // Access tokens are now managed purely via HttpOnly cookies by the browser.
-}
-
 // Resolve production vs development API endpoint
 export const getApiBaseUrl = () => {
   const envUrl = import.meta.env.VITE_API_URL
@@ -19,16 +15,82 @@ export const getApiBaseUrl = () => {
 
 export const API_BASE_URL = getApiBaseUrl()
 
+// Token helpers for local storage
+export const getAuthToken = () => {
+  try {
+    return localStorage.getItem('vastrams_access_token') || null
+  } catch {
+    return null
+  }
+}
+
+export const getRefreshToken = () => {
+  try {
+    return localStorage.getItem('vastrams_refresh_token') || null
+  } catch {
+    return null
+  }
+}
+
+export const setAuthToken = (token, refreshToken) => {
+  try {
+    if (token) {
+      localStorage.setItem('vastrams_access_token', token)
+      api.defaults.headers.common['Authorization'] = `Bearer ${token}`
+    } else {
+      localStorage.removeItem('vastrams_access_token')
+      delete api.defaults.headers.common['Authorization']
+    }
+    if (refreshToken) {
+      localStorage.setItem('vastrams_refresh_token', refreshToken)
+    } else if (refreshToken === null) {
+      localStorage.removeItem('vastrams_refresh_token')
+    }
+  } catch {}
+}
+
 const api = axios.create({
   baseURL: API_BASE_URL,
-  withCredentials: true, // Automatically send HttpOnly cookies with every request
+  withCredentials: true, // Also send cookies where supported
   headers: {
     'Content-Type': 'application/json',
   },
 })
 
-// Status codes that trigger navigation to a dedicated error screen (excluding 401 to prevent login loops)
-const ERROR_PAGE_CODES = new Set([403, 429, 500, 503])
+// Initialize Authorization header from existing storage immediately
+const initialToken = getAuthToken()
+if (initialToken) {
+  api.defaults.headers.common['Authorization'] = `Bearer ${initialToken}`
+}
+
+// Request interceptor: attach Bearer token to all outgoing requests
+api.interceptors.request.use(
+  (config) => {
+    const token = getAuthToken()
+    if (token && !config.headers.Authorization) {
+      config.headers.Authorization = `Bearer ${token}`
+    }
+    return config
+  },
+  (error) => Promise.reject(error)
+)
+
+// Status codes that trigger navigation to a dedicated error screen
+const ERROR_PAGE_CODES = new Set([403, 429, 500, 502, 503, 504])
+
+let isRefreshing = false
+let failedQueue = []
+
+const processQueue = (error, token = null) => {
+  failedQueue.forEach(prom => {
+    if (error) {
+      prom.reject(error)
+    } else {
+      prom.resolve(token)
+    }
+  })
+  failedQueue = []
+}
 
 // Global response interceptor
 api.interceptors.response.use(
@@ -45,15 +107,51 @@ api.interceptors.response.use(
                           requestUrl.includes('/auth/me') ||
                           requestUrl.includes('/auth/logout')
 
-    // Handle 401 Unauthorized with automatic cookie token refresh retry for normal data calls
+    // Handle 401 Unauthorized with token refresh retry
     if (status === 401 && !originalRequest._retry && !isAuthEndpoint) {
-      originalRequest._retry = true
-      try {
-        const refreshRes = await axios.post(`${API_BASE_URL}/auth/refresh`, {}, { withCredentials: true })
-        if (refreshRes.data && refreshRes.data.success) {
+      if (isRefreshing) {
+        return new Promise((resolve, reject) => {
+          failedQueue.push({ resolve, reject })
+        }).then((token) => {
+          originalRequest.headers.Authorization = `Bearer ${token}`
           return api(originalRequest)
+        }).catch((err) => Promise.reject(err))
+      }
+
+      originalRequest._retry = true
+      isRefreshing = true
+
+      const rfToken = getRefreshToken()
+      try {
+        const refreshRes = await axios.post(
+          `${API_BASE_URL}/auth/refresh`,
+          { refreshToken: rfToken },
+          {
+            withCredentials: true,
+            headers: {
+              'Content-Type': 'application/json',
+              ...(rfToken ? { 'x-refresh-token': rfToken } : {})
+            }
+          }
+        )
+
+        if (refreshRes.data && refreshRes.data.success && refreshRes.data.accessToken) {
+          const newAccess = refreshRes.data.accessToken
+          const newRefresh = refreshRes.data.refreshToken || rfToken
+          setAuthToken(newAccess, newRefresh)
+          processQueue(null, newAccess)
+          isRefreshing = false
+
+          originalRequest.headers.Authorization = `Bearer ${newAccess}`
+          return api(originalRequest)
+        } else {
+          throw new Error('Refresh failed')
         }
       } catch (refreshErr) {
+        processQueue(refreshErr, null)
+        isRefreshing = false
+        setAuthToken(null, null)
+        try { localStorage.removeItem('vastrams_user_cache') } catch {}
         return Promise.reject(new Error('Session expired. Please log in again.'))
       }
     }

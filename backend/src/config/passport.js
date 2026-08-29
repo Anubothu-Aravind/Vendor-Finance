@@ -11,8 +11,8 @@ const cookieExtractor = (req) => {
 
 const opts = {
   jwtFromRequest: ExtractJwt.fromExtractors([
-    cookieExtractor,
-    ExtractJwt.fromAuthHeaderAsBearerToken()
+    ExtractJwt.fromAuthHeaderAsBearerToken(),
+    cookieExtractor
   ]),
   secretOrKey: process.env.JWT_SECRET || 'vastrams_access_secret_key',
   algorithms: ['HS256'] // Explicitly restrict verified JWT header algorithm to HS256 ONLY

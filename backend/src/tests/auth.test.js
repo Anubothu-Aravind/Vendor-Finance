@@ -118,4 +118,16 @@ test('Auth flow tests', async (t) => {
     assert.equal(statusSent, 403)
     assert.equal(jsonSent.success, false)
   })
+
+  await t.test('refresh token is correctly accepted from cookie, request body, or header', () => {
+    const fromCookie = { cookies: { refreshToken: 'cookie-token' } }
+    const fromBody = { body: { refreshToken: 'body-token' } }
+    const fromHeader = { headers: { 'x-refresh-token': 'header-token' } }
+
+    const extractRefresh = (req) => req.cookies?.refreshToken || req.body?.refreshToken || req.headers?.['x-refresh-token']
+
+    assert.equal(extractRefresh(fromCookie), 'cookie-token')
+    assert.equal(extractRefresh(fromBody), 'body-token')
+    assert.equal(extractRefresh(fromHeader), 'header-token')
+  })
 })

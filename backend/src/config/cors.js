@@ -40,7 +40,7 @@ const corsOptions = {
   },
   credentials: true, // Allow HttpOnly cookie transmission
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'x-refresh-token', 'X-Refresh-Token'],
   optionsSuccessStatus: 200
 }
 
