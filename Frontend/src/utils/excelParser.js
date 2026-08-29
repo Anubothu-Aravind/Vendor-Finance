@@ -224,38 +224,62 @@ function parseVendorRow(row, rowIndex, invalidRows) {
     normMap[normalizeString(key)] = row[key]
   }
 
-  const nameRaw = getRowValue(normMap, ['Name', 'Vendor Name', 'Vendor', 'Supplier Name', 'Supplier', 'Party Name', 'Company Name', 'Party'])
+  const nameRaw = getRowValue(normMap, [
+    'Vendor Name', 'Vendor', 'Name', 'Supplier Name', 'Supplier', 'Party Name',
+    'Company Name', 'Firm Name', 'Party', 'vendorName', 'vendor_name', 'name'
+  ])
   const name = normalizeText(nameRaw)
   if (!name) {
     invalidRows.push({ sheet: 'Vendors', row: rowIndex + 2, field: 'Vendor Name', value: nameRaw, reason: 'Missing required Vendor Name' })
     return null
   }
 
-  const contactPerson = normalizeText(getRowValue(normMap, ['Contact Person', 'Contact', 'Person', 'Owner', 'Representative']))
-  const phone = normalizePhone(getRowValue(normMap, ['Phone', 'Mobile', 'Contact Number', 'Phone Number', 'Mobile Number', 'Tel']))
-  const email = normalizeText(getRowValue(normMap, ['Email', 'Email Address', 'Mail', 'Email ID']))
-  const address = normalizeText(getRowValue(normMap, ['Address', 'Location', 'City', 'Office Address']))
+  const contactPerson = normalizeText(getRowValue(normMap, ['Contact Person', 'Contact', 'Person', 'Owner', 'Representative', 'contactPerson', 'contact_person']))
+  const phone = normalizePhone(getRowValue(normMap, ['Phone', 'Mobile', 'Contact Number', 'Phone Number', 'Mobile Number', 'Tel', 'phone', 'mobile']))
+  const email = normalizeText(getRowValue(normMap, ['Email', 'Email Address', 'Mail', 'Email ID', 'email', 'emailAddress']))
+  const address = normalizeText(getRowValue(normMap, ['Address', 'Location', 'City', 'Office Address', 'address']))
   
-  const typeRaw = normalizeText(getRowValue(normMap, ['Vendor Type', 'Type', 'Category']))
+  const typeRaw = normalizeText(getRowValue(normMap, ['Vendor Type', 'Type', 'Category', 'type', 'vendorType']))
   let type = 'largeVendor'
   if (typeRaw && (typeRaw.toLowerCase().includes('small') || typeRaw.toLowerCase() === 'smallvendor')) {
     type = 'smallVendor'
   }
 
-  const gstin = normalizeGSTIN(getRowValue(normMap, ['GSTIN', 'GST', 'GST Number', 'GST No', 'Tax ID']))
+  const gstin = normalizeGSTIN(getRowValue(normMap, ['GSTIN', 'GST', 'GST Number', 'GST No', 'Tax ID', 'gstin', 'gst_number']))
   
-  const openingBalRes = normalizeNumber(getRowValue(normMap, ['Opening Balance', 'Opening', 'Balance', 'Initial Balance']), { required: false, defaultVal: 0 })
-  if (!openingBalRes.valid) {
-    invalidRows.push({ sheet: 'Vendors', row: rowIndex + 2, field: 'Opening Balance', value: getRowValue(normMap, ['Opening Balance']), reason: openingBalRes.error })
-    return null
+  // Safe status extraction
+  let statusRaw = normalizeText(getRowValue(normMap, [
+    'Status', 'Account Status', 'Vendor Status', 'State', 'status', 'accountStatus', 'vendorStatus', 'Active / Inactive', 'Active/Inactive'
+  ]))
+
+  // Safe opening balance extraction
+  const rawOpeningVal = getRowValue(normMap, [
+    'Opening Balance', 'Opening Bal', 'Opening', 'Initial Balance', 'openingBalance', 'opening_balance', 'openingBal'
+  ])
+
+  let openingBalance = 0
+  if (rawOpeningVal !== undefined && rawOpeningVal !== null && rawOpeningVal !== '') {
+    const rawOpeningStr = String(rawOpeningVal).trim().toLowerCase()
+    // If the value in opening balance is actually a status string like "active" or "inactive"
+    if (rawOpeningStr === 'active' || rawOpeningStr === 'inactive') {
+      if (!statusRaw) {
+        statusRaw = rawOpeningVal
+      }
+      openingBalance = 0
+    } else {
+      const openingBalRes = normalizeNumber(rawOpeningVal, { required: false, defaultVal: 0 })
+      if (!openingBalRes.valid) {
+        invalidRows.push({ sheet: 'Vendors', row: rowIndex + 2, field: 'Opening Balance', value: rawOpeningVal, reason: openingBalRes.error })
+        return null
+      }
+      openingBalance = openingBalRes.value
+    }
   }
 
-  const statusRaw = normalizeText(getRowValue(normMap, ['Status', 'Account Status', 'State']))
   const status = statusRaw && statusRaw.toLowerCase() === 'inactive' ? 'Inactive' : 'Active'
-
-  const bankName = normalizeText(getRowValue(normMap, ['Bank Name', 'Bank', 'Banker']))
-  const accountNo = normalizeAccountNumber(getRowValue(normMap, ['Account Number', 'Account No', 'Bank Account Number', 'A/C No', 'Acc No']))
-  const ifsc = normalizeIFSC(getRowValue(normMap, ['IFSC', 'IFSC Code', 'Bank IFSC']))
+  const bankName = normalizeText(getRowValue(normMap, ['Bank Name', 'Bank', 'Banker', 'bankName', 'bank_name']))
+  const accountNo = normalizeAccountNumber(getRowValue(normMap, ['Account Number', 'Account No', 'Bank Account Number', 'A/C No', 'Acc No', 'accountNo', 'account_number', 'accountNumber']))
+  const ifsc = normalizeIFSC(getRowValue(normMap, ['IFSC', 'IFSC Code', 'Bank IFSC', 'ifsc', 'ifscCode']))
 
   return {
     name,
@@ -265,7 +289,7 @@ function parseVendorRow(row, rowIndex, invalidRows) {
     address,
     type,
     gstin,
-    openingBalance: openingBalRes.value,
+    openingBalance,
     status,
     bankName,
     accountNo,
@@ -282,37 +306,46 @@ function parseBillRow(row, rowIndex, invalidRows) {
     normMap[normalizeString(key)] = row[key]
   }
 
-  const billNumberRaw = getRowValue(normMap, ['Bill Number', 'Bill No', 'Invoice Number', 'Invoice No', 'Bill ID', 'Invoice ID', 'Ref', 'Reference', 'PB Number', 'billNumber'])
+  const billNumberRaw = getRowValue(normMap, [
+    'Bill Number', 'Bill No', 'Invoice Number', 'Invoice No', 'Bill ID', 'Invoice ID',
+    'Ref', 'Reference', 'PB Number', 'Bill #', 'Invoice #', 'billNumber', 'bill_number', 'invoiceNumber', 'invoice_number'
+  ])
   const billNumber = normalizeText(billNumberRaw)
   if (!billNumber) {
     invalidRows.push({ sheet: 'Purchase Bills', row: rowIndex + 2, field: 'Bill Number', value: billNumberRaw, reason: 'Missing required Bill Number' })
     return null
   }
 
-  const vendorRaw = getRowValue(normMap, ['Vendor Name', 'Vendor', 'Supplier Name', 'Supplier', 'Party Name', 'Party', 'vendorId'])
+  const vendorRaw = getRowValue(normMap, [
+    'Vendor Name', 'Vendor', 'Supplier Name', 'Supplier', 'Party Name', 'Party',
+    'Company Name', 'vendorName', 'vendor_name', 'vendorId'
+  ])
   const vendorName = normalizeText(vendorRaw) || 'Primary Vendor'
 
-  const amountRes = normalizeNumber(getRowValue(normMap, ['Amount', 'Bill Amount', 'Total Amount', 'Invoice Amount', 'Grand Total', 'Total', 'Net Amount']), { required: true, min: 0 })
+  const amountRes = normalizeNumber(getRowValue(normMap, [
+    'Bill Amount', 'Amount', 'Total Amount', 'Invoice Amount', 'Grand Total', 'Total',
+    'Net Amount', 'Amount (₹)', 'amount', 'billAmount', 'totalAmount'
+  ]), { required: true, min: 0 })
   if (!amountRes.valid) {
-    invalidRows.push({ sheet: 'Purchase Bills', row: rowIndex + 2, field: 'Amount', value: getRowValue(normMap, ['Amount']), reason: amountRes.error })
+    invalidRows.push({ sheet: 'Purchase Bills', row: rowIndex + 2, field: 'Amount', value: getRowValue(normMap, ['Amount', 'Bill Amount']), reason: amountRes.error })
     return null
   }
 
-  const billDateRes = normalizeDate(getRowValue(normMap, ['Bill Date', 'Invoice Date', 'Date', 'Issue Date', 'billDate']), { required: false })
+  const billDateRes = normalizeDate(getRowValue(normMap, ['Bill Date', 'Invoice Date', 'Date', 'Issue Date', 'billDate', 'bill_date', 'invoiceDate']), { required: false })
   if (!billDateRes.valid) {
-    invalidRows.push({ sheet: 'Purchase Bills', row: rowIndex + 2, field: 'Bill Date', value: getRowValue(normMap, ['Bill Date']), reason: billDateRes.error })
+    invalidRows.push({ sheet: 'Purchase Bills', row: rowIndex + 2, field: 'Bill Date', value: getRowValue(normMap, ['Bill Date', 'Invoice Date']), reason: billDateRes.error })
     return null
   }
   const billDate = billDateRes.value || new Date().toISOString().split('T')[0]
 
-  const dueDateRes = normalizeDate(getRowValue(normMap, ['Due Date', 'Expiry Date', 'Payment Due Date', 'dueDate']), { required: false })
+  const dueDateRes = normalizeDate(getRowValue(normMap, ['Due Date', 'Expiry Date', 'Payment Due Date', 'dueDate', 'due_date']), { required: false })
   if (!dueDateRes.valid) {
     invalidRows.push({ sheet: 'Purchase Bills', row: rowIndex + 2, field: 'Due Date', value: getRowValue(normMap, ['Due Date']), reason: dueDateRes.error })
     return null
   }
   const dueDate = dueDateRes.value || billDate
 
-  const statusRaw = normalizeText(getRowValue(normMap, ['Status', 'Bill Status', 'Payment Status']))
+  const statusRaw = normalizeText(getRowValue(normMap, ['Status', 'Bill Status', 'Payment Status', 'status', 'billStatus']))
   let status = 'UNPAID'
   if (statusRaw) {
     const s = statusRaw.toUpperCase()
@@ -321,10 +354,10 @@ function parseBillRow(row, rowIndex, invalidRows) {
     else status = 'UNPAID'
   }
 
-  const paymentTypeRaw = normalizeText(getRowValue(normMap, ['Payment Type', 'Type', 'Payment Term', 'Terms']))
+  const paymentTypeRaw = normalizeText(getRowValue(normMap, ['Payment Type', 'Type', 'Payment Term', 'Terms', 'paymentType', 'payment_type']))
   const paymentType = (paymentTypeRaw && paymentTypeRaw.toLowerCase().includes('cash')) ? 'Cash' : 'Credit'
 
-  const remarks = normalizeText(getRowValue(normMap, ['Remarks', 'Notes', 'Description', 'Comments', 'Items', 'Particulars']))
+  const remarks = normalizeText(getRowValue(normMap, ['Remarks', 'Notes', 'Description', 'Comments', 'Items', 'Particulars', 'remarks', 'notes']))
 
   return {
     billNumber,
@@ -350,26 +383,48 @@ function parseFinancierRow(row, rowIndex, invalidRows) {
     normMap[normalizeString(key)] = row[key]
   }
 
-  const nameRaw = getRowValue(normMap, ['Name', 'Financier Name', 'Financier', 'Lender Name', 'Lender', 'Investor Name', 'Investor', 'Party Name', 'Party'])
-  const name = normalizeText(nameRaw)
+  // Support all explicit aliases for Financier Name
+  const nameRaw = getRowValue(normMap, [
+    'Financier Name', 'Financier', 'Name', 'Finance Provider', 'Provider Name', 'Provider',
+    'Finance', 'Lender Name', 'Lender', 'Investor Name', 'Investor', 'Party Name', 'Party',
+    'Borrower Name', 'Borrower', 'Institution Name', 'Institution', 'Firm Name', 'Company Name',
+    'Company', 'Account Name', 'financierName', 'financier_name', 'financeProvider', 'providerName',
+    'financier', 'lender', 'investor', 'name'
+  ])
+  
+  let name = normalizeText(nameRaw)
+  
+  // If Financier Name is not explicitly found under name aliases, check if any identifiable party/contact exists
+  const contactPerson = normalizeText(getRowValue(normMap, ['Contact Person', 'Contact', 'Owner', 'Person', 'Representative', 'contactPerson', 'contact_person']))
+  const phone = normalizePhone(getRowValue(normMap, ['Phone', 'Mobile', 'Contact Number', 'Phone Number', 'Mobile Number', 'Tel', 'phone', 'mobile']))
+  const email = normalizeText(getRowValue(normMap, ['Email', 'Email Address', 'Mail', 'Email ID', 'email', 'emailAddress']))
+
+  if (!name) {
+    if (contactPerson) {
+      name = contactPerson
+    } else if (phone) {
+      name = `Financier (${phone})`
+    }
+  }
+
   if (!name) {
     invalidRows.push({ sheet: 'Finance', row: rowIndex + 2, field: 'Financier Name', value: nameRaw, reason: 'Missing required Financier Name' })
     return null
   }
 
-  const contactPerson = normalizeText(getRowValue(normMap, ['Contact Person', 'Contact', 'Owner', 'Person']))
-  const phone = normalizePhone(getRowValue(normMap, ['Phone', 'Mobile', 'Contact Number', 'Phone Number']))
-  const email = normalizeText(getRowValue(normMap, ['Email', 'Email Address', 'Email ID']))
-  const address = normalizeText(getRowValue(normMap, ['Address', 'Location', 'City']))
-  const notes = normalizeText(getRowValue(normMap, ['Notes', 'Remarks', 'Description', 'Comments']))
+  const address = normalizeText(getRowValue(normMap, ['Address', 'Location', 'City', 'Office Address', 'address']))
+  const notes = normalizeText(getRowValue(normMap, ['Notes', 'Remarks', 'Description', 'Comments', 'notes', 'remarks']))
 
-  const rateRes = normalizePercentage(getRowValue(normMap, ['Default Interest Rate', 'Interest Rate', 'Rate', 'ROI', 'Annual Rate', 'Interest %']), { required: false })
+  const rateRes = normalizePercentage(getRowValue(normMap, [
+    'Default Interest Rate', 'Interest Rate', 'Rate', 'ROI', 'Annual Rate', 'Interest %', 'Interest',
+    'defaultInterestRate', 'interestRate', 'interest_rate'
+  ]), { required: false })
   if (!rateRes.valid) {
-    invalidRows.push({ sheet: 'Finance', row: rowIndex + 2, field: 'Default Interest Rate', value: getRowValue(normMap, ['Default Interest Rate']), reason: rateRes.error })
+    invalidRows.push({ sheet: 'Finance', row: rowIndex + 2, field: 'Default Interest Rate', value: getRowValue(normMap, ['Default Interest Rate', 'Interest Rate']), reason: rateRes.error })
     return null
   }
 
-  const statusRaw = normalizeText(getRowValue(normMap, ['Status', 'Account Status', 'State']))
+  const statusRaw = normalizeText(getRowValue(normMap, ['Status', 'Account Status', 'Financier Status', 'State', 'status', 'accountStatus']))
   const status = statusRaw && statusRaw.toLowerCase() === 'inactive' ? 'Inactive' : 'Active'
 
   return {
@@ -395,8 +450,8 @@ function parseLoanRow(row, rowIndex, invalidRows) {
   }
 
   const loanReferenceRaw = getRowValue(normMap, [
-    'Loan Number', 'Loan Reference', 'loan_reference', 'loan_number', 'LoanRef', 'LoanNo',
-    'Note Number', 'Note No', 'noteNumber', 'loanReference', 'Reference Number', 'Ref', 'Reference', 'Loan ID'
+    'Loan Number', 'Loan Reference', 'Loan No', 'Loan Ref', 'Loan #', 'Note Number', 'Note No',
+    'Note #', 'noteNumber', 'loanReference', 'loan_reference', 'loan_number', 'Ref', 'Reference', 'Loan ID'
   ])
   const loanReference = normalizeText(loanReferenceRaw)
   if (!loanReference) {
@@ -405,40 +460,48 @@ function parseLoanRow(row, rowIndex, invalidRows) {
   }
 
   const borrowerName = normalizeText(getRowValue(normMap, [
-    'Borrower Name', 'Borrower', 'Financier Name', 'Financier', 'financierId',
-    'Party Name', 'Party', 'Lender Name', 'Lender', 'Investor'
+    'Borrower Name', 'Borrower', 'Financier Name', 'Financier', 'Finance Provider', 'Provider',
+    'Party Name', 'Party', 'Lender Name', 'Lender', 'Investor Name', 'Investor', 'financierName', 'financierId'
   ])) || 'Primary Financier'
 
-  const phone = normalizePhone(getRowValue(normMap, ['Phone', 'Mobile', 'Contact', 'Phone Number', 'Mobile Number', 'Tel']))
+  const phone = normalizePhone(getRowValue(normMap, ['Phone', 'Mobile', 'Contact', 'Phone Number', 'Mobile Number', 'Tel', 'phone', 'mobile']))
 
-  const principalRes = normalizeNumber(getRowValue(normMap, ['Principal Amount', 'Principal', 'Loan Amount', 'Amount', 'Amount (₹)', 'principalAmount', 'PrincipalAmount']), { required: true, min: 0 })
+  const principalRes = normalizeNumber(getRowValue(normMap, [
+    'Principal Amount', 'Principal', 'Loan Amount', 'Amount', 'Amount (₹)', 'principalAmount', 'principal_amount', 'loanAmount'
+  ]), { required: true, min: 0 })
   if (!principalRes.valid) {
-    invalidRows.push({ sheet: 'Loans', row: rowIndex + 2, field: 'Principal Amount', value: getRowValue(normMap, ['Principal Amount']), reason: principalRes.error })
+    invalidRows.push({ sheet: 'Loans', row: rowIndex + 2, field: 'Principal Amount', value: getRowValue(normMap, ['Principal Amount', 'Loan Amount']), reason: principalRes.error })
     return null
   }
 
   // Interest Rate is OPTIONAL
-  const interestRes = normalizePercentage(getRowValue(normMap, ['Interest Rate', 'Interest', 'Rate', 'ROI', 'Interest %', 'interestRate', 'Rate (%)', 'Annual Rate', 'InterestRate']), { required: false })
+  const interestRes = normalizePercentage(getRowValue(normMap, [
+    'Interest Rate', 'Interest', 'Rate', 'ROI', 'Interest %', 'Annual Rate', 'interestRate', 'interest_rate', 'Rate (%)'
+  ]), { required: false })
   if (!interestRes.valid) {
     invalidRows.push({ sheet: 'Loans', row: rowIndex + 2, field: 'Interest Rate', value: getRowValue(normMap, ['Interest Rate']), reason: interestRes.error })
     return null
   }
 
   // Loan Date is OPTIONAL
-  const loanDateRes = normalizeDate(getRowValue(normMap, ['Loan Date', 'Drawdown Date', 'Date', 'Issue Date', 'Start Date', 'Disbursement Date', 'drawdownDate', 'loanDate']), { required: false })
+  const loanDateRes = normalizeDate(getRowValue(normMap, [
+    'Loan Date', 'Drawdown Date', 'Date', 'Issue Date', 'Start Date', 'Disbursement Date', 'drawdownDate', 'drawdown_date', 'loanDate', 'loan_date'
+  ]), { required: false })
   if (!loanDateRes.valid) {
-    invalidRows.push({ sheet: 'Loans', row: rowIndex + 2, field: 'Loan Date', value: getRowValue(normMap, ['Loan Date']), reason: loanDateRes.error })
+    invalidRows.push({ sheet: 'Loans', row: rowIndex + 2, field: 'Loan Date', value: getRowValue(normMap, ['Loan Date', 'Drawdown Date']), reason: loanDateRes.error })
     return null
   }
 
   // Maturity Date is OPTIONAL
-  const maturityDateRes = normalizeDate(getRowValue(normMap, ['Maturity Date', 'Due Date', 'Expiry Date', 'End Date', 'maturityDate', 'dueDate']), { required: false })
+  const maturityDateRes = normalizeDate(getRowValue(normMap, [
+    'Maturity Date', 'Due Date', 'Expiry Date', 'End Date', 'maturityDate', 'maturity_date', 'dueDate'
+  ]), { required: false })
   if (!maturityDateRes.valid) {
-    invalidRows.push({ sheet: 'Loans', row: rowIndex + 2, field: 'Maturity Date', value: getRowValue(normMap, ['Maturity Date']), reason: maturityDateRes.error })
+    invalidRows.push({ sheet: 'Loans', row: rowIndex + 2, field: 'Maturity Date', value: getRowValue(normMap, ['Maturity Date', 'Due Date']), reason: maturityDateRes.error })
     return null
   }
 
-  const statusRaw = normalizeText(getRowValue(normMap, ['Status', 'Loan Status', 'status', 'State']))
+  const statusRaw = normalizeText(getRowValue(normMap, ['Status', 'Loan Status', 'status', 'loanStatus', 'State']))
   let status = 'ACTIVE'
   if (statusRaw) {
     const s = statusRaw.toUpperCase()
@@ -447,7 +510,7 @@ function parseLoanRow(row, rowIndex, invalidRows) {
     else status = 'ACTIVE'
   }
 
-  const notes = normalizeText(getRowValue(normMap, ['Remarks', 'Notes', 'notes', 'remarks', 'Description', 'Comments']))
+  const notes = normalizeText(getRowValue(normMap, ['Remarks', 'Notes', 'Description', 'Comments', 'notes', 'remarks']))
 
   return {
     loanReference,
@@ -476,26 +539,33 @@ function parsePaymentRow(row, rowIndex, invalidRows) {
     normMap[normalizeString(key)] = row[key]
   }
 
-  const refRaw = getRowValue(normMap, ['Reference Number', 'Reference No', 'Ref No', 'Payment Ref', 'Transaction ID', 'Txn ID', 'UTR', 'Ref', 'Payment Number', 'Receipt No', 'referenceNumber'])
+  const refRaw = getRowValue(normMap, [
+    'Reference Number', 'Reference No', 'Ref No', 'Ref #', 'Payment Ref', 'Transaction ID',
+    'Txn ID', 'UTR', 'Ref', 'Payment Number', 'Payment No', 'Receipt No', 'referenceNumber', 'refNumber'
+  ])
   const referenceNumber = normalizeText(refRaw) || `PAY-${rowIndex + 1}`
 
-  const vendorRaw = getRowValue(normMap, ['Vendor Name', 'Vendor', 'Supplier Name', 'Supplier', 'Party Name', 'Party', 'vendorId'])
+  const vendorRaw = getRowValue(normMap, [
+    'Vendor Name', 'Vendor', 'Supplier Name', 'Supplier', 'Party Name', 'Party', 'vendorName', 'vendorId'
+  ])
   const vendorName = normalizeText(vendorRaw) || 'Primary Vendor'
 
-  const amountRes = normalizeNumber(getRowValue(normMap, ['Amount', 'Payment Amount', 'Paid Amount', 'Total Paid', 'Amount Paid']), { required: true, min: 0 })
+  const amountRes = normalizeNumber(getRowValue(normMap, [
+    'Amount', 'Payment Amount', 'Paid Amount', 'Total Paid', 'Amount Paid', 'Amount (₹)', 'amount', 'paymentAmount'
+  ]), { required: true, min: 0 })
   if (!amountRes.valid) {
-    invalidRows.push({ sheet: 'Vendor Payments', row: rowIndex + 2, field: 'Amount', value: getRowValue(normMap, ['Amount']), reason: amountRes.error })
+    invalidRows.push({ sheet: 'Vendor Payments', row: rowIndex + 2, field: 'Amount', value: getRowValue(normMap, ['Amount', 'Payment Amount']), reason: amountRes.error })
     return null
   }
 
-  const dateRes = normalizeDate(getRowValue(normMap, ['Payment Date', 'Date', 'Paid Date', 'Txn Date', 'paymentDate']), { required: false })
+  const dateRes = normalizeDate(getRowValue(normMap, ['Payment Date', 'Date', 'Paid Date', 'Txn Date', 'paymentDate', 'payment_date']), { required: false })
   if (!dateRes.valid) {
-    invalidRows.push({ sheet: 'Vendor Payments', row: rowIndex + 2, field: 'Payment Date', value: getRowValue(normMap, ['Payment Date']), reason: dateRes.error })
+    invalidRows.push({ sheet: 'Vendor Payments', row: rowIndex + 2, field: 'Payment Date', value: getRowValue(normMap, ['Payment Date', 'Date']), reason: dateRes.error })
     return null
   }
   const paymentDate = dateRes.value || new Date().toISOString().split('T')[0]
 
-  const modeRaw = normalizeText(getRowValue(normMap, ['Payment Mode', 'Mode', 'Method', 'Type', 'paymentMode']))
+  const modeRaw = normalizeText(getRowValue(normMap, ['Payment Mode', 'Mode', 'Method', 'Payment Type', 'Type', 'paymentMode', 'payment_mode']))
   let paymentMode = 'BANK_TRANSFER'
   if (modeRaw) {
     const m = modeRaw.toUpperCase()
@@ -505,9 +575,9 @@ function parsePaymentRow(row, rowIndex, invalidRows) {
     else paymentMode = 'BANK_TRANSFER'
   }
 
-  const chequeNumber = normalizeChequeNumber(getRowValue(normMap, ['Cheque Number', 'Cheque No', 'Check No']))
-  const bankName = normalizeText(getRowValue(normMap, ['Bank Name', 'Bank', 'Bank Account']))
-  const description = normalizeText(getRowValue(normMap, ['Description', 'Remarks', 'Notes', 'Comments']))
+  const chequeNumber = normalizeChequeNumber(getRowValue(normMap, ['Cheque Number', 'Cheque No', 'Check Number', 'Check No', 'Cheque #', 'Check #', 'chequeNumber']))
+  const bankName = normalizeText(getRowValue(normMap, ['Bank Name', 'Bank', 'Bank Account', 'bankName', 'bank_name']))
+  const description = normalizeText(getRowValue(normMap, ['Description', 'Remarks', 'Notes', 'Comments', 'description', 'remarks', 'notes']))
 
   return {
     referenceNumber,
@@ -532,32 +602,43 @@ function parseRepaymentRow(row, rowIndex, invalidRows) {
     normMap[normalizeString(key)] = row[key]
   }
 
-  const refRaw = getRowValue(normMap, ['Reference Number', 'Reference No', 'Ref No', 'Repayment Ref', 'Transaction ID', 'Txn ID', 'UTR', 'Ref', 'Repayment No', 'referenceNumber'])
+  const refRaw = getRowValue(normMap, [
+    'Reference Number', 'Reference No', 'Ref No', 'Ref #', 'Repayment Ref', 'Transaction ID',
+    'Txn ID', 'UTR', 'Ref', 'Repayment No', 'Repayment Number', 'referenceNumber', 'repaymentNumber'
+  ])
   const referenceNumber = normalizeText(refRaw) || `REP-${rowIndex + 1}`
 
-  const loanRefRaw = getRowValue(normMap, ['Loan Number', 'Loan Reference', 'Loan No', 'Loan Ref', 'Note Number', 'loanId', 'Loan'])
+  const loanRefRaw = getRowValue(normMap, [
+    'Loan Number', 'Loan Reference', 'Loan No', 'Loan Ref', 'Loan #', 'Note Number', 'Note No',
+    'Loan', 'loanReference', 'loanNumber', 'loanId'
+  ])
   const loanReference = normalizeText(loanRefRaw) || 'LN001'
 
-  const finRaw = getRowValue(normMap, ['Financier Name', 'Financier', 'Lender Name', 'Lender', 'Party Name', 'Party'])
+  const finRaw = getRowValue(normMap, [
+    'Financier Name', 'Financier', 'Finance Provider', 'Provider', 'Lender Name', 'Lender',
+    'Party Name', 'Party', 'Borrower Name', 'financierName'
+  ])
   const financierName = normalizeText(finRaw) || 'Primary Financier'
 
-  const amountRes = normalizeNumber(getRowValue(normMap, ['Amount', 'Repayment Amount', 'Paid Amount', 'Total Repayment']), { required: true, min: 0 })
+  const amountRes = normalizeNumber(getRowValue(normMap, [
+    'Amount', 'Repayment Amount', 'Paid Amount', 'Total Repayment', 'Amount (₹)', 'amount', 'repaymentAmount'
+  ]), { required: true, min: 0 })
   if (!amountRes.valid) {
-    invalidRows.push({ sheet: 'Fin. Repayments', row: rowIndex + 2, field: 'Amount', value: getRowValue(normMap, ['Amount']), reason: amountRes.error })
+    invalidRows.push({ sheet: 'Fin. Repayments', row: rowIndex + 2, field: 'Amount', value: getRowValue(normMap, ['Amount', 'Repayment Amount']), reason: amountRes.error })
     return null
   }
 
-  const principalRes = normalizeNumber(getRowValue(normMap, ['Principal Paid', 'Principal Amount', 'Principal Component', 'Principal']), { required: false, defaultVal: amountRes.value })
-  const interestRes = normalizeNumber(getRowValue(normMap, ['Interest Paid', 'Interest Amount', 'Interest Component', 'Interest']), { required: false, defaultVal: 0 })
+  const principalRes = normalizeNumber(getRowValue(normMap, ['Principal Paid', 'Principal Amount', 'Principal Component', 'Principal', 'principalPaid', 'principal_paid']), { required: false, defaultVal: amountRes.value })
+  const interestRes = normalizeNumber(getRowValue(normMap, ['Interest Paid', 'Interest Amount', 'Interest Component', 'Interest', 'interestPaid', 'interest_paid']), { required: false, defaultVal: 0 })
 
-  const dateRes = normalizeDate(getRowValue(normMap, ['Repayment Date', 'Date', 'Paid Date', 'repaymentDate']), { required: false })
+  const dateRes = normalizeDate(getRowValue(normMap, ['Repayment Date', 'Date', 'Paid Date', 'repaymentDate', 'repayment_date']), { required: false })
   if (!dateRes.valid) {
-    invalidRows.push({ sheet: 'Fin. Repayments', row: rowIndex + 2, field: 'Repayment Date', value: getRowValue(normMap, ['Repayment Date']), reason: dateRes.error })
+    invalidRows.push({ sheet: 'Fin. Repayments', row: rowIndex + 2, field: 'Repayment Date', value: getRowValue(normMap, ['Repayment Date', 'Date']), reason: dateRes.error })
     return null
   }
   const repaymentDate = dateRes.value || new Date().toISOString().split('T')[0]
 
-  const modeRaw = normalizeText(getRowValue(normMap, ['Repayment Mode', 'Payment Mode', 'Mode', 'Method', 'repaymentMode']))
+  const modeRaw = normalizeText(getRowValue(normMap, ['Repayment Mode', 'Payment Mode', 'Mode', 'Method', 'repaymentMode', 'repayment_mode']))
   let repaymentMode = 'BANK_TRANSFER'
   if (modeRaw) {
     const m = modeRaw.toUpperCase()
@@ -567,8 +648,8 @@ function parseRepaymentRow(row, rowIndex, invalidRows) {
     else repaymentMode = 'BANK_TRANSFER'
   }
 
-  const chequeNumber = normalizeChequeNumber(getRowValue(normMap, ['Cheque Number', 'Cheque No', 'Check No']))
-  const description = normalizeText(getRowValue(normMap, ['Description', 'Remarks', 'Notes']))
+  const chequeNumber = normalizeChequeNumber(getRowValue(normMap, ['Cheque Number', 'Cheque No', 'Check Number', 'Check No', 'Cheque #', 'Check #', 'chequeNumber']))
+  const description = normalizeText(getRowValue(normMap, ['Description', 'Remarks', 'Notes', 'Comments', 'description', 'remarks']))
 
   return {
     referenceNumber,
@@ -594,31 +675,39 @@ function parseChequeRow(row, rowIndex, invalidRows) {
     normMap[normalizeString(key)] = row[key]
   }
 
-  const chequeNumberRaw = getRowValue(normMap, ['Cheque Number', 'Cheque No', 'Check Number', 'Check No', 'Cheque #', 'Check #', 'chequeNumber'])
+  const chequeNumberRaw = getRowValue(normMap, [
+    'Cheque Number', 'Cheque No', 'Check Number', 'Check No', 'Cheque #', 'Check #',
+    'chequeNumber', 'cheque_number', 'Cheque', 'Check'
+  ])
   const chequeNumber = normalizeChequeNumber(chequeNumberRaw)
   if (!chequeNumber) {
     invalidRows.push({ sheet: 'Cheques', row: rowIndex + 2, field: 'Cheque Number', value: chequeNumberRaw, reason: 'Missing or invalid Cheque Number' })
     return null
   }
 
-  const partyName = normalizeText(getRowValue(normMap, ['Party Name', 'Party', 'Payee Name', 'Payee', 'Vendor Name', 'Financier Name', 'Vendor', 'Financier', 'Beneficiary'])) || 'Party'
+  const partyName = normalizeText(getRowValue(normMap, [
+    'Party Name', 'Party', 'Payee Name', 'Payee', 'Vendor Name', 'Financier Name',
+    'Finance Provider', 'Provider', 'Vendor', 'Financier', 'Beneficiary', 'Name', 'partyName', 'party_name', 'payee'
+  ])) || 'Party'
 
-  const amountRes = normalizeNumber(getRowValue(normMap, ['Amount', 'Cheque Amount', 'Total Amount']), { required: true, min: 0 })
+  const amountRes = normalizeNumber(getRowValue(normMap, [
+    'Amount', 'Cheque Amount', 'Total Amount', 'Amount (₹)', 'amount', 'chequeAmount'
+  ]), { required: true, min: 0 })
   if (!amountRes.valid) {
-    invalidRows.push({ sheet: 'Cheques', row: rowIndex + 2, field: 'Amount', value: getRowValue(normMap, ['Amount']), reason: amountRes.error })
+    invalidRows.push({ sheet: 'Cheques', row: rowIndex + 2, field: 'Amount', value: getRowValue(normMap, ['Amount', 'Cheque Amount']), reason: amountRes.error })
     return null
   }
 
-  const dateRes = normalizeDate(getRowValue(normMap, ['Cheque Date', 'Date', 'Issue Date', 'Date of Issue', 'chequeDate']), { required: false })
+  const dateRes = normalizeDate(getRowValue(normMap, ['Cheque Date', 'Date', 'Issue Date', 'Date of Issue', 'chequeDate', 'cheque_date']), { required: false })
   if (!dateRes.valid) {
-    invalidRows.push({ sheet: 'Cheques', row: rowIndex + 2, field: 'Cheque Date', value: getRowValue(normMap, ['Cheque Date']), reason: dateRes.error })
+    invalidRows.push({ sheet: 'Cheques', row: rowIndex + 2, field: 'Cheque Date', value: getRowValue(normMap, ['Cheque Date', 'Date']), reason: dateRes.error })
     return null
   }
   const chequeDate = dateRes.value || new Date().toISOString().split('T')[0]
 
-  const bankName = normalizeText(getRowValue(normMap, ['Bank Name', 'Bank', 'Drawee Bank', 'Bank Name & Branch', 'bankName']))
+  const bankName = normalizeText(getRowValue(normMap, ['Bank Name', 'Bank', 'Drawee Bank', 'Bank Name & Branch', 'bankName', 'bank_name']))
   
-  const statusRaw = normalizeText(getRowValue(normMap, ['Status', 'Cheque Status', 'State']))
+  const statusRaw = normalizeText(getRowValue(normMap, ['Status', 'Cheque Status', 'State', 'status', 'chequeStatus']))
   let status = 'PENDING'
   if (statusRaw) {
     const s = statusRaw.toUpperCase()
@@ -628,7 +717,7 @@ function parseChequeRow(row, rowIndex, invalidRows) {
     else status = 'PENDING'
   }
 
-  const typeRaw = normalizeText(getRowValue(normMap, ['Type', 'Cheque Type', 'Transaction Type', 'Direction']))
+  const typeRaw = normalizeText(getRowValue(normMap, ['Type', 'Cheque Type', 'Transaction Type', 'Direction', 'type', 'chequeType']))
   let type = 'ISSUED_VENDOR'
   if (typeRaw) {
     const t = typeRaw.toUpperCase()
@@ -638,7 +727,7 @@ function parseChequeRow(row, rowIndex, invalidRows) {
     else type = 'OTHER'
   }
 
-  const notes = normalizeText(getRowValue(normMap, ['Remarks', 'Notes', 'Comments', 'Description']))
+  const notes = normalizeText(getRowValue(normMap, ['Remarks', 'Notes', 'Comments', 'Description', 'notes', 'remarks']))
 
   return {
     chequeNumber,
@@ -680,7 +769,7 @@ export function parseExcelBackup(XLSX, workbook) {
   let loanSheetName = findMatchingSheet(sheetNames, ['Loans', 'Loan', 'Loan Test Data', 'LoanData', 'Loan_Data', 'Loan Records', 'Loan Accounts'], ['loan'])
   let vendorSheetName = findMatchingSheet(sheetNames, ['Vendors', 'Vendor', 'Suppliers', 'Supplier', 'Vendor List', 'Vendor Data'], ['vendor', 'supplier'])
   let billSheetName = findMatchingSheet(sheetNames, ['Bills', 'Bill', 'Purchase Bills', 'PurchaseBills', 'Invoices', 'Invoice', 'Bill Data'], ['bill', 'invoice', 'purchase'])
-  let financierSheetName = findMatchingSheet(sheetNames, ['Financiers', 'Financier', 'Finance', 'Lenders', 'Lender', 'Investors', 'Investor'], ['financier', 'finance', 'lender'])
+  let financierSheetName = findMatchingSheet(sheetNames, ['Financiers', 'Financier', 'Finance', 'Finance Providers', 'Lenders', 'Lender', 'Investors', 'Investor'], ['financier', 'finance', 'lender', 'provider'])
   let chequeSheetName = findMatchingSheet(sheetNames, ['Cheques', 'Cheque', 'Checks', 'Check', 'Cheque Registry', 'Check Registry'], ['cheque', 'check'])
   let paymentSheetName = findMatchingSheet(sheetNames, ['Payments', 'Payment', 'Vendor Payments', 'VendorPayments', 'Payment List'], ['payment', 'vendorpayment'])
   let repaymentSheetName = findMatchingSheet(sheetNames, ['Repayments', 'Repayment', 'Loan Repayments', 'LoanRepayments', 'Fin Repayments', 'Financier Payments'], ['repayment', 'loanrepayment'])
@@ -710,7 +799,7 @@ export function parseExcelBackup(XLSX, workbook) {
         repaymentSheetName = onlySheetName
       } else if (firstRowKeys.some(k => k.includes('payment') || k.includes('paymentmode'))) {
         paymentSheetName = onlySheetName
-      } else if (firstRowKeys.some(k => k.includes('financier') || k.includes('lender'))) {
+      } else if (firstRowKeys.some(k => k.includes('financier') || k.includes('lender') || k.includes('financeprovider'))) {
         financierSheetName = onlySheetName
       }
     }
@@ -720,6 +809,8 @@ export function parseExcelBackup(XLSX, workbook) {
   if (vendorSheetName) {
     const rows = getSheetRows(vendorSheetName)
     rows.forEach((row, idx) => {
+      // Ignore completely empty rows
+      if (Object.values(row).every(v => v === '' || v === null || v === undefined)) return
       const item = parseVendorRow(row, idx, invalidRows)
       if (item) parsed.vendors.push(item)
     })
@@ -729,15 +820,17 @@ export function parseExcelBackup(XLSX, workbook) {
   if (billSheetName) {
     const rows = getSheetRows(billSheetName)
     rows.forEach((row, idx) => {
+      if (Object.values(row).every(v => v === '' || v === null || v === undefined)) return
       const item = parseBillRow(row, idx, invalidRows)
       if (item) parsed.bills.push(item)
     })
   }
 
-  // Parse Financiers
+  // Parse Financiers (Finance)
   if (financierSheetName) {
     const rows = getSheetRows(financierSheetName)
     rows.forEach((row, idx) => {
+      if (Object.values(row).every(v => v === '' || v === null || v === undefined)) return
       const item = parseFinancierRow(row, idx, invalidRows)
       if (item) parsed.financiers.push(item)
     })
@@ -747,6 +840,7 @@ export function parseExcelBackup(XLSX, workbook) {
   if (loanSheetName) {
     const rows = getSheetRows(loanSheetName)
     rows.forEach((row, idx) => {
+      if (Object.values(row).every(v => v === '' || v === null || v === undefined)) return
       const item = parseLoanRow(row, idx, invalidRows)
       if (item) parsed.loans.push(item)
     })
@@ -756,6 +850,7 @@ export function parseExcelBackup(XLSX, workbook) {
   if (paymentSheetName) {
     const rows = getSheetRows(paymentSheetName)
     rows.forEach((row, idx) => {
+      if (Object.values(row).every(v => v === '' || v === null || v === undefined)) return
       const item = parsePaymentRow(row, idx, invalidRows)
       if (item) parsed.payments.push(item)
     })
@@ -765,6 +860,7 @@ export function parseExcelBackup(XLSX, workbook) {
   if (repaymentSheetName) {
     const rows = getSheetRows(repaymentSheetName)
     rows.forEach((row, idx) => {
+      if (Object.values(row).every(v => v === '' || v === null || v === undefined)) return
       const item = parseRepaymentRow(row, idx, invalidRows)
       if (item) parsed.repayments.push(item)
     })
@@ -774,6 +870,7 @@ export function parseExcelBackup(XLSX, workbook) {
   if (chequeSheetName) {
     const rows = getSheetRows(chequeSheetName)
     rows.forEach((row, idx) => {
+      if (Object.values(row).every(v => v === '' || v === null || v === undefined)) return
       const item = parseChequeRow(row, idx, invalidRows)
       if (item) parsed.cheques.push(item)
     })
