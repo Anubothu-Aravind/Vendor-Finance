@@ -31,7 +31,11 @@ export function AuthProvider({ children }) {
     try {
       const res = await authApi.post('/auth/refresh')
       if (res.data && res.data.success) {
-        // Fetch user profile using the refreshed HttpOnly cookie
+        if (res.data.user) {
+          setUser(res.data.user)
+          return true
+        }
+        // Fallback in case user object was not included in refresh response
         const meRes = await authApi.get('/auth/me')
         if (meRes.data && meRes.data.success) {
           setUser(meRes.data.user)

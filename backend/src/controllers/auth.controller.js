@@ -200,7 +200,15 @@ exports.refresh = async (req, res, next) => {
 
     res.status(200).json({
       success: true,
-      accessToken
+      accessToken,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        permissions: user.permissions || (user.role === 'Admin' ? VALID_PERMISSIONS : []),
+        isDefaultCredential: Boolean(user.isDefaultCredential)
+      }
     })
   } catch (error) {
     next(error)

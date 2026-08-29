@@ -54,6 +54,11 @@ export function PreferencesProvider({ children }) {
 
   const setSidebarCollapsed = async (collapsed) => {
     setSidebarCollapsedState(collapsed)
+    try {
+      localStorage.setItem('vastrams_ui_prefs', JSON.stringify({ sidebarCollapsed: collapsed }))
+    } catch {
+      // Ignore localStorage errors
+    }
     api.put('/settings/ui-prefs', { sidebarCollapsed: collapsed })
       .catch(err => console.error('Failed to sync sidebar prefs:', err))
   }
@@ -79,6 +84,13 @@ export function PreferencesProvider({ children }) {
       // Update DOM immediately
       applyThemeClass(next.theme)
       applyGradientToDOM(DEFAULT_GRADIENT)
+
+      // Persist locally for instant loading
+      try {
+        localStorage.setItem('vastrams_appearance', JSON.stringify(next))
+      } catch {
+        // Ignore localStorage errors
+      }
 
       // Sync with backend API (appearance endpoint for theme & format preferences)
       api.put('/settings/appearance', {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Search, DollarSign, Building2, Landmark, Clock, ArrowRight } from 'lucide-react'
+import { Search, DollarSign, Building2, Landmark, Clock, ArrowRight, ArrowUpRight } from 'lucide-react'
 import DropdownSelect from '../components/ui/DropdownSelect'
 import { toTitleCase } from '../utils/text'
 import EmptyState from '../components/ui/EmptyState'

@@ -58,6 +58,7 @@ export function Topbar({ onMenuClick }) {
   })
 
   const fetchNotifications = async () => {
+    if (!user) return
     try {
       const res = await api.get('/notifications')
       if (res.success) {
@@ -69,10 +70,11 @@ export function Topbar({ onMenuClick }) {
   }
 
   useEffect(() => {
+    if (!user) return
     fetchNotifications()
     const interval = setInterval(fetchNotifications, 30000)
     return () => clearInterval(interval)
-  }, [])
+  }, [user])
 
   useEffect(() => {
     const handleDataChanged = () => {

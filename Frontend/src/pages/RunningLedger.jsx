@@ -2,7 +2,6 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Download, Search, X, BookOpen, ArrowDownLeft, ArrowUpRight, DollarSign } from 'lucide-react'
 import PrintPreviewModal from '../components/PrintPreviewModal'
-import * as XLSX from 'xlsx'
 import DropdownSelect from '../components/ui/DropdownSelect'
 import CustomDatePicker from '../components/ui/CustomDatePicker'
 import { toTitleCase } from '../utils/text'
@@ -242,12 +241,13 @@ export function RunningLedger() {
   const totalCredit = useMemo(() => filteredLedger.reduce((s, r) => s + r.credit, 0), [filteredLedger])
   const finalBalance = useMemo(() => filteredLedger.length > 0 ? filteredLedger[filteredLedger.length - 1].balance : 0, [filteredLedger])
 
-  const handleExport = () => {
+  const handleExport = async () => {
     if (!filteredLedger.length) {
       toast('No data to export', 'error')
       return
     }
     try {
+      const XLSX = await import('xlsx')
       const rawPartyName = party ? party.split('|')[2] || 'Statement' : 'Statement'
       const cleanParty = rawPartyName.replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '')
       const fileName = `Ledger_${cleanParty}_${new Date().toISOString().split('T')[0]}.xlsx`

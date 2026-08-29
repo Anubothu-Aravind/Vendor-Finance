@@ -21,7 +21,6 @@ import PageHeader from '../components/ui/PageHeader'
 import { Card } from '../components/ui/Card'
 import { usePreferences } from '../hooks/usePreferences'
 import { toInputDate, fromInputDate } from '../utils/date'
-import * as XLSX from 'xlsx'
 import ProfileCompletionCard from '../components/settings/ProfileCompletionCard'
 import LogoUploader from '../components/settings/LogoUploader'
 import StickySaveBar from '../components/settings/StickySaveBar'
@@ -1233,6 +1232,7 @@ export function Settings() {
         })
       }
 
+      const XLSX = await import('xlsx')
       const wb = XLSX.utils.book_new()
       
       const sheets = [
@@ -1279,8 +1279,9 @@ export function Settings() {
     }
 
     const reader = new FileReader()
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       try {
+        const XLSX = await import('xlsx')
         const data = new Uint8Array(event.target.result)
         const workbook = XLSX.read(data, { type: 'array' })
         

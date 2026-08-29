@@ -2,7 +2,6 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
 import './styles/index.css'
-import { API_BASE_URL } from './utils/api'
 
 const DEFAULT_APPEARANCE = {
   theme: 'light',
@@ -39,24 +38,23 @@ function applyAppearance(appearance) {
   root.style.setProperty('--color-primary-muted', acc + '20')
 }
 
-Promise.all([
-  fetch(`${API_BASE_URL}/settings/appearance`).then(r => r.json()).catch(() => DEFAULT_APPEARANCE),
-  fetch(`${API_BASE_URL}/settings/ui-prefs`).then(r => r.json()).catch(() => DEFAULT_UI_PREFS)
-])
-.then(([appearance, uiPrefs]) => {
-  const finalAppearance = appearance.success ? appearance : DEFAULT_APPEARANCE
-  const finalUiPrefs = uiPrefs.success ? uiPrefs : DEFAULT_UI_PREFS
-  applyAppearance(finalAppearance)
-  window.__INIT_PREFS__ = { ...finalAppearance, ...finalUiPrefs }
-})
-.catch(() => {
+// Synchronously restore cached appearance & UI preferences from localStorage for instant startup
+try {
+  const cachedApp = localStorage.getItem('vastrams_appearance')
+  const cachedUi = localStorage.getItem('vastrams_ui_prefs')
+  const appObj = cachedApp ? JSON.parse(cachedApp) : DEFAULT_APPEARANCE
+  const uiObj = cachedUi ? JSON.parse(cachedUi) : DEFAULT_UI_PREFS
+  const initialPrefs = { ...DEFAULT_APPEARANCE, ...DEFAULT_UI_PREFS, ...appObj, ...uiObj }
+  applyAppearance(initialPrefs)
+  window.__INIT_PREFS__ = initialPrefs
+} catch {
   applyAppearance(DEFAULT_APPEARANCE)
   window.__INIT_PREFS__ = { ...DEFAULT_APPEARANCE, ...DEFAULT_UI_PREFS }
-})
-.finally(() => {
-  ReactDOM.createRoot(document.getElementById('root')).render(
-    <React.StrictMode>
-      <App />
-    </React.StrictMode>,
-  )
-})
+}
+
+// Mount React immediately without blocking on remote API calls
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>,
+)
