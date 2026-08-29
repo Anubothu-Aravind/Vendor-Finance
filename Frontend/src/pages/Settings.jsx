@@ -33,6 +33,7 @@ import { getFormDiff } from '../utils/formDiff'
 import { useCompanyProfile } from '../context/ProfileContext'
 import { useAuth } from '../hooks/AuthContext'
 import { AVAILABLE_PERMISSIONS, ALL_PERMISSIONS } from '../utils/permissions'
+import { parseExcelBackup } from '../utils/excelParser'
 
 // ── Appearance Tab (extracted to keep Settings component lean) ────────────────
 function AppearanceTab({ preferences, setPreferences, confirm, showToast }) {
@@ -1192,6 +1193,8 @@ export function Settings() {
   const [restoreLoading, setRestoreLoading] = useState(false)
   const [showRestoreModal, setShowRestoreModal] = useState(false)
   const [parsedRestoreData, setParsedRestoreData] = useState(null)
+  const [restoreInvalidRows, setRestoreInvalidRows] = useState([])
+  const [restoreSummaryText, setRestoreSummaryText] = useState('')
   const restoreFileInputRef = useRef(null)
 
   // Reset Flow States
@@ -1270,6 +1273,8 @@ export function Settings() {
     setRestoreFile(null)
     setRestoreError('')
     setParsedRestoreData(null)
+    setRestoreInvalidRows([])
+    setRestoreSummaryText('')
 
     // Client-side extension validation
     const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase()
@@ -1283,43 +1288,12 @@ export function Settings() {
       try {
         const XLSX = await import('xlsx')
         const data = new Uint8Array(event.target.result)
-        const workbook = XLSX.read(data, { type: 'array' })
+        const workbook = XLSX.read(data, { type: 'array', cellDates: true })
         
-        const parsed = {}
-        const parseSheet = (sheetName) => {
-          const sheet = workbook.Sheets[sheetName]
-          if (!sheet) return []
-          const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' })
-          return rows.map(row => {
-            const cleaned = {}
-            for (const key in row) {
-              if (row.hasOwnProperty(key)) {
-                let val = row[key]
-                if (val === '—') {
-                  val = null
-                } else if (val === 'Yes') {
-                  val = true
-                } else if (val === 'No') {
-                  val = false
-                }
-                cleaned[key] = val
-              }
-            }
-            return cleaned
-          })
-        }
-
-        parsed.settings = parseSheet('Settings')[0] || {}
-        parsed.vendors = parseSheet('Vendors')
-        parsed.financiers = parseSheet('Financiers')
-        parsed.loans = parseSheet('Loans')
-        parsed.bills = parseSheet('Bills')
-        parsed.payments = parseSheet('Payments')
-        parsed.repayments = parseSheet('Repayments')
-        parsed.cheques = parseSheet('Cheques')
-        parsed.transactions = parseSheet('Transactions')
-
-        setParsedRestoreData(parsed)
+        const result = parseExcelBackup(XLSX, workbook)
+        setParsedRestoreData(result.parsed)
+        setRestoreInvalidRows(result.invalidRows || [])
+        setRestoreSummaryText(result.summaryText)
         setRestoreFile(file)
       } catch (err) {
         console.error('Restore parsing error:', err)
@@ -2295,20 +2269,36 @@ export function Settings() {
                 </div>
 
                 {restoreFile && parsedRestoreData && !restoreError && (
-                  <div className="p-3 rounded-lg text-xs space-y-3 flex items-center justify-between" style={{ background: 'rgba(0,200,150,0.08)', border: '1px solid rgba(0,200,150,0.25)' }}>
-                    <div style={{ color: 'var(--color-primary)' }}>
-                      <p className="font-semibold">Ready to restore data snapshot:</p>
-                      <p className="text-[10px] mt-0.5" style={{ color: 'var(--color-text-secondary)' }}>
-                        {parsedRestoreData.vendors?.length || 0} vendors · {parsedRestoreData.bills?.length || 0} bills · {parsedRestoreData.loans?.length || 0} loans
-                      </p>
+                  <div className="p-3.5 rounded-lg text-xs space-y-2.5" style={{ background: 'rgba(0,200,150,0.08)', border: '1px solid rgba(0,200,150,0.25)' }}>
+                    <div className="flex items-center justify-between">
+                      <div style={{ color: 'var(--color-primary)' }}>
+                        <p className="font-semibold">Ready to restore data snapshot:</p>
+                        <p className="text-[11px] mt-0.5 font-medium" style={{ color: 'var(--color-text-secondary)' }}>
+                          {restoreSummaryText || `${parsedRestoreData.vendors?.length || 0} vendors · ${parsedRestoreData.bills?.length || 0} bills · ${parsedRestoreData.loans?.length || 0} loans`}
+                        </p>
+                      </div>
+                      <button 
+                        onClick={() => setShowRestoreModal(true)} 
+                        className="px-3.5 py-1.5 text-xs font-semibold text-white rounded-lg hover:opacity-90 transition-opacity cursor-pointer shadow-sm"
+                        style={{ background: 'var(--color-primary)' }}
+                      >
+                        Restore
+                      </button>
                     </div>
-                    <button 
-                      onClick={() => setShowRestoreModal(true)} 
-                      className="px-3.5 py-1.5 text-xs font-semibold text-white rounded-lg hover:opacity-90 transition-opacity"
-                      style={{ background: 'var(--color-primary)' }}
-                    >
-                      Restore
-                    </button>
+
+                    {restoreInvalidRows && restoreInvalidRows.length > 0 && (
+                      <div className="mt-2 pt-2 border-t border-amber-500/20 text-amber-600 dark:text-amber-400 text-[11px] space-y-1">
+                        <p className="font-semibold">⚠️ {restoreInvalidRows.length} invalid row(s) skipped:</p>
+                        <ul className="list-disc pl-4 space-y-0.5 text-[10px]">
+                          {restoreInvalidRows.slice(0, 5).map((inv, i) => (
+                            <li key={i}>[{inv.sheet}] Row {inv.row}: {inv.reason}</li>
+                          ))}
+                          {restoreInvalidRows.length > 5 && (
+                            <li>...and {restoreInvalidRows.length - 5} more</li>
+                          )}
+                        </ul>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

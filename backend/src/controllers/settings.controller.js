@@ -414,7 +414,7 @@ exports.restoreBackup = async (req, res, next) => {
       for (const key in obj) {
         if (obj.hasOwnProperty(key)) {
           let val = obj[key]
-          if (val === '' || val === '—' || val === 'null' || val === 'undefined') {
+          if (val === '' || val === '—' || val === '-' || val === 'null' || val === 'undefined' || val === 'N/A') {
             val = null
           }
           cleaned[key] = val
@@ -425,19 +425,174 @@ exports.restoreBackup = async (req, res, next) => {
 
     const cleanArray = (arr) => (arr || []).map(cleanObj)
 
-    // Restore arrays
+    // Restore Vendors
     if (data.vendors && data.vendors.length > 0) {
-      await Vendor.insertMany(cleanArray(data.vendors))
+      const vendorDocs = cleanArray(data.vendors).map(v => ({
+        ...v,
+        name: String(v.name || 'Vendor').trim(),
+        type: v.type === 'smallVendor' ? 'smallVendor' : 'largeVendor',
+        status: v.status === 'Inactive' ? 'Inactive' : 'Active',
+        openingBalance: Number(v.openingBalance) || 0,
+        isDeleted: Boolean(v.isDeleted)
+      }))
+      for (const v of vendorDocs) {
+        if (v._id && mongoose.Types.ObjectId.isValid(v._id)) {
+          await Vendor.findByIdAndUpdate(v._id, v, { upsert: true, new: true })
+        } else {
+          await Vendor.findOneAndUpdate({ name: v.name }, v, { upsert: true, new: true })
+        }
+      }
     }
+
+    // Restore Financiers
     if (data.financiers && data.financiers.length > 0) {
-      await Financier.insertMany(cleanArray(data.financiers))
+      const finDocs = cleanArray(data.financiers).map(f => ({
+        ...f,
+        name: String(f.name || 'Financier').trim(),
+        status: f.status === 'Inactive' ? 'Inactive' : 'Active',
+        defaultInterestRate: Number(f.defaultInterestRate) || 12,
+        outstandingBalance: Number(f.outstandingBalance) || 0,
+        isDeleted: Boolean(f.isDeleted)
+      }))
+      for (const f of finDocs) {
+        if (f._id && mongoose.Types.ObjectId.isValid(f._id)) {
+          await Financier.findByIdAndUpdate(f._id, f, { upsert: true, new: true })
+        } else {
+          await Financier.findOneAndUpdate({ name: f.name }, f, { upsert: true, new: true })
+        }
+      }
     }
+
+    // Restore Loans
     if (data.loans && data.loans.length > 0) {
-      await Loan.insertMany(cleanArray(data.loans))
+      const rawLoans = cleanArray(data.loans)
+      const loanDocs = []
+
+      for (const l of rawLoans) {
+        if (!l.loanReference) continue
+
+        let finDoc = null
+        if (l.financierId && mongoose.Types.ObjectId.isValid(l.financierId)) {
+          finDoc = await Financier.findById(l.financierId)
+        }
+        if (!finDoc) {
+          const finName = String(l.financierName || l.borrowerName || l.financier || l.partyName || (l.financierId && !mongoose.Types.ObjectId.isValid(l.financierId) ? l.financierId : '') || 'Primary Financier').trim()
+          finDoc = await Financier.findOne({ name: finName })
+          if (!finDoc) {
+            finDoc = new Financier({
+              name: finName,
+              phone: l.phone || '',
+              status: 'Active',
+              defaultInterestRate: (l.interestRate !== null && l.interestRate !== undefined && !isNaN(l.interestRate)) ? Number(l.interestRate) : 12,
+              outstandingBalance: 0,
+              isDeleted: false
+            })
+            await finDoc.save()
+          }
+        }
+
+        const principalAmount = Number(l.principalAmount) || 0
+        const rate = (l.interestRate !== null && l.interestRate !== undefined && l.interestRate !== '' && !isNaN(l.interestRate)) ? Number(l.interestRate) : null
+        const dDate = l.drawdownDate ? new Date(l.drawdownDate) : null
+        const mDate = l.maturityDate ? new Date(l.maturityDate) : null
+
+        let status = 'ACTIVE'
+        if (l.status) {
+          const s = String(l.status).toUpperCase()
+          if (s === 'CLOSED' || s === 'SETTLED') status = 'SETTLED'
+          else if (s === 'OVERDUE') status = 'OVERDUE'
+          else status = 'ACTIVE'
+        }
+
+        loanDocs.push({
+          loanReference: String(l.loanReference).trim(),
+          financierId: finDoc._id,
+          principalAmount: principalAmount,
+          interestRate: rate,
+          paidPrincipal: Number(l.paidPrincipal) || 0,
+          paidInterest: Number(l.paidInterest) || 0,
+          accruedInterest: Number(l.accruedInterest) || 0,
+          outstandingPrincipal: Number(l.outstandingPrincipal ?? principalAmount) || 0,
+          drawdownDate: dDate && !isNaN(dDate.getTime()) ? dDate : null,
+          maturityDate: mDate && !isNaN(mDate.getTime()) ? mDate : null,
+          status: status,
+          notes: l.notes || l.remarks || '',
+          isDeleted: Boolean(l.isDeleted)
+        })
+      }
+
+      for (const loanItem of loanDocs) {
+        await Loan.findOneAndUpdate(
+          { loanReference: loanItem.loanReference },
+          loanItem,
+          { upsert: true, new: true }
+        )
+      }
     }
+
+    // Restore Bills
     if (data.bills && data.bills.length > 0) {
-      await Bill.insertMany(cleanArray(data.bills))
+      const rawBills = cleanArray(data.bills)
+      const billDocs = []
+
+      for (const b of rawBills) {
+        if (!b.billNumber) continue
+
+        let venDoc = null
+        if (b.vendorId && mongoose.Types.ObjectId.isValid(b.vendorId)) {
+          venDoc = await Vendor.findById(b.vendorId)
+        }
+        if (!venDoc) {
+          const venName = String(b.vendorName || b.vendor || b.partyName || (b.vendorId && !mongoose.Types.ObjectId.isValid(b.vendorId) ? b.vendorId : '') || 'Primary Vendor').trim()
+          venDoc = await Vendor.findOne({ name: venName })
+          if (!venDoc) {
+            venDoc = new Vendor({
+              name: venName,
+              type: 'largeVendor',
+              status: 'Active',
+              openingBalance: 0,
+              isDeleted: false
+            })
+            await venDoc.save()
+          }
+        }
+
+        const amount = Number(b.amount) || 0
+        const bDate = b.billDate ? new Date(b.billDate) : new Date()
+        const dDate = b.dueDate ? new Date(b.dueDate) : bDate
+
+        let status = 'UNPAID'
+        if (b.status) {
+          const s = String(b.status).toUpperCase()
+          if (s.includes('PARTIAL')) status = 'PARTIALLY_PAID'
+          else if (s === 'PAID') status = 'PAID'
+          else status = 'UNPAID'
+        }
+
+        billDocs.push({
+          billNumber: String(b.billNumber).trim(),
+          vendorId: venDoc._id,
+          paymentType: b.paymentType || 'Credit',
+          amount: amount,
+          paidAmount: Number(b.paidAmount) || 0,
+          outstandingAmount: Number(b.outstandingAmount ?? amount) || 0,
+          billDate: bDate && !isNaN(bDate.getTime()) ? bDate : new Date(),
+          dueDate: dDate && !isNaN(dDate.getTime()) ? dDate : new Date(),
+          status: status,
+          remarks: b.remarks || b.notes || '',
+          isDeleted: Boolean(b.isDeleted)
+        })
+      }
+
+      for (const billItem of billDocs) {
+        await Bill.findOneAndUpdate(
+          { billNumber: billItem.billNumber },
+          billItem,
+          { upsert: true, new: true }
+        )
+      }
     }
+
     if (data.payments && data.payments.length > 0) {
       let paymentsData = cleanArray(data.payments)
       paymentsData = paymentsData.map(p => {
