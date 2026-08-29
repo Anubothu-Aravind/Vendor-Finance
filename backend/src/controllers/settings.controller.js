@@ -593,22 +593,179 @@ exports.restoreBackup = async (req, res, next) => {
       }
     }
 
+    // Restore Payments
     if (data.payments && data.payments.length > 0) {
-      let paymentsData = cleanArray(data.payments)
-      paymentsData = paymentsData.map(p => {
-        if (typeof p.allocations === 'string') {
-          try { p.allocations = JSON.parse(p.allocations) } catch { p.allocations = [] }
+      const rawPayments = cleanArray(data.payments)
+      for (const p of rawPayments) {
+        if (!p.amount || Number(p.amount) <= 0) continue
+
+        let venDoc = null
+        if (p.vendorId && mongoose.Types.ObjectId.isValid(p.vendorId)) {
+          venDoc = await Vendor.findById(p.vendorId)
         }
-        return p
-      })
-      await Payment.insertMany(paymentsData)
+        if (!venDoc) {
+          const venName = String(p.vendorName || p.vendor || p.partyName || (p.vendorId && !mongoose.Types.ObjectId.isValid(p.vendorId) ? p.vendorId : '') || 'Primary Vendor').trim()
+          venDoc = await Vendor.findOne({ name: venName })
+          if (!venDoc) {
+            venDoc = new Vendor({
+              name: venName,
+              type: 'largeVendor',
+              status: 'Active',
+              openingBalance: 0,
+              isDeleted: false
+            })
+            await venDoc.save()
+          }
+        }
+
+        let mode = 'BANK_TRANSFER'
+        if (p.paymentMode) {
+          const m = String(p.paymentMode).toUpperCase()
+          if (m.includes('CHEQUE') || m.includes('CHECK')) mode = 'CHEQUE'
+          else if (m.includes('CASH')) mode = 'CASH'
+          else if (m.includes('OTHER')) mode = 'OTHER'
+          else mode = 'BANK_TRANSFER'
+        }
+
+        let allocations = p.allocations
+        if (typeof allocations === 'string') {
+          try { allocations = JSON.parse(allocations) } catch { allocations = [] }
+        }
+        if (!Array.isArray(allocations)) allocations = []
+
+        const pDate = p.paymentDate ? new Date(p.paymentDate) : new Date()
+        const refNum = String(p.referenceNumber || p.ref || `PAY-${Date.now()}-${Math.floor(Math.random() * 1000)}`).trim()
+
+        const payDoc = {
+          vendorId: venDoc._id,
+          amount: Number(p.amount) || 0,
+          paymentDate: pDate && !isNaN(pDate.getTime()) ? pDate : new Date(),
+          paymentMode: mode,
+          referenceNumber: refNum,
+          allocations: allocations,
+          isDeleted: Boolean(p.isDeleted)
+        }
+
+        await Payment.findOneAndUpdate(
+          { referenceNumber: payDoc.referenceNumber },
+          payDoc,
+          { upsert: true, new: true }
+        )
+      }
     }
+
+    // Restore Repayments
     if (data.repayments && data.repayments.length > 0) {
-      await Repayment.insertMany(cleanArray(data.repayments))
+      const rawRepayments = cleanArray(data.repayments)
+      for (const r of rawRepayments) {
+        if (!r.amount || Number(r.amount) <= 0) continue
+
+        let loanDoc = null
+        if (r.loanId && mongoose.Types.ObjectId.isValid(r.loanId)) {
+          loanDoc = await Loan.findById(r.loanId)
+        }
+        if (!loanDoc) {
+          const loanRef = String(r.loanReference || r.loanId || r.loan || 'LN001').trim()
+          loanDoc = await Loan.findOne({ loanReference: loanRef })
+          if (!loanDoc) {
+            // Find or create primary financier for loan
+            let fin = await Financier.findOne()
+            if (!fin) {
+              fin = new Financier({ name: 'Primary Financier', defaultInterestRate: 12, status: 'Active' })
+              await fin.save()
+            }
+            loanDoc = new Loan({
+              loanReference: loanRef,
+              financierId: fin._id,
+              principalAmount: Number(r.amount) || 10000,
+              outstandingPrincipal: Number(r.amount) || 10000,
+              status: 'ACTIVE'
+            })
+            await loanDoc.save()
+          }
+        }
+
+        let mode = 'BANK_TRANSFER'
+        if (r.repaymentMode) {
+          const m = String(r.repaymentMode).toUpperCase()
+          if (m.includes('CHEQUE') || m.includes('CHECK')) mode = 'CHEQUE'
+          else if (m.includes('CASH')) mode = 'CASH'
+          else if (m.includes('OTHER')) mode = 'OTHER'
+          else mode = 'BANK_TRANSFER'
+        }
+
+        const rDate = r.repaymentDate ? new Date(r.repaymentDate) : new Date()
+        const refNum = String(r.referenceNumber || r.ref || `REP-${Date.now()}-${Math.floor(Math.random() * 1000)}`).trim()
+
+        const repDoc = {
+          loanId: loanDoc._id,
+          amount: Number(r.amount) || 0,
+          principalPaid: Number(r.principalPaid ?? r.amount) || 0,
+          interestPaid: Number(r.interestPaid) || 0,
+          repaymentDate: rDate && !isNaN(rDate.getTime()) ? rDate : new Date(),
+          repaymentMode: mode,
+          referenceNumber: refNum,
+          isDeleted: Boolean(r.isDeleted)
+        }
+
+        await Repayment.findOneAndUpdate(
+          { referenceNumber: repDoc.referenceNumber },
+          repDoc,
+          { upsert: true, new: true }
+        )
+      }
     }
+
+    // Restore Cheques
     if (data.cheques && data.cheques.length > 0) {
-      await Cheque.insertMany(cleanArray(data.cheques))
+      const rawCheques = cleanArray(data.cheques)
+      for (const c of rawCheques) {
+        let chqNum = String(c.chequeNumber || c.chequeNo || '').replace(/\D/g, '')
+        if (chqNum.length > 0) {
+          chqNum = chqNum.padStart(6, '0').slice(-6)
+        }
+        if (!chqNum) continue
+
+        let type = 'ISSUED_VENDOR'
+        if (c.type) {
+          const t = String(c.type).toUpperCase()
+          if (t.includes('REC') || t.includes('INCOMING')) type = 'RECEIVED_FINANCIER'
+          else if (t.includes('FINANCIER')) type = 'ISSUED_FINANCIER'
+          else if (t.includes('VENDOR')) type = 'ISSUED_VENDOR'
+          else type = 'OTHER'
+        }
+
+        let status = 'PENDING'
+        if (c.status) {
+          const s = String(c.status).toUpperCase()
+          if (s.includes('CLEAR') || s === 'PAID') status = 'CLEARED'
+          else if (s.includes('BOUNCE') || s.includes('DISHONOR')) status = 'BOUNCED'
+          else if (s.includes('CANCEL')) status = 'CANCELLED'
+          else status = 'PENDING'
+        }
+
+        const cDate = c.chequeDate ? new Date(c.chequeDate) : new Date()
+
+        const chqDoc = {
+          chequeNumber: chqNum,
+          partyName: String(c.partyName || c.party || 'Party').trim(),
+          type: type,
+          amount: Number(c.amount) || 0,
+          chequeDate: cDate && !isNaN(cDate.getTime()) ? cDate : new Date(),
+          status: status,
+          bankName: c.bankName || '',
+          notes: c.notes || c.remarks || '',
+          isDeleted: Boolean(c.isDeleted)
+        }
+
+        await Cheque.findOneAndUpdate(
+          { chequeNumber: chqDoc.chequeNumber },
+          chqDoc,
+          { upsert: true, new: true }
+        )
+      }
     }
+
     if (data.transactions && data.transactions.length > 0) {
       await Transaction.insertMany(cleanArray(data.transactions))
     }
