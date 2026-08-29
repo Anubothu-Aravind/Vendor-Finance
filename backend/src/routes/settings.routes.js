@@ -59,6 +59,17 @@ const handleLogoUpload = (req, res, next) => {
   })
 }
 
+// Multer storage configuration for Excel and JSON backup files
+const excelUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 20 * 1024 * 1024 // 20MB limit for database backups
+  },
+  fileFilter: (req, file, cb) => {
+    cb(null, true)
+  }
+})
+
 // Protected updates
 router.put('/appearance', requireRole(['Admin']), settingsController.updateAppearance)
 router.put('/ui-prefs', settingsController.updateUiPrefs)
@@ -66,7 +77,7 @@ router.put('/ui-prefs', settingsController.updateUiPrefs)
 router.get('/profile', settingsController.getProfile)
 router.post('/profile', requireRole(['Admin']), profileSaveLimiter, validateProfile, audit('profile'), settingsController.updateProfile)
 router.post('/upload-logo', requireRole(['Admin']), logoUploadLimiter, handleLogoUpload, audit('logo'), settingsController.uploadLogo)
-router.post('/backup/restore', requireRole(['Admin']), upload.single('backup'), settingsController.restoreBackup)
+router.post('/backup/restore', requireRole(['Admin']), excelUpload.single('backup'), settingsController.restoreBackup)
 
 router.get('/invoice-template', settingsController.getInvoiceTemplate)
 router.put('/invoice-template', requireRole(['Admin']), settingsController.saveInvoiceTemplate)

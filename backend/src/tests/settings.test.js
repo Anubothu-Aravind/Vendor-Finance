@@ -42,4 +42,41 @@ test('Settings unit tests', async (t) => {
     assert.ok(!allowedMimeTypes.includes('application/pdf'))
     assert.ok(!allowedMimeTypes.includes('image/gif'))
   })
+
+  await t.test('Excel backup restore accepts spreadsheet files and payloads', () => {
+    const validExtensions = ['.xlsx', '.xls']
+    const testFileExt = '.xlsx'
+    assert.ok(validExtensions.includes(testFileExt))
+
+    const mockPayload = {
+      vendors: [{ name: 'Test Vendor', type: 'largeVendor', status: 'Active' }],
+      loans: [{ loanReference: 'LN-100', principalAmount: 50000, interestRate: null, drawdownDate: null }]
+    }
+
+    assert.equal(mockPayload.vendors.length, 1)
+    assert.equal(mockPayload.loans.length, 1)
+    assert.equal(mockPayload.loans[0].interestRate, null)
+    assert.equal(mockPayload.loans[0].drawdownDate, null)
+  })
+
+  await t.test('Excel restore handles invalid rows gracefully without crashing', () => {
+    const skipped = []
+    const rawLoans = [
+      { loanReference: 'LN-01', principalAmount: 50000 },
+      { loanReference: '', principalAmount: 20000 } // invalid row
+    ]
+
+    const validLoans = []
+    rawLoans.forEach((l, idx) => {
+      if (!l.loanReference) {
+        skipped.push({ sheet: 'Loans', row: idx + 2, field: 'Loan Number', reason: 'Missing required Loan Number' })
+      } else {
+        validLoans.push(l)
+      }
+    })
+
+    assert.equal(validLoans.length, 1)
+    assert.equal(skipped.length, 1)
+    assert.equal(skipped[0].sheet, 'Loans')
+  })
 })

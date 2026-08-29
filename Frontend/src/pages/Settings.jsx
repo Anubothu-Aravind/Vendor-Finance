@@ -1317,7 +1317,18 @@ export function Settings() {
         }
       })
       if (res.success) {
-        showToast('Data restored successfully')
+        const restored = res.restored || {}
+        const countParts = []
+        if (restored.vendors) countParts.push(`${restored.vendors} vendors`)
+        if (restored.bills) countParts.push(`${restored.bills} bills`)
+        if (restored.loans) countParts.push(`${restored.loans} loans`)
+        if (restored.financiers) countParts.push(`${restored.financiers} financiers`)
+        if (restored.payments) countParts.push(`${restored.payments} payments`)
+        if (restored.repayments) countParts.push(`${restored.repayments} repayments`)
+        if (restored.cheques) countParts.push(`${restored.cheques} cheques`)
+        
+        const summary = countParts.length > 0 ? `Restored: ${countParts.join(' · ')}` : 'Data restored successfully'
+        showToast(summary, 'success')
         setShowRestoreModal(false)
         setRestoreFile(null)
         setParsedRestoreData(null)
