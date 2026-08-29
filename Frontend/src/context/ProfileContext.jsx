@@ -6,15 +6,21 @@ const ProfileContext = createContext(null)
 
 export function ProfileProvider({ children }) {
   const { user } = useAuth()
-  const [companyProfile, setCompanyProfile] = useState({
-    businessName: 'Vastrams',
-    logo: '',
-    ownerName: '',
-    email: '',
-    phone: '',
-    address: '',
-    gstin: '',
-    website: '',
+  const [companyProfile, setCompanyProfile] = useState(() => {
+    try {
+      const cached = localStorage.getItem('vastrams_cached_profile')
+      if (cached) return JSON.parse(cached)
+    } catch {}
+    return {
+      businessName: 'Vastrams',
+      logo: '',
+      ownerName: '',
+      email: '',
+      phone: '',
+      address: '',
+      gstin: '',
+      website: '',
+    }
   })
   const [loadingProfile, setLoadingProfile] = useState(true)
 
@@ -26,12 +32,15 @@ export function ProfileProvider({ children }) {
     try {
       const res = await api.get('/settings/profile')
       if (res.success && res.data) {
-        setCompanyProfile(prev => ({
-          ...prev,
+        const merged = {
           ...res.data,
           businessName: res.data.businessName || 'Vastrams',
           logo: res.data.logo || '',
-        }))
+        }
+        setCompanyProfile(merged)
+        try {
+          localStorage.setItem('vastrams_cached_profile', JSON.stringify(merged))
+        } catch {}
       }
     } catch {
       // Silently keep default fallback

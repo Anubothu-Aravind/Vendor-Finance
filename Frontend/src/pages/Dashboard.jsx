@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { useQueries } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
 import {
   Coins,
@@ -24,56 +24,34 @@ import { AlertsWidget } from '../components/dashboard/AlertsWidget'
 
 const fmt = (v) => new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(v)
 
-// ── Query fetchers (stable references) ─────────────────────────────────────────
-const fetchSummary     = () => api.get('/dashboard/summary')
-const fetchPayments    = () => api.get('/payments')
-const fetchLoans       = () => api.get('/loans')
-const fetchCheques     = () => api.get('/cheques')
-const fetchLedger      = () => api.get('/ledger')
+// ── Query fetcher (single optimized dashboard endpoint) ──────────────────────
+const fetchSummary = () => api.get('/dashboard/summary')
 
 export function Dashboard() {
-  const results = useQueries({
-    queries: [
-      { queryKey: ['dashboard-summary'],  queryFn: fetchSummary },
-      { queryKey: ['payments'],           queryFn: fetchPayments },
-      { queryKey: ['loans'],              queryFn: fetchLoans },
-      { queryKey: ['cheques'],            queryFn: fetchCheques },
-      { queryKey: ['ledger'],             queryFn: fetchLedger },
-    ],
+  const { data: summary, isLoading: loading, isError, error: queryError } = useQuery({
+    queryKey: ['dashboard-summary'],
+    queryFn: fetchSummary,
+    staleTime: 30_000,
   })
 
-  const [summaryQ, paymentsQ, loansQ, chequesQ, ledgerQ] = results
-
-  const loading = summaryQ.isLoading
-  const error   = summaryQ.isError ? (summaryQ.error?.message || 'Failed to load dashboard summary') : null
-
-  const summary      = summaryQ.data
-  const payments     = Array.isArray(paymentsQ.data)  ? paymentsQ.data  : []
-  const loans        = Array.isArray(loansQ.data)     ? loansQ.data     : []
-  const cheques      = Array.isArray(chequesQ.data)   ? chequesQ.data   : []
-  const transactions = Array.isArray(ledgerQ.data)    ? ledgerQ.data    : []
+  const error = isError ? (queryError?.message || 'Failed to load dashboard summary') : null
 
   // ── KPIs ────────────────────────────────────────────────────────────────────
   const kpis = useMemo(() => {
     if (!summary || !summary.kpis) return []
 
-    const todayYMD  = new Date().toISOString().split('T')[0]
-    const todayStr  = new Date().toDateString()
-    const oneWeekAgo = new Date(); oneWeekAgo.setDate(oneWeekAgo.getDate() - 7)
-
-    const todayPmts  = payments.filter(p => {
-      if (p.isDeleted) return false
-      const raw = p.paymentDate || p.date || ''
-      return String(raw).startsWith(todayYMD) || new Date(raw).toDateString() === todayStr
-    })
-    const weekPmts   = payments.filter(p => !p.isDeleted && new Date(p.paymentDate || p.date) >= oneWeekAgo)
-    const activeLoans = loans.filter(l => !l.isDeleted && String(l.status).toUpperCase() === 'ACTIVE')
-    const pendingCheques = cheques.filter(c => !c.isDeleted && String(c.status).toUpperCase() === 'PENDING')
+    const k = summary.kpis
+    const todayTotal = k.todayPaymentsTotal ?? 0
+    const todayCount = k.todayPaymentsCount ?? 0
+    const weekTotal = k.weekPaymentsTotal ?? 0
+    const weekCount = k.weekPaymentsCount ?? 0
+    const activeLoans = k.activeLoansCount ?? 0
+    const upcomingChequesAmt = k.upcomingChequesTotal ?? k.chequesInTransit ?? 0
 
     return [
       {
         title: 'Financier Outstanding',
-        value: `₹${fmt(summary.kpis.financierOutstanding || 0)}`,
+        value: `₹${fmt(k.financierOutstanding || 0)}`,
         subtitle: 'Total exposure',
         icon: Landmark,
         iconColor: 'text-blue-600 dark:text-blue-400',
@@ -82,8 +60,8 @@ export function Dashboard() {
       },
       {
         title: "Today's Payments",
-        value: `₹${fmt(todayPmts.reduce((s,p) => s+(p.amount || 0), 0))}`,
-        subtitle: `${todayPmts.length} payments today`,
+        value: `₹${fmt(todayTotal)}`,
+        subtitle: `${todayCount} payments today`,
         icon: CreditCard,
         iconColor: 'text-slate-600 dark:text-slate-300',
         iconBg: 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700',
@@ -91,8 +69,8 @@ export function Dashboard() {
       },
       {
         title: "This Week's Payments",
-        value: `₹${fmt(weekPmts.reduce((s,p) => s+(p.amount || 0), 0))}`,
-        subtitle: `${weekPmts.length} payments recorded`,
+        value: `₹${fmt(weekTotal)}`,
+        subtitle: `${weekCount} payments recorded`,
         icon: CreditCard,
         iconColor: 'text-emerald-600 dark:text-emerald-400',
         iconBg: 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-100 dark:border-emerald-900/40',
@@ -100,7 +78,7 @@ export function Dashboard() {
       },
       {
         title: 'Overdue Bills',
-        value: `₹${fmt(summary.kpis.overdueBills || 0)}`,
+        value: `₹${fmt(k.overdueBills || 0)}`,
         subtitle: 'Pending payable bills',
         icon: FileText,
         iconColor: 'text-rose-600 dark:text-rose-400',
@@ -109,7 +87,7 @@ export function Dashboard() {
       },
       {
         title: 'Active Loans',
-        value: String(activeLoans.length),
+        value: String(activeLoans),
         subtitle: 'Active accounts',
         icon: Coins,
         iconColor: 'text-purple-600 dark:text-purple-400',
@@ -118,7 +96,7 @@ export function Dashboard() {
       },
       {
         title: 'Upcoming Cheques',
-        value: `₹${fmt(pendingCheques.reduce((s,c) => s+(c.amount || 0), 0))}`,
+        value: `₹${fmt(upcomingChequesAmt)}`,
         subtitle: 'In transit / pending',
         icon: CheckSquare,
         iconColor: 'text-amber-600 dark:text-amber-400',
@@ -126,7 +104,7 @@ export function Dashboard() {
         link: '/cheques'
       },
     ]
-  }, [summary, payments, loans, cheques])
+  }, [summary])
 
   // ── Pie chart data ──────────────────────────────────────────────────────────
   const pieData = useMemo(() => [
@@ -135,29 +113,28 @@ export function Dashboard() {
   ], [summary])
 
   // ── Recent transactions ─────────────────────────────────────────────────────
-  const recentTransactions = useMemo(() =>
-    transactions.slice(0, 5).map(txn => ({
+  const recentTransactions = useMemo(() => {
+    const list = summary?.recentTransactions || []
+    return list.map(txn => ({
       date:   txn.date ? formatDateDisplay(txn.date) : '—',
       type:   txn.type || 'TRANSACTION',
       party:  txn.vendorId?.name || txn.financierId?.name || txn.party || '—',
       ref:    txn.description || txn.referenceNumber || txn.ref || '—',
       amount: txn.amount || 0,
-    })),
-  [transactions])
+    }))
+  }, [summary])
 
   // ── Upcoming cheques ────────────────────────────────────────────────────────
-  const upcomingCheques = useMemo(() =>
-    cheques
-      .filter(c => !c.isDeleted && String(c.status).toUpperCase() === 'PENDING')
-      .slice(0, 5)
-      .map(chq => ({
-        chqNo:  chq.chequeNumber || chq.chequeNo || '—',
-        date:   chq.chequeDate ? formatDateDisplay(chq.chequeDate) : '—',
-        party:  chq.vendorId?.name || chq.financierId?.name || chq.partyName || '—',
-        amount: chq.amount || 0,
-        status: chq.status || 'Pending',
-      })),
-  [cheques])
+  const upcomingCheques = useMemo(() => {
+    const list = summary?.upcomingCheques || []
+    return list.map(chq => ({
+      chqNo:  chq.chequeNumber || chq.chequeNo || '—',
+      date:   chq.chequeDate ? formatDateDisplay(chq.chequeDate) : '—',
+      party:  chq.vendorId?.name || chq.financierId?.name || chq.partyName || '—',
+      amount: chq.amount || 0,
+      status: chq.status || 'Pending',
+    }))
+  }, [summary])
 
   if (error) {
     return (

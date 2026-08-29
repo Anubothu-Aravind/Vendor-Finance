@@ -14,8 +14,14 @@ const authApi = axios.create({
 })
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [user, setUser] = useState(() => {
+    try {
+      const cached = localStorage.getItem('vastrams_user_cache')
+      if (cached) return JSON.parse(cached)
+    } catch {}
+    return null
+  })
+  const [loading, setLoading] = useState(!user)
 
   const logout = useCallback(async () => {
     try {
@@ -24,6 +30,7 @@ export function AuthProvider({ children }) {
       console.error('Logout request failed:', err)
     } finally {
       setUser(null)
+      try { localStorage.removeItem('vastrams_user_cache') } catch {}
     }
   }, [])
 
@@ -31,19 +38,23 @@ export function AuthProvider({ children }) {
     try {
       const res = await authApi.post('/auth/refresh')
       if (res.data && res.data.success) {
-        if (res.data.user) {
-          setUser(res.data.user)
+        const u = res.data.user
+        if (u) {
+          setUser(u)
+          try { localStorage.setItem('vastrams_user_cache', JSON.stringify(u)) } catch {}
           return true
         }
         // Fallback in case user object was not included in refresh response
         const meRes = await authApi.get('/auth/me')
-        if (meRes.data && meRes.data.success) {
+        if (meRes.data && meRes.data.success && meRes.data.user) {
           setUser(meRes.data.user)
+          try { localStorage.setItem('vastrams_user_cache', JSON.stringify(meRes.data.user)) } catch {}
           return true
         }
       }
     } catch (err) {
       setUser(null)
+      try { localStorage.removeItem('vastrams_user_cache') } catch {}
     }
     return false
   }, [])

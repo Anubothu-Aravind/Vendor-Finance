@@ -32,10 +32,23 @@ const Error429 = lazy(() => import('../pages/errors/Error429'))
 const Error500 = lazy(() => import('../pages/errors/Error500'))
 const Error503 = lazy(() => import('../pages/errors/Error503'))
 
-// Loading placeholder
+// Lightweight Suspense loading placeholder
 const PageLoader = () => (
-  <div className="flex items-center justify-center min-h-[200px] w-full">
-    <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2" style={{ borderColor: 'var(--color-primary)' }}></div>
+  <div className="space-y-6 max-w-[1600px] mx-auto p-4 sm:p-6 animate-pulse">
+    <div className="flex justify-between items-center pb-4 border-b border-slate-100 dark:border-slate-800">
+      <div className="space-y-2">
+        <div className="h-7 w-48 bg-slate-200 dark:bg-slate-700 rounded-md"></div>
+        <div className="h-4 w-72 bg-slate-100 dark:bg-slate-800 rounded-md"></div>
+      </div>
+      <div className="h-9 w-28 bg-slate-200 dark:bg-slate-700 rounded-lg"></div>
+    </div>
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="h-24 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200/60 dark:border-slate-700/60"></div>
+      <div className="h-24 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200/60 dark:border-slate-700/60"></div>
+      <div className="h-24 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200/60 dark:border-slate-700/60"></div>
+      <div className="h-24 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200/60 dark:border-slate-700/60"></div>
+    </div>
+    <div className="h-64 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200/60 dark:border-slate-700/60"></div>
   </div>
 )
 

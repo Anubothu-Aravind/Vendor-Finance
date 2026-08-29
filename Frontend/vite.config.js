@@ -19,6 +19,7 @@ export default defineConfig({
           'vendor-query': ['@tanstack/react-query'],
           'vendor-motion': ['framer-motion'],
           'vendor-icons': ['lucide-react'],
+          'vendor-charts': ['recharts'],
         },
       },
     },
