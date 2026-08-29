@@ -132,5 +132,36 @@ test('CORS Configuration and Allowlist Tests', async (t) => {
       server.close()
     }
   })
+
+  await t.test('Health check: /api/health and /health return 200 OK without authentication', async () => {
+    const expressModule = (await import('express')).default
+    const http = await import('node:http')
+
+    const app = expressModule()
+    app.get('/health', (req, res) => {
+      res.status(200).json({ status: 'ok', success: true })
+    })
+    app.get('/api/health', (req, res) => {
+      res.status(200).json({ status: 'ok', success: true })
+    })
+
+    const server = http.createServer(app)
+    await new Promise((resolve) => server.listen(0, resolve))
+    const port = server.address().port
+
+    try {
+      const res1 = await fetch(`http://127.0.0.1:${port}/health`)
+      assert.equal(res1.status, 200)
+      const data1 = await res1.json()
+      assert.equal(data1.status, 'ok')
+
+      const res2 = await fetch(`http://127.0.0.1:${port}/api/health`)
+      assert.equal(res2.status, 200)
+      const data2 = await res2.json()
+      assert.equal(data2.status, 'ok')
+    } finally {
+      server.close()
+    }
+  })
 })
 

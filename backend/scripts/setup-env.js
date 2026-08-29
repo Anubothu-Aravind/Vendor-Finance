@@ -106,15 +106,19 @@ function printSummaryTable(data) {
 
 async function run() {
   const isProduction = process.env.NODE_ENV === 'production';
+  const mongoUri = process.env.MONGO_URI || process.env.MONGODB_URI || process.env.DATABASE_URL;
+  if (mongoUri) {
+    process.env.MONGO_URI = mongoUri;
+  }
 
   // In production (e.g. Render), environment variables are managed by the platform
   if (isProduction) {
     console.log("\x1b[36m%s\x1b[0m", "=== Vastrams Backend (Production Mode) ===");
-    if (!process.env.MONGO_URI) {
-      console.error("\x1b[31mError: MONGO_URI is required in production environment.\x1b[0m");
-      process.exit(1);
+    if (!mongoUri) {
+      console.warn("\x1b[33mWarning: MONGO_URI / MONGODB_URI not found in process.env. Backend will start in recovery mode.\x1b[0m");
+    } else {
+      console.log("\x1b[32m%s\x1b[0m", "✓ Production environment variables verified.");
     }
-    console.log("\x1b[32m%s\x1b[0m", "✓ Production environment variables verified.");
     process.exit(0);
   }
 

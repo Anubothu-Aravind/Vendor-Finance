@@ -92,9 +92,35 @@ app.use(requestId)
 // Serve static uploads
 app.use('/uploads', express.static(path.join(__dirname, '../upload')))
 
-// Base Health Check
+// Base Health Check & Root Endpoints (before auth/setup middleware)
+app.get('/', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    success: true,
+    message: 'Vastrams API Server is operational',
+    database: require('mongoose').connection.readyState === 1 ? 'connected' : 'connecting',
+    timestamp: new Date().toISOString()
+  })
+})
+
+app.get('/health', (req, res) => {
+  const isConnected = require('mongoose').connection.readyState === 1
+  res.status(200).json({
+    status: 'ok',
+    success: true,
+    database: isConnected ? 'connected' : 'connecting',
+    timestamp: new Date().toISOString()
+  })
+})
+
 app.get('/api/health', (req, res) => {
-  res.status(200).json({ status: 'ok', timestamp: new Date() })
+  const isConnected = require('mongoose').connection.readyState === 1
+  res.status(200).json({
+    status: 'ok',
+    success: true,
+    database: isConnected ? 'connected' : 'connecting',
+    timestamp: new Date().toISOString()
+  })
 })
 
 // Global Setup Verification Middleware
@@ -121,35 +147,18 @@ const { sseHandler } = require('./utils/sse')
 app.get('/api/events', sseHandler)
 app.use('/api', require('./routes/backup.routes'))
 
-// Standalone API Server Root & Health Endpoints
-app.get('/', (req, res) => {
-  res.status(200).json({
-    success: true,
-    message: 'Vastrams API Server is operational'
-  })
-})
-
-app.get('/health', (req, res) => {
-  res.status(200).json({
-    success: true,
-    status: 'healthy',
-    database: 'connected',
-    timestamp: new Date().toISOString()
-  })
-})
-
-app.get('/api/health', (req, res) => {
-  res.status(200).json({
-    success: true,
-    status: 'healthy',
-    database: 'connected',
-    timestamp: new Date().toISOString()
-  })
-})
-
 // Global Error Handler
 app.use(errorHandler)
 
-app.listen(PORT, () => {
-  console.log(`\x1b[32m%s\x1b[0m`, `Server running on port ${PORT}`)
+// Prevent unhandled promise rejections from crashing the process
+process.on('unhandledRejection', (reason) => {
+  console.error('[UNHANDLED REJECTION]', reason)
+})
+
+process.on('uncaughtException', (err) => {
+  console.error('[UNCAUGHT EXCEPTION]', err)
+})
+
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`\x1b[32m%s\x1b[0m`, `Server running on port ${PORT} (0.0.0.0)`)
 })
